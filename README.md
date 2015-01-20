@@ -1,4 +1,5 @@
 # RandomForest
-Julia implementation of random forest and decision tree learning for classification and regression
+Julia (http://julialang.org/) implementation of random forest and decision tree learning for classification and regression
 
-(c) Henrik Boström, henrik.bostrom@dsv.su.se, started in Nov. 2014
+Copyright 2015 Henrik Boström.
+
