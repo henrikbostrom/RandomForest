@@ -14,6 +14,10 @@ There are two basic ways of working with the package:
 
 All named arguments are optional, while the others are mandatory.
 
+Sample datasets included in uci.zip have been adapted from:
+
+Lichman, M. (2013). UCI Machine Learning Repository [http://archive.ics.uci.edu/ml]. Irvine, CA: University of California, School of Information and Computer Science. 
+
 <h2>To run an experiment</h2>
 
 An experiment is run by calling experiment(...) in the following way:
