@@ -1,10 +1,10 @@
-<h1>RandomForest</h1> v. 0.0.9
+<h1>RandomForest v. 0.0.9</h1>
 
 Copyright 2016 Henrik Boström
 
-Implementation of random forests for classification and regression with conformal prediction in Julia (http://julialang.org/).
+Julia (http://julialang.org/) package implementing random forests for classification and regression with conformal prediction.
 
-There are two basic ways of working with the program:
+There are two basic ways of working with the package:
 
 - running an experiment with multiple datasets, possibly comparing multiple methods,
   i.e., random forests with different parameter settings, or
@@ -141,9 +141,10 @@ A dataset should have the following format:
 ...<br>
 \<data-row\><br>
 <br>
-where \<names-row\> = \<name\>\<separator\>\<name\>\<separator\>...\<name\><br>
-and   \<data-row\>  = \<value\>\<separator\>\<value\>\<separator\>...\<value\>
-<br>
+where >br>
+\<names-row\> = \<name\>\<separator\>\<name\>\<separator\>...\<name\><br>
+and<br>
+\<data-row\>  = \<value\>\<separator\>\<value\>\<separator\>...\<value\><br>
 \<name\> can be any of the following:
 
         CLASS            - declares that the column contains class labels
