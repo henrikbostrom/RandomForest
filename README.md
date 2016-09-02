@@ -43,18 +43,18 @@ The arguments should be on the following format:
             :test means dividing the data into training and according to boolean values
              in a column labeled TEST (true means that the example is used for testing)
         - example: protocol = 0.25 (25% of the data is for testing)
-
-   normalizetarget : boolean (default = false)
+        
+    normalizetarget : boolean (default = false)
         - true means that each regression value v will be replaced by
           (v-v_min)/(v_max-v_min), where v_min and V-max are the minimum and maximum values
         - false means that the original regression values are kept
-
-   normalizeinput : boolean (default = false)
+        
+    normalizeinput : boolean (default = false)
         - true means that each numeric input value v will be replaced by
           (v-v_min)/(v_max-v_min), where v_min and V-max are the minimum and maximum values
         - false means that the original values are kept
-
-   method : a call on the form forest(...) (default = forest())
+        
+    method : a call on the form forest(...) (default = forest())
         - The call may have the following (optional) arguments:
 
             notrees : integer (default = 100)
@@ -207,9 +207,7 @@ For regression tasks the following measures are reported:
         Size       - the number of nodes in the forest
         Time       - the total time taken for both training and testing
 
-*************************************
-*** To work with a single dataset ***
-*************************************
+<h2>To work with a single dataset</h2>
 
 To load a dataset from a file or dataframe:
 
