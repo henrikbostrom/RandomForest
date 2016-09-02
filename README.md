@@ -26,9 +26,9 @@ Rasmussen,  C.E.,  Neal,  R.M.,  Hinton,  G.,  van  Camp,  D.,  Revow,  M.,  Gha
 
 An experiment is run by calling experiment(...) in the following way:
 
-julia> experiment(files = \<files\>, separator = \<separator\>, protocol = \<protocol\>,
-                  normalizetarget = \<normalizetarget\>, normalizeinput = \<normalizeinput\>,
-                  methods = [\<method\>, ...])
+    julia> experiment(files = <files>, separator = <separator>, protocol = <protocol>,
+                      normalizetarget = <normalizetarget>, normalizeinput = <normalizeinput>,
+                      methods = [<method>, ...])
 
 The arguments should be on the following format:
 
@@ -130,15 +130,15 @@ The arguments should be on the following format:
 
 - - - - -
 
-Examples:
+    Examples:
 
-The call experiment(files = "uci") is hence the same as<br>
+    The call experiment(files = "uci") is hence the same as
 
-experiment(files = "uci", separator = ´,´, protocol = 10, methods = [forest()])<br>
+    experiment(files = "uci", separator = ´,´, protocol = 10, methods = [forest()])
 
-The following compares the default random forest to one with 1000 trees and a maxdepth of 10:<br>
+    The following compares the default random forest to one with 1000 trees and a maxdepth of 10:
 
-julia> experiment(files = "uci", methods = [forest(), forest(notrees = 1000, maxdepth = 10)])
+    julia> experiment(files = "uci", methods = [forest(), forest(notrees = 1000, maxdepth = 10)])
 
 - - - - -
 
@@ -150,9 +150,12 @@ A dataset should have the following format:
     <data-row>
     
 where
-\<names-row\> = \<name\>\<separator\>\<name\>\<separator\>...\<name\><br>
-and<br>
-\<data-row\>  = \<value\>\<separator\>\<value\>\<separator\>...\<value\><br>
+
+    <names-row> = <name><separator><name><separator>...<name>
+and
+
+    <data-row>  = <value><separator><value><separator>...<value>
+
 \<name\> can be any of the following:
 
         CLASS            - declares that the column contains class labels
@@ -219,8 +222,8 @@ For regression tasks the following measures are reported:
 
 To load a dataset from a file or dataframe:
 
-julia> load_data(\<filename\>, separator = \<separator\>)
-julia> load_data(\<dataframe\>)
+    julia> load_data(<filename>, separator = <separator>)
+    julia> load_data(<dataframe>)
 
 The arguments should be on the following format:
 
@@ -232,14 +235,14 @@ The arguments should be on the following format:
 
 To get a description of a loaded dataset:
 
-julia> describe_data()
+    julia> describe_data()
 
 - - - - -
 
 To evaluate a method or several methods for generating a random forest:
 
-julia> evaluate_method(method = forest(...), protocol = \<protocol\>)
-julia> evaluate_methods(methods = [forest(...), ...], protocol = \<protocol\>)
+    julia> evaluate_method(method = forest(...), protocol = <protocol>)
+    julia> evaluate_methods(methods = [forest(...), ...], protocol = <protocol>)
 
 The arguments should be on the following format:
 
@@ -251,7 +254,7 @@ The arguments should be on the following format:
 
 To generate a model from the loaded dataset:
 
-julia> m = generate_model(method = forest(...))                         
+    julia> m = generate_model(method = forest(...))                         
 
 The argument should be on the following format:
 
@@ -261,7 +264,7 @@ The argument should be on the following format:
 
 To get a description of a model:
 
-julia> describe_model(\<model\>)                                   
+    julia> describe_model(<model>)                                   
 
 The argument should be on the following format:
 
@@ -271,7 +274,7 @@ The argument should be on the following format:
 
 To store a model in a file:
 
-julia> store_model(\<model\>,\<file\>)                              
+    julia> store_model(<model>,<file>)                              
 
 The arguments should be on the following format:
 
@@ -282,7 +285,7 @@ The arguments should be on the following format:
 
 To load a model from file::
 
-julia> rf = load_model(\<file\>)                                  
+    julia> rf = load_model(<file>)                                  
 
 The argument should be on the following format:
 
@@ -292,7 +295,7 @@ The argument should be on the following format:
 
 To apply a model to loaded data:
 
-julia> apply_model(\<model\>)
+    julia> apply_model(<model>)
 
 The argument should be on the following format:
 
