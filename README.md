@@ -15,9 +15,7 @@ There are two basic ways of working with the program:
 
 All named arguments are optional, while the others are mandatory.
 
-****************************
 *** To run an experiment ***
-****************************
 
 An experiment is run by calling experiment(...) in the following way:
 
