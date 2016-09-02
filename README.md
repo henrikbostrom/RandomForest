@@ -136,14 +136,14 @@ julia> experiment(files = "uci", methods = [forest(), forest(notrees = 1000, max
 
 A dataset should have the following format:
 
-\<names-row\>
-\<data-row\>
-...
-\<data-row\>
-
-where \<names-row\> = \<name\>\<separator\>\<name\>\<separator\>...\<name\>
+\<names-row\><br>
+\<data-row\><br>
+...<br>
+\<data-row\><br>
+<br>
+where \<names-row\> = \<name\>\<separator\>\<name\>\<separator\>...\<name\><br>
 and   \<data-row\>  = \<value\>\<separator\>\<value\>\<separator\>...\<value\>
-
+<br>
 \<name\> can be any of the following:
 
         CLASS            - declares that the column contains class labels
