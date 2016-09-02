@@ -34,7 +34,7 @@ Install a requested package:
 
     julia> Pkg.add("DataFrames")
 
-Try to load the package:
+Try to load the RandomForest package:
 
     julia> using RandomForests
 
