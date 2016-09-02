@@ -1,8 +1,6 @@
-<h1>RandomForest</h1>
+<h1>RandomForest</h1> v. 0.0.9
 
 Copyright 2016 Henrik Boström
-
-v. 0.0.9
 
 Implementation of random forests for classification and regression with conformal prediction in Julia (http://julialang.org/).
 
