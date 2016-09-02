@@ -1,9 +1,10 @@
-# RandomForest
-Julia (http://julialang.org/) implementation of random forests for classification and regression with conformal prediction
+<h1>RandomForest</h1>
 
 Copyright 2016 Henrik Boström
 
-RandomForest v. 0.0.9
+v. 0.0.9
+
+Implementation of random forests for classification and regression with conformal prediction in Julia (http://julialang.org/).
 
 There are two basic ways of working with the program:
 
@@ -19,9 +20,9 @@ All named arguments are optional, while the others are mandatory.
 
 An experiment is run by calling experiment(...) in the following way:
 
-julia> experiment(files = <files>, separator = <separator>, protocol = <protocol>,
-                  normalizetarget = <normalizetarget>, normalizeinput = <normalizeinput>,
-                  methods = [<method>, ...])
+julia> experiment(files = \<files\>, separator = \<separator\>, protocol = \<protocol\>,
+                  normalizetarget = \<normalizetarget\>, normalizeinput = \<normalizeinput\>,
+                  methods = [\<method\>, ...])
 
 The arguments should be on the following format:
 
@@ -137,15 +138,15 @@ julia> experiment(files = "uci", methods = [forest(), forest(notrees = 1000, max
 
 A dataset should have the following format:
 
-<names-row>
-<data-row>
+\<names-row\>
+\<data-row\>
 ...
-<data-row>
+\<data-row\>
 
-where <names-row> = <name><separator><name><separator>...<name>
-and   <data-row>  = <value><separator><value><separator>...<value>
+where \<names-row\> = \<name\>\<separator\>\<name\>\<separator\>...\<name\>
+and   \<data-row\>  = \<value\>\<separator\>\<value\>\<separator\>...\<value\>
 
-<name> can be any of the following:
+\<name\> can be any of the following:
 
         CLASS            - declares that the column contains class labels
         REGRESSION       - declares that the column contains regression values
@@ -155,9 +156,9 @@ and   <data-row>  = <value><separator><value><separator>...<value>
         WEIGHT           - declares that the column contains instance weights
         any other value  - is used to create a variable name
 
-<separator> is a single character (as specified above)
+\<separator\> is a single character (as specified above)
 
-<value> can be any of the following:
+\<value\> can be any of the following:
 
         integer          - is handled as a number if all values in the same column are of type integer, 
                            float or NA, and as a string otherwise
@@ -211,8 +212,8 @@ For regression tasks the following measures are reported:
 
 To load a dataset from a file or dataframe:
 
-julia> load_data(<filename>, separator = <separator>)
-julia> load_data(<dataframe>)
+julia> load_data(\<filename\>, separator = \<separator\>)
+julia> load_data(\<dataframe\>)
 
 The arguments should be on the following format:
 
@@ -230,8 +231,8 @@ julia> describe_data()
 
 To evaluate a method or several methods for generating a random forest:
 
-julia> evaluate_method(method = forest(...), protocol = <protocol>)
-julia> evaluate_methods(methods = [forest(...), ...], protocol = <protocol>)
+julia> evaluate_method(method = forest(...), protocol = \<protocol\>)
+julia> evaluate_methods(methods = [forest(...), ...], protocol = \<protocol\>)
 
 The arguments should be on the following format:
 
@@ -253,7 +254,7 @@ The argument should be on the following format:
 
 To get a description of a model:
 
-julia> describe_model(<model>)                                   
+julia> describe_model(\<model\>)                                   
 
 The argument should be on the following format:
 
@@ -263,7 +264,7 @@ The argument should be on the following format:
 
 To store a model in a file:
 
-julia> store_model(<model>,<file>)                              
+julia> store_model(\<model\>,\<file\>)                              
 
 The arguments should be on the following format:
 
@@ -274,7 +275,7 @@ The arguments should be on the following format:
 
 To load a model from file::
 
-julia> rf = load_model(<file>)                                  
+julia> rf = load_model(\<file\>)                                  
 
 The argument should be on the following format:
 
@@ -284,40 +285,38 @@ The argument should be on the following format:
 
 To apply a model to loaded data:
 
-julia> apply_model(<model>)
+julia> apply_model(\<model\>)
 
 The argument should be on the following format:
 
     model : a generated or loaded model (see generate_model and load_model)
 
-********************************
-*** Summary of all functions ***
-********************************
+<h2>Summary of all functions</h2>
 
 All named arguments are optional, while the others are mandatory.
 
 To run an experiment:
 
-        experiment(files = <files>, separator = <separator>, protocol = <protocol>, methods = [<method>, ...])
+        experiment(files = \<files\>, separator = \<separator\>, protocol = \<protocol\>, methods = [\<method\>, ...])
 
 To work with a single dataset:
 
-        load_data(<filename>, separator = <separator>)
+        load_data(\<filename\>, separator = \<separator\>)
 
-        load_data(<dataframe>)
+        load_data(\<dataframe\>)
 
         describe_data()
 
-        evaluate_method(method = forest(...), protocol = <protocol>)
+        evaluate_method(method = forest(...), protocol = \<protocol\>)
 
-        evaluate_methods(methods = [forest(...), ...], protocol = <protocol>)
+        evaluate_methods(methods = [forest(...), ...], protocol = \<protocol\>)
 
         m = generate_model(method = forest(...))                
 
-        describe_model(<model>)                                   
+        describe_model(\<model\>)                                   
 
-        store_model(<model>,<file>)                              
+        store_model(\<model\>,\<file\>)                              
 
-        m = load_model(<file>)                                  
+        m = load_model(\<file\>)                                  
 
-        apply_model(<model>)
+        apply_model(\<model\>)
