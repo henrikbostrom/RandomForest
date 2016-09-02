@@ -12,7 +12,7 @@ There are two basic ways of working with the package:
 - working with a single dataset, to evaluate, generate, store, load or
   apply a random forest
 
-All named arguments are optional, while the others are mandatory.
+All named arguments below are optional, while the others are mandatory.
 
 The sample classification datasets included in uci.zip have been downloaded and adapted from:
 
