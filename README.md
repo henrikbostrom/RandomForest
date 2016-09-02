@@ -22,6 +22,38 @@ The sample regression datasets included in regression.zip have been downloaded a
 
 Rasmussen,  C.E.,  Neal,  R.M.,  Hinton,  G.,  van  Camp,  D.,  Revow,  M.,  Ghahramani, Z., Kustra, R., and Tibshirani, R. (1996) Delve data for evaluating learning in valid experiments [http://www.cs.toronto.edu/~delve/data/datasets.html]
 
+<h2>To install the package</h2>
+
+Download RandomForest.jl (and possibly also the sample datasets uci.zip and regression.zip) and put it in some suitable directory.
+
+From this directory, start Julia (which can be downloaded from http://julialang.org/) at a command prompt:
+
+    julia
+
+Install a requested package:
+
+    julia> Pkg.add("DataFrames")
+
+Try to load the package:
+
+    julia> using RandomForests
+
+The exit by:
+
+    julia> exit()
+
+<h2>To use the package</h2>
+
+Start Julia at a command prompt:
+
+    julia -p <N>
+
+where \<N\> is the number of cores you would like the code to be executed on, e.g., 24.
+
+Load the package:
+
+    julia> using RandomForests
+
 <h2>To run an experiment</h2>
 
 An experiment is run by calling experiment(...) in the following way:
