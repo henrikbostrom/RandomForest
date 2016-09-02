@@ -2,7 +2,7 @@
 
 Copyright 2016 Henrik Boström
 
-<a href="http://julialang.org/">Julia</a>Julia package implementing random forests for classification and regression with conformal prediction.
+<a href="http://julialang.org/">Julia</a> package implementing random forests for classification and regression with conformal prediction.
 
 There are two basic ways of working with the package:
 
