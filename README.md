@@ -3,13 +3,6 @@ Julia (http://julialang.org/) implementation of random forests for classificatio
 
 Copyright 2016 Henrik Boström
 
-*******************************************************************************************************
-**********************                                                       **************************
-**********************       Instructions for the RandomForest package       **************************
-**********************       Copyright Henrik Boström 2016                   **************************
-**********************                                                       **************************
-*******************************************************************************************************
-
 RandomForest v. 0.0.9
 
 There are two basic ways of working with the program:
