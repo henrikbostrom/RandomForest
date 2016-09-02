@@ -132,11 +132,11 @@ The arguments should be on the following format:
 
 Examples:
 
-The call experiment(files = "uci") is hence the same as
+The call experiment(files = "uci") is hence the same as<br>
 
-experiment(files = "uci", separator = ´,´, protocol = 10, methods = [forest()])
+experiment(files = "uci", separator = ´,´, protocol = 10, methods = [forest()])<br>
 
-The following compares the default random forest to one with 1000 trees and a maxdepth of 10:
+The following compares the default random forest to one with 1000 trees and a maxdepth of 10:<br>
 
 julia> experiment(files = "uci", methods = [forest(), forest(notrees = 1000, maxdepth = 10)])
 
@@ -144,12 +144,12 @@ julia> experiment(files = "uci", methods = [forest(), forest(notrees = 1000, max
 
 A dataset should have the following format:
 
-\<names-row\><br>
-\<data-row\><br>
-...<br>
-\<data-row\><br>
-<br>
-where >br>
+    <names-row>
+    <data-row>
+    ...
+    <data-row>
+    
+where
 \<names-row\> = \<name\>\<separator\>\<name\>\<separator\>...\<name\><br>
 and<br>
 \<data-row\>  = \<value\>\<separator\>\<value\>\<separator\>...\<value\><br>
@@ -176,11 +176,11 @@ and<br>
 
 Example:
 
-ID,RI,Na,Mg,Al,Si,K,Ca,Ba,Fe,CLASS<br>
-1,1.52101,NA,4.49,1.10,71.78,0.06,8.75,0.00,0.00,1<br>
-2,1.51761,13.89,NA,1.36,72.73,0.48,7.83,0.00,0.00,1<br>
-3,1.51618,13.53,3.55,1.54,72.99,0.39,7.78,0.00,0.00,1<br>
-...<br>
+    ID,RI,Na,Mg,Al,Si,K,Ca,Ba,Fe,CLASS
+    1,1.52101,NA,4.49,1.10,71.78,0.06,8.75,0.00,0.00,1
+    2,1.51761,13.89,NA,1.36,72.73,0.48,7.83,0.00,0.00,1
+    3,1.51618,13.53,3.55,1.54,72.99,0.39,7.78,0.00,0.00,1
+    ...
 
 - - - - -
 
