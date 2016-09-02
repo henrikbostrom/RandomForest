@@ -94,9 +94,9 @@ The arguments should be on the following format:
                 - a float means that the corresponding fraction of examples are sampled with replacement
 
             modpred : boolean (default = false)
-                - true means that for each test instance, the trees for which a randomly selected training instance
-                  is out-of-bag is used for prediction and the training instance is not used for calculating a
-                  calibration score
+                - true means that for each test instance, the trees for which a randomly selected training
+                  instance is out-of-bag is used for prediction and the training instance is not used for
+                  calculating a calibration score
                 - false means that all trees in the forest are used for prediction and all out-of-bag scores
                   are used for calibration
 
@@ -296,7 +296,8 @@ All named arguments are optional, while the others are mandatory.
 
 To run an experiment:
 
-        experiment(files = \<files\>, separator = \<separator\>, protocol = \<protocol\>, methods = [\<method\>, ...])
+        experiment(files = \<files\>, separator = \<separator\>, protocol = \<protocol\>, 
+                   methods = [\<method\>, ...])
 
 To work with a single dataset:
 
