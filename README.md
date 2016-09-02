@@ -24,7 +24,7 @@ Rasmussen,  C.E.,  Neal,  R.M.,  Hinton,  G.,  van  Camp,  D.,  Revow,  M.,  Gha
 
 <h2>To install the package</h2>
 
-Download RandomForest.jl (and possibly also the sample datasets uci.zip and regression.zip) and put it in some suitable directory.
+Download <a href="https://github.com/henrikbostrom/RandomForest/blob/master/RandomForest.jl">RandomForest.jl</a> (and possibly also the sample datasets <a href="https://github.com/henrikbostrom/RandomForest/blob/master/uci.zip">uci.zip</a> and <a href="https://github.com/henrikbostrom/RandomForest/blob/master/regression.zip">regression.zip</a>) and put it in some suitable directory.
 
 From this directory, start Julia (which can be downloaded from http://julialang.org/) at a command prompt:
 
