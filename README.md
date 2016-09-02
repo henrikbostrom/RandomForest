@@ -38,7 +38,7 @@ Try to load the RandomForest package:
 
     julia> using RandomForests
 
-The exit by:
+Then exit by:
 
     julia> exit()
 
