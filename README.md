@@ -14,9 +14,13 @@ There are two basic ways of working with the package:
 
 All named arguments are optional, while the others are mandatory.
 
-Sample datasets included in uci.zip have been downloaded and adapted from:
+The sample classification datasets included in uci.zip have been downloaded and adapted from:
 
 Lichman, M. (2013). UCI Machine Learning Repository [http://archive.ics.uci.edu/ml]. Irvine, CA: University of California, School of Information and Computer Science. 
+
+The sample regression datasets included in regression.zip have been downloaded and adapted from the above source and from:
+
+Rasmussen,  C.E.,  Neal,  R.M.,  Hinton,  G.,  van  Camp,  D.,  Revow,  M.,  Ghahramani, Z., Kustra, R., and Tibshirani, R. (1996) Delve data for evaluating learning in valid experiments [http://www.cs.toronto.edu/delve]
 
 <h2>To run an experiment</h2>
 
