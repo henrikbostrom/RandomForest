@@ -147,7 +147,9 @@ function doc()
 
 RandomForest v. $(majorversion).$(minorversion).$(patchversion)
 
-There are two basic ways of working with the program:
+A Julia package that implements random forests for classification and regression with conformal prediction.
+
+There are two basic ways of working with the package:
 
 - running an experiment with multiple datasets, possibly comparing multiple methods,
   i.e., random forests with different parameter settings, or
@@ -155,17 +157,17 @@ There are two basic ways of working with the program:
 - working with a single dataset, to evaluate, generate, store, load or
   apply a random forest
 
-All named arguments are optional, while the others are mandatory.
+All named arguments below are optional, while the others are mandatory.
 
-****************************
-*** To run an experiment ***
-****************************
+-------------------------------------------------------------------------------------------------------
+
+To run an experiment
 
 An experiment is run by calling experiment(...) in the following way:
 
-julia> experiment(files = <files>, separator = <separator>, protocol = <protocol>,
-                  normalizetarget = <normalizetarget>, normalizeinput = <normalizeinput>,
-                  methods = [<method>, ...])
+    julia> experiment(files = <files>, separator = <separator>, protocol = <protocol>,
+                      normalizetarget = <normalizetarget>, normalizeinput = <normalizeinput>,
+                      methods = [<method>, ...])
 
 The arguments should be on the following format:
 
@@ -175,30 +177,30 @@ The arguments should be on the following format:
         - example: files = [\"uci/house-votes.txt\", \"uci/glass.txt\"],
         - example: files = \"uci\"
 
-    separator : single character (default = \',\')
+    separator : single character (default = ',')
         - the character to use as field separator
-        - example: separator = \'\\t\' (the tab character)
+        - example: separator = '\t' (the tab character)
 
     protocol : integer, float, :cv, :test (default = 10)
         - the experiment protocol:
             an integer means using cross-validation with this no. of folds. 
             a float between 0 and 1 means using this fraction of the dataset for testing
             :cv means using cross-validation with folds specified by a column labeled FOLD
-            :test means dividing the data into training and according to boolean values
+            :test means dividing the data into training and test according to boolean values
              in a column labeled TEST (true means that the example is used for testing)
         - example: protocol = 0.25 (25% of the data is for testing)
-
-   normalizetarget : boolean (default = false)
+        
+    normalizetarget : boolean (default = false)
         - true means that each regression value v will be replaced by
           (v-v_min)/(v_max-v_min), where v_min and V-max are the minimum and maximum values
         - false means that the original regression values are kept
-
-   normalizeinput : boolean (default = false)
+        
+    normalizeinput : boolean (default = false)
         - true means that each numeric input value v will be replaced by
           (v-v_min)/(v_max-v_min), where v_min and V-max are the minimum and maximum values
         - false means that the original values are kept
-
-   method : a call on the form forest(...) (default = forest())
+        
+    method : a call on the form forest(...) (default = forest())
         - The call may have the following (optional) arguments:
 
             notrees : integer (default = 100)
@@ -239,9 +241,9 @@ The arguments should be on the following format:
                 - a float means that the corresponding fraction of examples are sampled with replacement
 
             modpred : boolean (default = false)
-                - true means that for each test instance, the trees for which a randomly selected training instance
-                  is out-of-bag is used for prediction and the training instance is not used for calculating a
-                  calibration score
+                - true means that for each test instance, the trees for which a randomly selected training
+                  instance is out-of-bag is used for prediction and the training instance is not used for
+                  calculating a calibration score
                 - false means that all trees in the forest are used for prediction and all out-of-bag scores
                   are used for calibration
 
@@ -267,27 +269,31 @@ The arguments should be on the following format:
 
 - - - - -
 
-Examples:
+    Examples:
 
-The call experiment(files = \"uci\") is hence the same as
+    The call experiment(files = \"uci\") is hence the same as
 
-experiment(files = \"uci\", separator = \´,\´, protocol = 10, methods = [forest()])
+    experiment(files = \"uci\", separator = ´,´, protocol = 10, methods = [forest()])
 
-The following compares the default random forest to one with 1000 trees and a maxdepth of 10:
+    The following compares the default random forest to one with 1000 trees and a maxdepth of 10:
 
-julia> experiment(files = \"uci\", methods = [forest(), forest(notrees = 1000, maxdepth = 10)])
+    julia> experiment(files = \"uci\", methods = [forest(), forest(notrees = 1000, maxdepth = 10)])
 
 - - - - -
 
 A dataset should have the following format:
 
-<names-row>
-<data-row>
-...
-<data-row>
+    <names-row>
+    <data-row>
+    ...
+    <data-row>
+    
+where
 
-where <names-row> = <name><separator><name><separator>...<name>
-and   <data-row>  = <value><separator><value><separator>...<value>
+    <names-row> = <name><separator><name><separator>...<name>
+and
+
+    <data-row>  = <value><separator><value><separator>...<value>
 
 <name> can be any of the following:
 
@@ -312,11 +318,11 @@ and   <data-row>  = <value><separator><value><separator>...<value>
 
 Example:
 
-ID,RI,Na,Mg,Al,Si,K,Ca,Ba,Fe,CLASS
-1,1.52101,NA,4.49,1.10,71.78,0.06,8.75,0.00,0.00,1
-2,1.51761,13.89,NA,1.36,72.73,0.48,7.83,0.00,0.00,1
-3,1.51618,13.53,3.55,1.54,72.99,0.39,7.78,0.00,0.00,1
-...
+    ID,RI,Na,Mg,Al,Si,K,Ca,Ba,Fe,CLASS
+    1,1.52101,NA,4.49,1.10,71.78,0.06,8.75,0.00,0.00,1
+    2,1.51761,13.89,NA,1.36,72.73,0.48,7.83,0.00,0.00,1
+    3,1.51618,13.53,3.55,1.54,72.99,0.39,7.78,0.00,0.00,1
+    ...
 
 - - - - -
 
@@ -351,33 +357,34 @@ For regression tasks the following measures are reported:
         Size       - the number of nodes in the forest
         Time       - the total time taken for both training and testing
 
-*************************************
-*** To work with a single dataset ***
-*************************************
+
+-------------------------------------------------------------------------------------------------------
+
+To work with a single dataset
 
 To load a dataset from a file or dataframe:
 
-julia> load_data(<filename>, separator = <separator>)
-julia> load_data(<dataframe>)
+    julia> load_data(<filename>, separator = <separator>)
+    julia> load_data(<dataframe>)
 
 The arguments should be on the following format:
 
     filename : name of a file containing a dataset (see format requirements above)
-    separator : single character (default = \',\')
+    separator : single character (default = ',')
     dataframe : a dataframe where the column labels should be according to the format requirements above
 
 - - - - -
 
 To get a description of a loaded dataset:
 
-julia> describe_data()
+    julia> describe_data()
 
 - - - - -
 
 To evaluate a method or several methods for generating a random forest:
 
-julia> evaluate_method(method = forest(...), protocol = <protocol>)
-julia> evaluate_methods(methods = [forest(...), ...], protocol = <protocol>)
+    julia> evaluate_method(method = forest(...), protocol = <protocol>)
+    julia> evaluate_methods(methods = [forest(...), ...], protocol = <protocol>)
 
 The arguments should be on the following format:
 
@@ -389,7 +396,7 @@ The arguments should be on the following format:
 
 To generate a model from the loaded dataset:
 
-julia> m = generate_model(method = forest(...))                         
+    julia> m = generate_model(method = forest(...))                         
 
 The argument should be on the following format:
 
@@ -399,7 +406,7 @@ The argument should be on the following format:
 
 To get a description of a model:
 
-julia> describe_model(<model>)                                   
+    julia> describe_model(<model>)                                   
 
 The argument should be on the following format:
 
@@ -409,7 +416,7 @@ The argument should be on the following format:
 
 To store a model in a file:
 
-julia> store_model(<model>,<file>)                              
+    julia> store_model(<model>,<file>)                              
 
 The arguments should be on the following format:
 
@@ -420,7 +427,7 @@ The arguments should be on the following format:
 
 To load a model from file::
 
-julia> rf = load_model(<file>)                                  
+    julia> rf = load_model(<file>)                                  
 
 The argument should be on the following format:
 
@@ -430,21 +437,22 @@ The argument should be on the following format:
 
 To apply a model to loaded data:
 
-julia> apply_model(<model>)
+    julia> apply_model(<model>)
 
 The argument should be on the following format:
 
     model : a generated or loaded model (see generate_model and load_model)
 
-********************************
-*** Summary of all functions ***
-********************************
+-------------------------------------------------------------------------------------------------------
+
+Summary of all functions
 
 All named arguments are optional, while the others are mandatory.
 
 To run an experiment:
 
-        experiment(files = <files>, separator = <separator>, protocol = <protocol>, methods = [<method>, ...])
+        experiment(files = <files>, separator = <separator>, protocol = <protocol>, 
+                   methods = [<method>, ...])
 
 To work with a single dataset:
 
@@ -467,7 +475,6 @@ To work with a single dataset:
         m = load_model(<file>)                                  
 
         apply_model(<model>)
-
 ")
 end
 
@@ -3363,11 +3370,11 @@ end
 
 function evaluate_method(;method = forest(),protocol = 10)
     println("Running experiment")
-    totaltime = @elapsed results = [run_single_experiment(protocol,collect(method))]
+    totaltime = @elapsed results = [run_single_experiment(protocol,[method])]
     classificationresults = map(Bool,[pt == :CLASS for (pt,f,r) in results])
     regressionresults = map(Bool,[pt == :REGRESSION for (pt,f,r) in results])
-    present_results(sort(results[classificationresults]),collect(method),ignoredatasetlabel = true)
-    present_results(sort(results[regressionresults]),collect(method),ignoredatasetlabel = true)
+    present_results(sort(results[classificationresults]),[method],ignoredatasetlabel = true)
+    present_results(sort(results[regressionresults]),[method],ignoredatasetlabel = true)
     println("Total time: $(round(totaltime,2)) s.")    
 end
 
@@ -3576,7 +3583,7 @@ function generate_model(;method = forest())
             ##     conformalfunction = (:isotonic,isotonicthresholds,largestrange)
             end
         end
-        result = Model(predictiontask,classes,(majorversion,minorversion,patchversion),method,oobperformance,variableimportance,vcat(trees...),conformalfunction)
+        result = PredictionModel(predictiontask,classes,(majorversion,minorversion,patchversion),method,oobperformance,variableimportance,vcat(trees...),conformalfunction)
         println("Model generated")
     end
     return result
@@ -3727,7 +3734,8 @@ function apply_trees(Args)
         for i = 1:nopredictions
             predictions[i] = zeros(noclasses)
             for t = 1:length(trees)
-                predictions[i] += make_prediction(trees[t],newtestdata,i,zeros(noclasses))
+                treeprediction = make_prediction(trees[t],newtestdata,i,zeros(noclasses))
+                predictions[i] += treeprediction
             end
         end
         results = predictions
@@ -3738,7 +3746,8 @@ function apply_trees(Args)
             predictions[i] = 0.0
             squaredpredictions[i] = 0.0
             for t = 1:length(trees)
-                treeprediction = make_prediction(trees[t],newtestdata,i,0)
+                leafstats = make_prediction(trees[t],newtestdata,i,0)
+                treeprediction = leafstats[2]/leafstats[1]
                 predictions[i] += treeprediction
                 squaredpredictions[i] += treeprediction^2
             end
