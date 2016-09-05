@@ -79,7 +79,7 @@ The arguments should be on the following format:
             an integer means using cross-validation with this no. of folds. 
             a float between 0 and 1 means using this fraction of the dataset for testing
             :cv means using cross-validation with folds specified by a column labeled FOLD
-            :test means dividing the data into training and according to boolean values
+            :test means dividing the data into training and test according to boolean values
              in a column labeled TEST (true means that the example is used for testing)
         - example: protocol = 0.25 (25% of the data is for testing)
         
