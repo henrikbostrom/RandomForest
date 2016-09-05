@@ -1,4 +1,5 @@
-<h1>RandomForest v. 0.0.9</h1>
+RandomForest v. 0.0.9
+=====================
 
 Copyright 2016 Henrik Boström
 
@@ -22,7 +23,8 @@ The sample regression datasets included in regression.zip have been downloaded a
 
 Rasmussen,  C.E.,  Neal,  R.M.,  Hinton,  G.,  van  Camp,  D.,  Revow,  M.,  Ghahramani, Z., Kustra, R., and Tibshirani, R. (1996) Delve data for evaluating learning in valid experiments [http://www.cs.toronto.edu/~delve/data/datasets.html]
 
-<h2>To install the package</h2>
+To install the package
+----------------------
 
 Clone or download the package to some suitable directory.
 
@@ -42,7 +44,8 @@ Then exit by:
 
     julia> exit()
 
-<h2>To use the package</h2>
+To use the package
+------------------
 
 Start Julia at a command prompt:
 
@@ -54,7 +57,8 @@ Load the package:
 
     julia> using RandomForests
 
-<h2>To run an experiment</h2>
+To run an experiment
+--------------------
 
 An experiment is run by calling experiment(...) in the following way:
 
@@ -250,7 +254,8 @@ For regression tasks the following measures are reported:
         Size       - the number of nodes in the forest
         Time       - the total time taken for both training and testing
 
-<h2>To work with a single dataset</h2>
+To work with a single dataset
+-----------------------------
 
 To load a dataset from a file or dataframe:
 
@@ -333,7 +338,8 @@ The argument should be on the following format:
 
     model : a generated or loaded model (see generate_model and load_model)
 
-<h2>Summary of all functions</h2>
+Summary of all functions
+------------------------
 
 All named arguments are optional, while the others are mandatory.
 
