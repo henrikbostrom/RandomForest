@@ -138,14 +138,10 @@ end
 function doc()
     println("
 
-*******************************************************************************************************
-**********************                                                       **************************
-**********************       Instructions for the RandomForest package       **************************
-**********************       Copyright Henrik Boström 2016                   **************************
-**********************                                                       **************************
-*******************************************************************************************************
-
 RandomForest v. $(majorversion).$(minorversion).$(patchversion)
+===============================================================
+
+Copyright Henrik Boström 2016 
 
 A Julia package that implements random forests for classification and regression with conformal prediction.
 
@@ -159,9 +155,9 @@ There are two basic ways of working with the package:
 
 All named arguments below are optional, while the others are mandatory.
 
--------------------------------------------------------------------------------------------------------
 
 To run an experiment
+--------------------
 
 An experiment is run by calling experiment(...) in the following way:
 
@@ -358,9 +354,8 @@ For regression tasks the following measures are reported:
         Time       - the total time taken for both training and testing
 
 
--------------------------------------------------------------------------------------------------------
-
 To work with a single dataset
+-----------------------------
 
 To load a dataset from a file or dataframe:
 
@@ -443,9 +438,9 @@ The argument should be on the following format:
 
     model : a generated or loaded model (see generate_model and load_model)
 
--------------------------------------------------------------------------------------------------------
 
 Summary of all functions
+------------------------
 
 All named arguments are optional, while the others are mandatory.
 
