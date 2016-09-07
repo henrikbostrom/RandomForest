@@ -31,6 +31,8 @@
 ##
 ## *** SHOULD ***
 ##
+## - allow stored models to be used with different confidence levels (requires storing all alphas)
+## - allow for using modpred in stored models (requires storing info. from all oob predictions) 
 ## - leave-one-out cross validation
 ## - handling of sparse data
 ## - make everything work for single trees, including nonconformity measures, etc.
@@ -70,69 +72,16 @@ export load_model
 export describe_model
 export apply_model
 export runexp
-export warmup
 
 global majorversion = 0
 global minorversion = 0 
 global patchversion = 9 
 
 function runexp()
-#    warmup()    
-    experiment(files="uci",
-               methods=[forest(notrees=500,confidence=0.90,conformal=:std,modpred=false),
-                        forest(notrees=500,confidence=0.90,conformal=:std,modpred=true),
-                        forest(notrees=500,confidence=0.90,conformal=:classcond,modpred=false),
-                        forest(notrees=500,confidence=0.90,conformal=:classcond,modpred=true)],
-               resultfile="results20160824-500-uci-90.txt")
-    experiment(files="uci",
-               methods=[forest(notrees=500,confidence=0.95,conformal=:std,modpred=false),
-                        forest(notrees=500,confidence=0.95,conformal=:std,modpred=true),
-                        forest(notrees=500,confidence=0.95,conformal=:classcond,modpred=false),
-                        forest(notrees=500,confidence=0.95,conformal=:classcond,modpred=true)],
-               resultfile="results20160824-500-uci-95.txt")
-    experiment(files="uci",
-               methods=[forest(notrees=500,confidence=0.99,conformal=:std,modpred=false),
-                        forest(notrees=500,confidence=0.99,conformal=:std,modpred=true),
-                        forest(notrees=500,confidence=0.99,conformal=:classcond,modpred=false),
-                        forest(notrees=500,confidence=0.99,conformal=:classcond,modpred=true)],
-               resultfile="results20160824-500-uci-99.txt")
-    ## experiment(files="uci", 
-    ##            methods=[forest(notrees=500,confidence=0.95,conformal=:classcond,modpred=false),
-    ##                     forest(notrees=500,confidence=0.95,conformal=:classcond,modpred=true)],
-    ##            resultfile="results20160824-500-uci-95.txt")
-    ## experiment(files="uci", 
-    ##            methods=[forest(notrees=500,confidence=0.99,conformal=:classcond,modpred=false),
-    ##                     forest(notrees=500,confidence=0.99,conformal=:classcond,modpred=true)],
-    ##            resultfile="results20160824-500-uci-99.txt")
-    ## experiment(files="uci", protocol = 0.5,
-    ##            methods=[forest(notrees=500,confidence=0.95,conformal=:std,modpred=false),
-    ##                     forest(notrees=500,confidence=0.95,conformal=:std,modpred=true),
-    ##                     forest(notrees=500,confidence=0.95,conformal=:classcond,modpred=false),
-    ##                     forest(notrees=500,confidence=0.95,conformal=:classcond,modpred=true)],
-    ##            resultfile="results20160817-500-uci-95.txt")
-    ## experiment(files="uci", protocol = 0.5,
-    ##            methods=[forest(notrees=500,confidence=0.99,conformal=:std,modpred=false),
-    ##                     forest(notrees=500,confidence=0.99,conformal=:std,modpred=true),
-    ##                     forest(notrees=500,confidence=0.99,conformal=:classcond,modpred=false),
-    ##                     forest(notrees=500,confidence=0.99,conformal=:classcond,modpred=true)],
-    ##            resultfile="results20160817-500-uci-99.txt")
-    ## experiment(files="regression", normalizetarget=true,
-    ##            methods=[forest(notrees=500,confidence=0.9,conformal=:normalized,modpred=false),
-    ##                     forest(notrees=500,confidence=0.9,conformal=:normalized,modpred=true)],
-    ##            resultfile="results20160812-500-regression-90.txt")
-    ## experiment(files="regression", normalizetarget=true,
-    ##            methods=[forest(notrees=500,confidence=0.95,conformal=:normalized,modpred=false),
-    ##                     forest(notrees=500,confidence=0.95,conformal=:normalized,modpred=true)],
-    ##            resultfile="results20160812-500-regression-95.txt")
-    ## experiment(files="regression", normalizetarget=true,
-    ##            methods=[forest(notrees=500,confidence=0.99,conformal=:normalized,modpred=false),
-    ##                     forest(notrees=500,confidence=0.99,conformal=:normalized,modpred=true)],
-    ##            resultfile="results20160812-500-regression-99.txt")
-end
-
-function warmup()
-    experiment(files = ["uci/glass.txt"])
-    experiment(files = ["glass-reg.txt"])
+    experiment(files = ["uci/glass.txt"]) # Warmup
+    experiment(files="uci",methods=[forest(),forest(notrees=500)],resultfile="uci-results.txt")
+    experiment(files = ["regression/cooling.txt"]) # Warmup
+    experiment(files="regression",methods=[forest(),forest(notrees=500)],resultfile="regression-results.txt")
 end
 
 function doc()
@@ -411,7 +360,7 @@ The argument should be on the following format:
 
 To store a model in a file:
 
-    julia> store_model(<model>,<file>)                              
+    julia> store_model(<model>, <file>)                              
 
 The arguments should be on the following format:
 
@@ -432,12 +381,14 @@ The argument should be on the following format:
 
 To apply a model to loaded data:
 
-    julia> apply_model(<model>)
+    julia> apply_model(<model>, confidence = <confidence>)
 
 The argument should be on the following format:
 
     model : a generated or loaded model (see generate_model and load_model)
-
+    confidence : a float between 0 and 1 or :std (default = :std) 
+                 - probability of including the correct label in the prediction region
+                 - :std means employing the same confidence level as used during training
 
 Summary of all functions
 ------------------------
@@ -465,11 +416,11 @@ To work with a single dataset:
 
         describe_model(<model>)                                   
 
-        store_model(<model>,<file>)                              
+        store_model(<model>, <file>)                              
 
         m = load_model(<file>)                                  
 
-        apply_model(<model>)
+        apply_model(<model>, confidence = <confidence>)
 ")
 end
 
@@ -3465,35 +3416,38 @@ function generate_model(;method = forest())
                 end
                 thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
                 if thresholdindex >= 1                
-                    alpha = sort(alphas)[thresholdindex]
+                    sortedalphas = sort(alphas)
+                    alpha = sortedalphas[thresholdindex]
                 else
                     alpha = -Inf
                 end
-                classalphas = [alpha for j=1:noclasses]
+                conformalfunction = (:std,alpha,sortedalphas)
             elseif conformal == :classcond
-                classalphas = Array(Float64,noclasses)
+                classalpha = Array(Float64,noclasses)
+                classalphas = Array(Any,noclasses)
                 for c = 1:noclasses
-                    alphas = Float64[]
+                    classalphas[c] = Float64[]
                     noclassoob = 0
                     for i = 1:size(oobpredictions[c],1)
                         oobpredcount = oobpredictions[c][i][1]
                         if oobpredcount > 0
                             alphavalue = oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount
-                            push!(alphas,alphavalue)
+                            push!(classalphas[c],alphavalue)
                             noobcorrect += 1-abs(sign(indmax(oobpredictions[c][i][2:end])-c))
                             noclassoob += 1
                         end
                     end
                     thresholdindex = Int(floor((noclassoob+1)*(1-method.confidence)))
                     if thresholdindex >= 1                
-                        classalphas[c] = sort(alphas)[thresholdindex]
+                        classalphas[c] = sort(classalphas[c])
+                        classalpha[c] = classalphas[c][thresholdindex]
                     else
-                        classalphas[c] = -Inf
+                        classalpha[c] = -Inf
                     end
                     nooob += noclassoob                    
                 end
+                conformalfunction = (:classcond,classalpha,classalphas)
             end
-            conformalfunction = (conformal,classalphas)
             oobperformance = noobcorrect/nooob
         else
             oobpredictions = oobs[1]
@@ -3505,7 +3459,7 @@ function generate_model(;method = forest())
             nooob = 0
             ooberrors = Float64[]
             alphas = Float64[]
-            deltas = Float64[]
+#            deltas = Float64[]
             for i = 1:length(correcttrainingvalues)
                 oobpredcount = oobpredictions[i][1]
                 if oobpredcount > 0.0
@@ -3514,7 +3468,7 @@ function generate_model(;method = forest())
                     delta = (oobpredictions[i][3]/oobpredcount-(oobpredictions[i][2]/oobpredcount)^2)
                     alpha = 2*ooberror/(delta+0.01)
                     push!(alphas,alpha)                    
-                    push!(deltas,delta)                    
+#                    push!(deltas,delta)                    
                     oobse += ooberror^2
                     nooob += 1
                 end
@@ -3529,14 +3483,20 @@ function generate_model(;method = forest())
             end
             if conformal == :std
                 if thresholdindex >= 1
-                    errorrange = minimum([largestrange,2*sort(ooberrors, rev=true)[thresholdindex]])
+                    sortedooberrors = sort(ooberrors, rev=true)
+                    errorrange = minimum([largestrange,2*sortedooberrors[thresholdindex]])
                 else
                     errorrange = largestrange
                 end
-                conformalfunction = (:std,errorrange)
+                conformalfunction = (:std,errorrange,largestrange,sortedooberrors)
             elseif conformal == :normalized
-                alpha = sort(alphas,rev=true)[thresholdindex]
-                conformalfunction = (:normalized,alpha)
+                sortedalphas = sort(alphas,rev=true)
+                if thresholdindex >= 1
+                    alpha = sortedalphas[thresholdindex]
+                else
+                    alpha = Inf
+                end
+                conformalfunction = (:normalized,alpha,largestrange,sortedalphas)
             ## elseif conformal == :isotonic
             ##     eds = Array(Float64,nooob,2)
             ##     eds[:,1] = ooberrors
@@ -3621,7 +3581,7 @@ function describe_model(model::PredictionModel)
     end
 end
 
-function apply_model(model)
+function apply_model(model; confidence = :std)
     predictiontask = prediction_task(globaldata)
     if predictiontask != model.predictiontask 
         println("The model is not consistent with the loaded dataset") 
@@ -3664,10 +3624,30 @@ function apply_model(model)
         if predictiontask == :REGRESSION
             squaredpredictions = squaredpredictions/model.method.notrees
             if model.conformal[1] == :std
-                errorrange = model.conformal[2]
-                results = [(p,[p-errorrange/2,p+errorrange/2]) for p in predictions]
+                if confidence == :std
+                    errorrange = model.conformal[2]
+                else
+                    nooob = size(model.conformal[4],1)
+                    thresholdindex = Int(floor((nooob+1)*(1-confidence)))
+                    if thresholdindex >= 1
+                        errorrange = minimum([model.conformal[3],2*model.conformal[4][thresholdindex]])
+                    else
+                        errorrange = model.conformal[3]
+                    end
+                    results = [(p,[p-errorrange/2,p+errorrange/2]) for p in predictions]
+                end
             elseif model.conformal[1] == :normalized
-                alpha = model.conformal[2]
+                if confidence == :std
+                    alpha = model.conformal[2]
+                else
+                    nooob = size(model.conformal[4],1)
+                    thresholdindex = Int(floor((nooob+1)*(1-confidence)))
+                    if thresholdindex >= 1
+                        alpha = model.conformal[4][thresholdindex]
+                    else
+                        alpha = Inf
+                    end
+                end
                 results = Array(Any,size(predictions,1))
                 for i = 1:size(predictions,1)
                     delta = squaredpredictions[i]-predictions[i]^2
@@ -3693,23 +3673,56 @@ function apply_model(model)
             ##         results[i] = (predictions[i],[predictions[i]-errorrange/2,predictions[i]+errorrange/2])
             ##     end
             end
-        else
+        else # predictiontask == :CLASS
             results = Array(Any,size(predictions,1))
             noclasses = length(model.classes)
             if model.conformal[1] == :std
-                classalphas = model.conformal[2]
-            elseif model.conformal[1] == :classcond
-                classalphas = model.conformal[2]
-            end
-            for i = 1:size(predictions,1)
-                class = model.classes[indmax(predictions[i])]
-                plausible = Any[]
-                for j=1:noclasses
-                    if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= classalphas[j]
-                        push!(plausible,model.classes[j])
+                if confidence == :std
+                    alpha = model.conformal[2]
+                else
+                    nooob = size(model.conformal[3],1)
+                    thresholdindex = Int(floor((nooob+1)*(1-confidence)))
+                    if thresholdindex >= 1
+                        alpha = model.conformal[3][thresholdindex]
+                    else
+                        alpha = -Inf
                     end
                 end
-                results[i] = (class,plausible,predictions[i])
+                for i = 1:size(predictions,1)
+                    class = model.classes[indmax(predictions[i])]
+                    plausible = Any[]
+                    for j=1:noclasses
+                        if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= alpha
+                            push!(plausible,model.classes[j])
+                        end
+                    end
+                    results[i] = (class,plausible,predictions[i])
+                end
+            elseif model.conformal[1] == :classcond
+                if confidence == :std
+                    classalpha = model.conformal[2]
+                else
+                    classalpha = Array(Float64,noclasses)
+                    for c = 1:noclasses
+                        noclassoob = size(model.conformal[3][c],1)
+                        thresholdindex = Int(floor((noclassoob+1)*(1-confidence)))
+                        if thresholdindex >= 1                
+                            classalpha[c] = model.conformal[3][c][thresholdindex]
+                        else
+                            classalpha[c] = -Inf
+                        end
+                    end
+                end
+                for i = 1:size(predictions,1)
+                    class = model.classes[indmax(predictions[i])]
+                    plausible = Any[]
+                    for j=1:noclasses
+                        if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= classalpha[j]
+                            push!(plausible,model.classes[j])
+                        end
+                    end
+                    results[i] = (class,plausible,predictions[i])
+                end
             end
         end
     end
