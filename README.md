@@ -311,7 +311,7 @@ The argument should be on the following format:
 
 To store a model in a file:
 
-    julia> store_model(<model>,<file>)                              
+    julia> store_model(<model>, <file>)                              
 
 The arguments should be on the following format:
 
@@ -332,11 +332,14 @@ The argument should be on the following format:
 
 To apply a model to loaded data:
 
-    julia> apply_model(<model>)
+    julia> apply_model(<model>, confidence = <confidence>)
 
 The argument should be on the following format:
 
     model : a generated or loaded model (see generate_model and load_model)
+    confidence : a float between 0 and 1 or :std (default = :std) 
+                 - probability of including the correct label in the prediction region
+                 - :std means employing the same confidence level as used during training
 
 Summary of all functions
 ------------------------
@@ -364,8 +367,9 @@ To work with a single dataset:
 
         describe_model(<model>)                                   
 
-        store_model(<model>,<file>)                              
+        store_model(<model>, <file>)                              
 
         m = load_model(<file>)                                  
 
-        apply_model(<model>)
+        apply_model(<model>, confidence = <confidence>)
+
