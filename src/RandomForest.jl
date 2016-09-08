@@ -156,7 +156,7 @@ function experiment(;files = ".", separator = ',', protocol = 10, normalizetarge
     if typeof(files) == ASCIIString
         if isdir(files)
             dirfiles = readdir(files)
-            datafiles = dirfiles[map(Bool,[splitext(file)[2] in [".txt",".csv"] for file in dirfiles])]
+            datafiles = dirfiles[[splitext(file)[2] in [".txt",".csv"] for file in dirfiles]]
             filenames = [string(files,"/",filename) for filename in datafiles]
         else
             throw("Not a directory: $files")
