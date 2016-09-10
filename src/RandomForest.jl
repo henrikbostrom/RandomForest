@@ -165,8 +165,8 @@ function experiment(;files = ".", separator = ',', protocol = 10, normalizetarge
         filenames = files
     end
     totaltime = @elapsed results = [run_experiment(file,separator,protocol,normalizetarget,normalizeinput,methods) for file in filenames]
-    classificationresults = map(Bool,[pt == :CLASS for (pt,f,r) in results])
-    regressionresults = map(Bool,[pt == :REGRESSION for (pt,f,r) in results])
+    classificationresults = [pt == :CLASS for (pt,f,r) in results]
+    regressionresults = [pt == :REGRESSION for (pt,f,r) in results]
     present_results(sort(results[classificationresults]),methods)
     present_results(sort(results[regressionresults]),methods)
     println("Total time: $(round(totaltime,2)) s.")
@@ -1897,7 +1897,7 @@ function generate_tree(method,trainingrefs,trainingweights,regressionvalues,trai
             end
             selectedsample = rand(1:length(trainingrefs),samplesize)
             newtrainingweights[selectedsample] += 1.0
-            nonzeroweights = map(Bool,[newtrainingweights[i] > 0 for i=1:length(trainingweights)])
+            nonzeroweights = [newtrainingweights[i] > 0 for i=1:length(trainingweights)]
             newtrainingrefs = trainingrefs[nonzeroweights]
             newtrainingweights = newtrainingweights[nonzeroweights]
             newregressionvalues = regressionvalues[nonzeroweights]
@@ -1928,7 +1928,7 @@ function generate_tree(method,trainingrefs,trainingweights,regressionvalues,trai
             end
             zeroweights = Array(Any,noclasses)
             for c = 1:noclasses
-                nonzeroweights = map(Bool,[newtrainingweights[c][i] > 0 for i=1:length(newtrainingweights[c])])
+                nonzeroweights = [newtrainingweights[c][i] > 0 for i=1:length(newtrainingweights[c])]
                 zeroweights[c] = ~nonzeroweights
                 newtrainingrefs[c] = trainingrefs[c][nonzeroweights]
                 newtrainingweights[c] = newtrainingweights[c][nonzeroweights]
@@ -2978,8 +2978,8 @@ end
 function evaluate_method(;method = forest(),protocol = 10)
     println("Running experiment")
     totaltime = @elapsed results = [run_single_experiment(protocol,[method])]
-    classificationresults = map(Bool,[pt == :CLASS for (pt,f,r) in results])
-    regressionresults = map(Bool,[pt == :REGRESSION for (pt,f,r) in results])
+    classificationresults = [pt == :CLASS for (pt,f,r) in results]
+    regressionresults = [pt == :REGRESSION for (pt,f,r) in results]
     present_results(sort(results[classificationresults]),[method],ignoredatasetlabel = true)
     present_results(sort(results[regressionresults]),[method],ignoredatasetlabel = true)
     println("Total time: $(round(totaltime,2)) s.")
@@ -2988,8 +2988,8 @@ end
 function evaluate_methods(;methods = [forest()],protocol = 10)
     println("Running experiment")
     totaltime = @elapsed results = [run_single_experiment(protocol,methods)]
-    classificationresults = map(Bool,[pt == :CLASS for (pt,f,r) in results])
-    regressionresults = map(Bool,[pt == :REGRESSION for (pt,f,r) in results])
+    classificationresults = [pt == :CLASS for (pt,f,r) in results]
+    regressionresults = [pt == :REGRESSION for (pt,f,r) in results]
     present_results(sort(results[classificationresults]),methods,ignoredatasetlabel = true)
     present_results(sort(results[regressionresults]),methods,ignoredatasetlabel = true)
     println("Total time: $(round(totaltime,2)) s.")
