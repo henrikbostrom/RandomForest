@@ -8,19 +8,6 @@
 ## Copyright Henrik Boström 2016
 ## Email: henrik.bostrom@dsv.su.se
 ##
-## --------------------------------------------------------------------------
-##
-## Before running the first time,  the following package has to be added:
-## julia> Pkg.add("DataFrames")
-## and later:
-## julia> Pkg.update()
-##
-## Get instructions for how to run the program by the following commands:
-## julia> using RandomForest
-## julia> doc()
-##
-## --------------------------------------------------------------------------
-##
 ## TODO for version 1.0:
 ##
 ## *** MUST ***
@@ -53,25 +40,28 @@
 ## - allow for original weights that have to be taken into account when performing bagging, etc.
 ## - visualize single tree
 
+__precompile__()
+
 module RandomForest
 
 using DataFrames
 
-export experiment
-export tree
-export forest
-export doc
-export read_data
-export load_data
-export describe_data
-export evaluate_method
-export evaluate_methods
-export generate_model
-export store_model
-export load_model
-export describe_model
-export apply_model
-export runexp
+export 
+    experiment,
+    tree,
+    forest,
+    doc,
+    read_data,
+    load_data,
+    describe_data,
+    evaluate_method,
+    evaluate_methods,
+    generate_model,
+    store_model,
+    load_model,
+    describe_model,
+    apply_model,
+    runexp
 
 global majorversion = 0
 global minorversion = 0
@@ -85,67 +75,7 @@ function runexp()
     experiment(files="regression",methods=[forest(),forest(notrees=500)],resultfile="regression-results.txt")
 end
 
-## Type declarations
-
-type LearningMethod
-    modeltype::Any
-    notrees::Int
-    minleaf::Int
-    maxdepth::Int
-    randsub::Any
-    randval::Bool
-    splitsample::Int
-    bagging::Bool
-    bagsize::Number
-    modpred::Bool
-    laplace::Bool
-    confidence::Float64
-    conformal::Any
-end
-
-type RegressionResult
-    MSE::Float64
-    Corr::Float64
-    AvMSE::Float64
-    VarMSE::Float64
-    DEOMSE::Float64
-    AEEMSE::Float64
-    Valid::Float64
-    Region::Float64
-    Size::Float64
-    NoIrr::Float64
-    Time::Float64
-end
-
-type ClassificationResult
-    Acc::Float64
-    AUC::Float64
-    Brier::Float64
-    AvAcc::Float64
-    DEOAcc::Float64
-    AEEAcc::Float64
-    AvBrier::Float64
-    VBrier::Float64
-    Margin::Float64
-    Prob::Float64
-    Valid::Float64
-    Region::Float64
-    OneC::Float64
-    Size::Float64
-    NoIrr::Float64
-    Time::Float64
-end
-
-type PredictionModel
-    predictiontask::Any
-    classes::Any
-    version::Any
-    method::LearningMethod
-    oobperformance::Any
-    variableimportance::Any
-    trees::Any
-    conformal::Any
-end
+include("types.jl")
 
 ##
 ## Functions for running experiments
@@ -180,16 +110,6 @@ function experiment(;files = ".", separator = ',', protocol = 10, normalizetarge
         redirect_stdout(origstdout)
         close(resultfilestream)
     end
-end
-
-function tree(;minleaf = 5, maxdepth = 0, randsub = :all, randval = false,
-              splitsample = 0, bagging = false, bagsize = 1.0, modpred = false, laplace = true, confidence = 0.95, conformal = :default)
-    return LearningMethod(:tree,1,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
-end
-
-function forest(;minleaf = 1, maxdepth = 0, randsub = :default, randval = true,
-                splitsample = 0, bagging = true, bagsize = 1.0, modpred = false, laplace = false, confidence = 0.95, conformal = :default, notrees = 100)
-    return LearningMethod(:forest,notrees,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
 end
 
 function run_experiment(file, separator, protocol, normalizetarget, normalizeinput, methods)
