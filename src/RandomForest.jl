@@ -2685,7 +2685,7 @@ end
 function present_results(results,methods;ignoredatasetlabel = false)
     if results != []
         if results[1][1] == :CLASS # NOTE: Assuming all tasks of the same type
-            resultlabels = fieldnames(ClassificationResult)
+            resultlabels = fieldnames(ClassificationResult) #FIXME: Can be extracted from the model information
         else
             resultlabels = fieldnames(RegressionResult)
         end
@@ -2949,7 +2949,7 @@ end
 
 function generate_model(;method = forest())
     predictiontask = prediction_task(globaldata)
-    if predictiontask == :NONE
+    if predictiontask == :NONE # FIXME: We should not be doing this
         println("The loaded dataset is not on the correct format: CLASS/REGRESSION column missing")
         println("This may be due to an incorrectly specified separator, e.g., use: separator = \'\\t\'")
         result = :NONE
