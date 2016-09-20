@@ -219,7 +219,7 @@ function run_split_internal(method::LearningMethod{Regressor}, results)
         predictions += results[r][2]
     end
     nopredictions = size(predictions,1)
-        
+
     predictions = [predictions[i][2]/predictions[i][1] for i = 1:nopredictions]
     if methods[m].conformal == :default
         conformal = :normalized
@@ -473,7 +473,7 @@ function run_split_internal(method::LearningMethod{Classifier}, results)
         predictions += results[r][2]
     end
     nopredictions = size(predictions,1)
-    
+
     predictions = [predictions[i][2:end]/predictions[i][1] for i = 1:nopredictions]
     classes = unique(globaldata[:CLASS])
     noclasses = length(classes)
@@ -669,7 +669,7 @@ function run_split_internal(method::LearningMethod{Classifier}, results)
     varbrier = avbrier-brierscore
     extratime = toq()
     return ClassificationResult(accuracy,weightedauc,brierscore,avacc,esterr,absesterr,avbrier,varbrier,margin,prob,validity,avc,onec,modelsize,noirregularleafs,time+extratime)
-    
+
 end
 
 function calculate_auc(posclassprobabilities,negclassprobabilities)
@@ -837,7 +837,7 @@ function run_cross_validation_internal(method::LearningMethod{Regressor}, result
     end
     nopredictions = size(globaldata,1)
     testexamplecounter = 0
-    
+
     predictions = [predictions[i][2]/predictions[i][1] for i = 1:nopredictions]
     mse = Array(Float64,nofolds)
     corrcoeff = Array(Float64,nofolds)
@@ -1123,7 +1123,7 @@ function run_cross_validation_internal(method::LearningMethod{Classifier}, resul
     end
     nopredictions = size(globaldata,1)
     testexamplecounter = 0
-    
+
     predictions = [predictions[i][2:end]/predictions[i][1] for i = 1:nopredictions]
     if methods[m].conformal == :default
         conformal = :std
@@ -1667,7 +1667,7 @@ function generate_trees(method::LearningMethod{Regressor},predictiontask,classes
     for i = 1:size(trainingdata,1)
         oobpredictions[i] = [0,0,0]
     end
-    
+
     # AMGAD: starting from here till the end of the function is duplicated between here and the classifier dispatcher
     variables, types = get_variables_and_types(globaldata)
     modelsize = 0
@@ -1703,7 +1703,7 @@ function generate_trees(method::LearningMethod{Classifier},predictiontask,classe
         end
     end
     regressionvalues = []
-    
+
     # AMGAD: starting from here till the end of the function is duplicated between here and the regressor dispatcher
     variables, types = get_variables_and_types(globaldata)
     modelsize = 0
@@ -1720,7 +1720,7 @@ function generate_trees(method::LearningMethod{Classifier},predictiontask,classe
     return (model,oobpredictions,variableimportance)
 end
 
-function find_missing_values(mathod::LearningMethod{Regressor},variables,trainingdata)
+function find_missing_values(method::LearningMethod{Regressor},variables,trainingdata)
     missingvalues = Array(Any,length(variables))
     nonmissingvalues = Array(Any,length(variables))
     for v = 1:length(variables)
@@ -1742,7 +1742,7 @@ function find_missing_values(mathod::LearningMethod{Regressor},variables,trainin
     return (missingvalues,nonmissingvalues)
 end
 
-function find_missing_values(mathod::LearningMethod{Classifier},variables,trainingdata)
+function find_missing_values(method::LearningMethod{Classifier},variables,trainingdata)
     noclasses = size(trainingdata,1)
     missingvalues = Array(Any,noclasses)
     nonmissingvalues = Array(Any,noclasses)
@@ -1864,7 +1864,7 @@ function replacements_for_missing_values!(method::LearningMethod{Classifier},new
         end
     end
 end
-    
+
 function replacements_for_missing_values!(method::LearningMethod{Regressor},newtestdata,testdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
     for v = 1:length(variables)
         if missingvalues[v] != []
@@ -2536,7 +2536,7 @@ end
 """
 The classification version
 """
-function make_split(trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
+function make_split(method::LearningMethod{Classifier},trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
     (varno, variable, splittype, splitpoint) = bestsplit
     noclasses = size(trainingrefs,1)
     leftrefs = Array(Any,noclasses)
@@ -2583,7 +2583,7 @@ end
 """
 The regression version
 """
-function make_split(trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
+function make_split(method::LearningMethod{Regressor},trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
     (varno, variable, splittype, splitpoint) = bestsplit
     leftrefs = Int[]
     leftweights = Float64[]
@@ -2765,7 +2765,7 @@ end
 function present_results(results,methods;ignoredatasetlabel = false)
     if results != []
         if results[1][1] == :CLASS # NOTE: Assuming all tasks of the same type
-            resultlabels = fieldnames(ClassificationResult) #FIXME: Can be extracted from the model information
+            resultlabels = fieldnames(ClassificationResult) #FIXME: MOH Can be extracted from the model information
         else
             resultlabels = fieldnames(RegressionResult)
         end
@@ -3029,7 +3029,7 @@ end
 
 function generate_model(;method = forest())
     predictiontask = prediction_task(globaldata)
-    if predictiontask == :NONE # FIXME: We should not be doing this
+    if predictiontask == :NONE # FIXME: MOH We should not be doing this...probably DEAD code
         println("The loaded dataset is not on the correct format: CLASS/REGRESSION column missing")
         println("This may be due to an incorrectly specified separator, e.g., use: separator = \'\\t\'")
         result = :NONE
