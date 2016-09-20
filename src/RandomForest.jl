@@ -206,460 +206,470 @@ function run_split(testoption,predictiontask,methods)
         end
         time = @elapsed results = pmap(generate_and_test_trees,[(methods[m],predictiontask,:test,n,rand(1:1000_000_000),randomoobs) for n in notrees])
         tic()
-        modelsize = sum([result[1] for result in results])
-        if predictiontask == :REGRESSION
-            noirregularleafs = sum([result[6] for result in results])
-        else
-            noirregularleafs = sum([result[5] for result in results])
-        end
-        predictions = results[1][2]
+        methodresults[m] = run_split_internal(methods[m], results)
+    end
+    return methodresults
+end
+
+function run_split_internal(method::LearningMethod{Regressor}, results)
+    modelsize = sum([result[1] for result in results])
+    noirregularleafs = sum([result[6] for result in results])
+    predictions = results[1][2]
+    for r = 2:length(results)
+        predictions += results[r][2]
+    end
+    nopredictions = size(predictions,1)
+        
+    predictions = [predictions[i][2]/predictions[i][1] for i = 1:nopredictions]
+    if methods[m].conformal == :default
+        conformal = :normalized
+    else
+        conformal = methods[m].conformal
+    end
+    if conformal == :normalized ## || conformal == :isotonic
+        squaredpredictions = results[1][5]
         for r = 2:length(results)
-            predictions += results[r][2]
+            squaredpredictions += results[r][5]
         end
-        nopredictions = size(predictions,1)
-        if predictiontask == :REGRESSION
-            predictions = [predictions[i][2]/predictions[i][1] for i = 1:nopredictions]
-            if methods[m].conformal == :default
-                conformal = :normalized
-            else
-                conformal = methods[m].conformal
-            end
+        squaredpredictions = [squaredpredictions[i][2]/squaredpredictions[i][1] for i = 1:nopredictions]
+    end
+    oobpredictions = results[1][4]
+    for r = 2:length(results)
+        oobpredictions += results[r][4]
+    end
+    trainingdata = globaldata[globaldata[:TEST] .== false,:]
+    correcttrainingvalues = trainingdata[:REGRESSION]
+    oobse = 0.0
+    nooob = 0
+    ooberrors = Float64[]
+    alphas = Float64[]
+    deltas = Float64[]
+    ## if conformal == :rfok
+    ##     labels = names(trainingdata)[[!(l in [:REGRESSION,:WEIGHT,:TEST,:FOLD,:ID]) for l in names(trainingdata)]]
+    ##     rows = Array{Float64}[]
+    ##     knnalphas = Float64[]
+    ## end
+    largestrange = maximum(correcttrainingvalues)-minimum(correcttrainingvalues)
+    for i = 1:length(correcttrainingvalues)
+        oobpredcount = oobpredictions[i][1]
+        if oobpredcount > 0.0
+            ooberror = abs(correcttrainingvalues[i]-(oobpredictions[i][2]/oobpredcount))
+            push!(ooberrors,ooberror)
             if conformal == :normalized ## || conformal == :isotonic
-                squaredpredictions = results[1][5]
-                for r = 2:length(results)
-                    squaredpredictions += results[r][5]
-                end
-                squaredpredictions = [squaredpredictions[i][2]/squaredpredictions[i][1] for i = 1:nopredictions]
-            end
-            oobpredictions = results[1][4]
-            for r = 2:length(results)
-                oobpredictions += results[r][4]
-            end
-            trainingdata = globaldata[globaldata[:TEST] .== false,:]
-            correcttrainingvalues = trainingdata[:REGRESSION]
-            oobse = 0.0
-            nooob = 0
-            ooberrors = Float64[]
-            alphas = Float64[]
-            deltas = Float64[]
-            ## if conformal == :rfok
-            ##     labels = names(trainingdata)[[!(l in [:REGRESSION,:WEIGHT,:TEST,:FOLD,:ID]) for l in names(trainingdata)]]
-            ##     rows = Array{Float64}[]
-            ##     knnalphas = Float64[]
-            ## end
-            largestrange = maximum(correcttrainingvalues)-minimum(correcttrainingvalues)
-            for i = 1:length(correcttrainingvalues)
-                oobpredcount = oobpredictions[i][1]
-                if oobpredcount > 0.0
-                    ooberror = abs(correcttrainingvalues[i]-(oobpredictions[i][2]/oobpredcount))
-                    push!(ooberrors,ooberror)
-                    if conformal == :normalized ## || conformal == :isotonic
-                        delta = (oobpredictions[i][3]/oobpredcount-(oobpredictions[i][2]/oobpredcount)^2)
-                        if 2*ooberror > largestrange
-                            alpha = largestrange/(delta+0.01)
-                        else
-                            alpha = 2*ooberror/(delta+0.01)
-                        end
-                        push!(alphas,alpha)
-                        push!(deltas,delta)
-                    end
-                    ## if conformal == :rfok
-                    ##     push!(rows,hcat(ooberror,convert(Array{Float64},trainingdata[i,labels])))
-                    ## end
-                    oobse += ooberror^2
-                    nooob += 1
-                end
-            end
-            ## if conformal == :rfok
-            ##     maxk = minimum([45,nooob-1])
-            ##     deltasalphas = Array(Float64,nooob,maxk,2)
-            ##     distancematrix = Array(Float64,nooob,nooob)
-            ##     for r = 1:nooob-1
-            ##         distancematrix[r,r] = 0.001
-            ##         for k = r+1:nooob
-            ##             distance = sqL2dist(rows[r][2:end],rows[k][2:end])+0.001 # Small term added to prevent infinite weights
-            ##             distancematrix[r,k] = distance
-            ##             distancematrix[k,r] = distance
-            ##         end
-            ##     end
-            ##     distancematrix[nooob,nooob] = 0.001
-            ##     for r = 1:nooob
-            ##         distanceerrors = Array(Float64,nooob,2)
-            ##         for n = 1:nooob
-            ##             distanceerrors[n,1] = distancematrix[r,n]
-            ##             distanceerrors[n,2] = rows[n][1]
-            ##         end
-            ##         distanceerrors = sortrows(distanceerrors,by=x->x[1])
-            ##         knndelta = 0.0
-            ##         distancesum = 0.0
-            ##         for k = 2:maxk+1
-            ##             knndelta += distanceerrors[k,2]/distanceerrors[k,1]
-            ##             distancesum += 1/distanceerrors[k,1]
-            ##             deltasalphas[r,k-1,1] = knndelta/distancesum
-            ##             if 2*rows[r][1] > largestrange
-            ##                 deltasalphas[r,k-1,2] = largestrange/(deltasalphas[r,k-1,1]+0.01)
-            ##             else
-            ##                 deltasalphas[r,k-1,2] = 2*rows[r][1]/(deltasalphas[r,k-1,1]+0.01)
-            ##             end
-            ##         end
-            ##     end
-            ##     thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
-            ##     if thresholdindex >= 1
-            ##         lowestrangesum = Inf
-            ##         bestk = Inf
-            ##         bestalpha = Inf
-            ##         for k = 1:maxk
-            ##             knnalpha = sort(deltasalphas[:,k,2],rev=true)[thresholdindex]
-            ##             knnrangesum = 0.0
-            ##             for j = 1:nooob
-            ##                 knnrangesum += knnalpha*(deltasalphas[j,k,1]+0.01)
-            ##             end
-            ##             if knnrangesum < lowestrangesum
-            ##                 lowestrangesum = knnrangesum
-            ##                 bestk = k
-            ##                 bestalpha = knnalpha
-            ##             end
-            ##         end
-            ##     else
-            ##         bestalpha = Inf
-            ##         bestk = 1
-            ##     end
-            ## end
-            oobmse = oobse/nooob
-            thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
-            if conformal == :std
-                if thresholdindex >= 1
-                    errorrange = minimum([largestrange,2*sort(ooberrors, rev=true)[thresholdindex]])
+                delta = (oobpredictions[i][3]/oobpredcount-(oobpredictions[i][2]/oobpredcount)^2)
+                if 2*ooberror > largestrange
+                    alpha = largestrange/(delta+0.01)
                 else
-                    errorrange = largestrange
+                    alpha = 2*ooberror/(delta+0.01)
                 end
-            elseif conformal == :normalized
+                push!(alphas,alpha)
+                push!(deltas,delta)
+            end
+            ## if conformal == :rfok
+            ##     push!(rows,hcat(ooberror,convert(Array{Float64},trainingdata[i,labels])))
+            ## end
+            oobse += ooberror^2
+            nooob += 1
+        end
+    end
+    ## if conformal == :rfok
+    ##     maxk = minimum([45,nooob-1])
+    ##     deltasalphas = Array(Float64,nooob,maxk,2)
+    ##     distancematrix = Array(Float64,nooob,nooob)
+    ##     for r = 1:nooob-1
+    ##         distancematrix[r,r] = 0.001
+    ##         for k = r+1:nooob
+    ##             distance = sqL2dist(rows[r][2:end],rows[k][2:end])+0.001 # Small term added to prevent infinite weights
+    ##             distancematrix[r,k] = distance
+    ##             distancematrix[k,r] = distance
+    ##         end
+    ##     end
+    ##     distancematrix[nooob,nooob] = 0.001
+    ##     for r = 1:nooob
+    ##         distanceerrors = Array(Float64,nooob,2)
+    ##         for n = 1:nooob
+    ##             distanceerrors[n,1] = distancematrix[r,n]
+    ##             distanceerrors[n,2] = rows[n][1]
+    ##         end
+    ##         distanceerrors = sortrows(distanceerrors,by=x->x[1])
+    ##         knndelta = 0.0
+    ##         distancesum = 0.0
+    ##         for k = 2:maxk+1
+    ##             knndelta += distanceerrors[k,2]/distanceerrors[k,1]
+    ##             distancesum += 1/distanceerrors[k,1]
+    ##             deltasalphas[r,k-1,1] = knndelta/distancesum
+    ##             if 2*rows[r][1] > largestrange
+    ##                 deltasalphas[r,k-1,2] = largestrange/(deltasalphas[r,k-1,1]+0.01)
+    ##             else
+    ##                 deltasalphas[r,k-1,2] = 2*rows[r][1]/(deltasalphas[r,k-1,1]+0.01)
+    ##             end
+    ##         end
+    ##     end
+    ##     thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
+    ##     if thresholdindex >= 1
+    ##         lowestrangesum = Inf
+    ##         bestk = Inf
+    ##         bestalpha = Inf
+    ##         for k = 1:maxk
+    ##             knnalpha = sort(deltasalphas[:,k,2],rev=true)[thresholdindex]
+    ##             knnrangesum = 0.0
+    ##             for j = 1:nooob
+    ##                 knnrangesum += knnalpha*(deltasalphas[j,k,1]+0.01)
+    ##             end
+    ##             if knnrangesum < lowestrangesum
+    ##                 lowestrangesum = knnrangesum
+    ##                 bestk = k
+    ##                 bestalpha = knnalpha
+    ##             end
+    ##         end
+    ##     else
+    ##         bestalpha = Inf
+    ##         bestk = 1
+    ##     end
+    ## end
+    oobmse = oobse/nooob
+    thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
+    if conformal == :std
+        if thresholdindex >= 1
+            errorrange = minimum([largestrange,2*sort(ooberrors, rev=true)[thresholdindex]])
+        else
+            errorrange = largestrange
+        end
+    elseif conformal == :normalized
+        if thresholdindex >= 1
+            alpha = sort(alphas, rev=true)[thresholdindex]
+        else
+            alpha = Inf
+        end
+    ## elseif conformal == :rfok
+    ##     alpha = bestalpha
+    ## elseif conformal == :isotonic
+    ##     eds = Array(Any,nooob,2)
+    ##     eds[:,1] = ooberrors
+    ##     eds[:,2] = deltas
+    ##     eds = sortrows(eds,by=x->x[2])
+    ##     mincalibrationsize = maximum([10,Int(floor(1/(round((1-methods[m].confidence)*1000000)/1000000))-1)])
+    ##     isotonicthresholds = Any[]
+    ##     oobindex = 0
+    ##     while size(eds,1)-oobindex >= 2*mincalibrationsize
+    ##         isotonicgroup = eds[oobindex+1:oobindex+mincalibrationsize,:]
+    ##         threshold = isotonicgroup[1,2]
+    ##         isotonicgroup = sortrows(isotonicgroup,by=x->x[1],rev=true)
+    ##         push!(isotonicthresholds,(threshold,isotonicgroup[1,1],isotonicgroup))
+    ##         oobindex += mincalibrationsize
+    ##     end
+    ##     isotonicgroup = eds[oobindex+1:end,:]
+    ##     threshold = isotonicgroup[1,2]
+    ##     isotonicgroup = sortrows(isotonicgroup,by=x->x[1],rev=true)
+    ##     thresholdindex = maximum([1,Int(floor(size(isotonicgroup,1)*(1-methods[m].confidence)))])
+    ##     push!(isotonicthresholds,(threshold,isotonicgroup[thresholdindex][1],isotonicgroup))
+    ##     originalthresholds = copy(isotonicthresholds)
+    ##     change = true
+    ##     while change
+    ##         change = false
+    ##         counter = 1
+    ##         while counter < size(isotonicthresholds,1) && ~change
+    ##             if isotonicthresholds[counter][2] > isotonicthresholds[counter+1][2]
+    ##                 newisotonicgroup = [isotonicthresholds[counter][3];isotonicthresholds[counter+1][3]]
+    ##                 threshold = minimum(newisotonicgroup[:,2])
+    ##                 newisotonicgroup = sortrows(newisotonicgroup,by=x->x[1],rev=true)
+    ##                 thresholdindex = maximum([1,Int(floor(size(newisotonicgroup,1)*(1-methods[m].confidence)))])
+    ##                 splice!(isotonicthresholds,counter:counter+1,[(threshold,newisotonicgroup[thresholdindex][1],newisotonicgroup)])
+    ##                 change = true
+    ##             else
+    ##                 counter += 1
+    ##             end
+    ##         end
+    ##     end
+    end
+    testdata = globaldata[globaldata[:TEST] .== true,:]
+    correctvalues = testdata[:REGRESSION]
+    mse = 0.0
+    validity = 0.0
+    rangesum = 0.0
+    for i = 1:nopredictions
+        error = abs(correctvalues[i]-predictions[i])
+        mse += error^2
+        if conformal == :normalized && methods[m].modpred
+            randomoob = randomoobs[i]
+            oobpredcount = oobpredictions[randomoob][1]
+            if oobpredcount > 0.0
+                thresholdindex = Int(floor(nooob*(1-methods[m].confidence)))
                 if thresholdindex >= 1
-                    alpha = sort(alphas, rev=true)[thresholdindex]
+                    alpha = sort(alphas[[1:randomoob-1;randomoob+1:end]], rev=true)[thresholdindex]
                 else
                     alpha = Inf
                 end
-            ## elseif conformal == :rfok
-            ##     alpha = bestalpha
-            ## elseif conformal == :isotonic
-            ##     eds = Array(Any,nooob,2)
-            ##     eds[:,1] = ooberrors
-            ##     eds[:,2] = deltas
-            ##     eds = sortrows(eds,by=x->x[2])
-            ##     mincalibrationsize = maximum([10,Int(floor(1/(round((1-methods[m].confidence)*1000000)/1000000))-1)])
-            ##     isotonicthresholds = Any[]
-            ##     oobindex = 0
-            ##     while size(eds,1)-oobindex >= 2*mincalibrationsize
-            ##         isotonicgroup = eds[oobindex+1:oobindex+mincalibrationsize,:]
-            ##         threshold = isotonicgroup[1,2]
-            ##         isotonicgroup = sortrows(isotonicgroup,by=x->x[1],rev=true)
-            ##         push!(isotonicthresholds,(threshold,isotonicgroup[1,1],isotonicgroup))
-            ##         oobindex += mincalibrationsize
-            ##     end
-            ##     isotonicgroup = eds[oobindex+1:end,:]
-            ##     threshold = isotonicgroup[1,2]
-            ##     isotonicgroup = sortrows(isotonicgroup,by=x->x[1],rev=true)
-            ##     thresholdindex = maximum([1,Int(floor(size(isotonicgroup,1)*(1-methods[m].confidence)))])
-            ##     push!(isotonicthresholds,(threshold,isotonicgroup[thresholdindex][1],isotonicgroup))
-            ##     originalthresholds = copy(isotonicthresholds)
-            ##     change = true
-            ##     while change
-            ##         change = false
-            ##         counter = 1
-            ##         while counter < size(isotonicthresholds,1) && ~change
-            ##             if isotonicthresholds[counter][2] > isotonicthresholds[counter+1][2]
-            ##                 newisotonicgroup = [isotonicthresholds[counter][3];isotonicthresholds[counter+1][3]]
-            ##                 threshold = minimum(newisotonicgroup[:,2])
-            ##                 newisotonicgroup = sortrows(newisotonicgroup,by=x->x[1],rev=true)
-            ##                 thresholdindex = maximum([1,Int(floor(size(newisotonicgroup,1)*(1-methods[m].confidence)))])
-            ##                 splice!(isotonicthresholds,counter:counter+1,[(threshold,newisotonicgroup[thresholdindex][1],newisotonicgroup)])
-            ##                 change = true
-            ##             else
-            ##                 counter += 1
-            ##             end
-            ##         end
-            ##     end
-            end
-            testdata = globaldata[globaldata[:TEST] .== true,:]
-            correctvalues = testdata[:REGRESSION]
-            mse = 0.0
-            validity = 0.0
-            rangesum = 0.0
-            for i = 1:nopredictions
-                error = abs(correctvalues[i]-predictions[i])
-                mse += error^2
-                if conformal == :normalized && methods[m].modpred
-                    randomoob = randomoobs[i]
-                    oobpredcount = oobpredictions[randomoob][1]
-                    if oobpredcount > 0.0
-                        thresholdindex = Int(floor(nooob*(1-methods[m].confidence)))
-                        if thresholdindex >= 1
-                            alpha = sort(alphas[[1:randomoob-1;randomoob+1:end]], rev=true)[thresholdindex]
-                        else
-                            alpha = Inf
-                        end
-                    else
-                        println("oobpredcount = $oobpredcount !!! This is almost surely impossible!")
-                    end
-                    delta = squaredpredictions[i]-predictions[i]^2
-                    errorrange = alpha*(delta+0.01)
-                    if isnan(errorrange) || errorrange > largestrange
-                        errorrange = largestrange
-                    end
-                elseif conformal == :normalized
-                    delta = squaredpredictions[i]-predictions[i]^2
-                    errorrange = alpha*(delta+0.01)
-                    if isnan(errorrange) || errorrange > largestrange
-                        errorrange = largestrange
-                    end
-                ## elseif conformal == :rfok
-                ##     testrow = convert(Array{Float64},testdata[i,labels])
-                ##     distanceerrors = Array(Float64,nooob,2)
-                ##     for n = 1:nooob
-                ##         distanceerrors[n,1] = sqL2dist(testrow,rows[n][2:end])+0.001 # Small term added to prevent infinite weights
-                ##         distanceerrors[n,2] = rows[n][1]
-                ##     end
-                ##     distanceerrors = sortrows(distanceerrors,by=x->x[1])
-                ##     knndelta = 0.0
-                ##     distancesum = 0.0
-                ##     for j = 1:bestk
-                ##         knndelta += distanceerrors[j,2]/distanceerrors[j,1]
-                ##         distancesum += 1/distanceerrors[j,1]
-                ##     end
-                ##     knndelta /= distancesum
-                ##     errorrange = alpha*(knndelta+0.01)
-                ##     if isnan(errorrange) || errorrange > largestrange
-                ##         errorrange = largestrange
-                ##     end
-                ## elseif conformal == :isotonic
-                ##     delta = squaredpredictions[i]-predictions[i]^2
-                ##     foundthreshold = false
-                ##     thresholdcounter = size(isotonicthresholds,1)
-                ##     while ~foundthreshold && thresholdcounter > 0
-                ##         if delta >= isotonicthresholds[thresholdcounter][1]
-                ##             errorrange = isotonicthresholds[thresholdcounter][2]*2
-                ##             foundthreshold = true
-                ##         else
-                ##             thresholdcounter -= 1
-                ##         end
-                ## end
-                end
-                rangesum += errorrange
-                if error <= errorrange/2
-                    validity += 1
-                end
-            end
-            mse = mse/nopredictions
-            esterr = oobmse-mse
-            absesterr = abs(esterr)
-            validity = validity/nopredictions
-            region = rangesum/nopredictions
-            corrcoeff = cor(correctvalues,predictions)
-            totalnotrees = sum([results[r][3][1] for r = 1:length(results)])
-            totalsquarederror = sum([results[r][3][2] for r = 1:length(results)])
-            avmse = totalsquarederror/totalnotrees
-            varmse = avmse-mse
-            extratime = toq()
-            methodresults[m] = RegressionResult(mse,corrcoeff,avmse,varmse,esterr,absesterr,validity,region,modelsize,noirregularleafs,time+extratime)
-        else # predictiontask = :CLASS
-            predictions = [predictions[i][2:end]/predictions[i][1] for i = 1:nopredictions]
-            classes = unique(globaldata[:CLASS])
-            noclasses = length(classes)
-            classdata = Array(Any,noclasses)
-            for c = 1:noclasses
-                classdata[c] = globaldata[globaldata[:CLASS] .== classes[c],:]
-            end
-            if methods[m].conformal == :default
-                conformal = :std
             else
-                conformal = methods[m].conformal
+                println("oobpredcount = $oobpredcount !!! This is almost surely impossible!")
             end
-            oobpredictions = results[1][4]
-            for c = 1:noclasses
-                for r = 2:length(results)
-                    oobpredictions[c] += results[r][4][c]
-                end
+            delta = squaredpredictions[i]-predictions[i]^2
+            errorrange = alpha*(delta+0.01)
+            if isnan(errorrange) || errorrange > largestrange
+                errorrange = largestrange
             end
-            noobcorrect = 0
-            nooob = 0
-            if conformal == :std
-                alphas = Float64[]
-                for c = 1:noclasses
-                    for i = 1:size(oobpredictions[c],1)
-                        oobpredcount = oobpredictions[c][i][1]
-                        if oobpredcount > 0
-                            alpha = oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount
-                            push!(alphas,alpha)
-                            noobcorrect += 1-abs(sign(indmax(oobpredictions[c][i][2:end])-c))
-                            nooob += 1
-                        end
-                    end
-                end
-                thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
-                if thresholdindex >= 1
-                    alpha = sort(alphas)[thresholdindex]
-                else
-                    alpha = -Inf
-                end
-            elseif conformal == :classcond
-                randomclassoobs = Array(Any,size(randomoobs,1))
-                for i = 1:size(randomclassoobs,1)
-                    oobref = randomoobs[i]
-                    c = 1
-                    while oobref > size(oobpredictions[c],1)
-                        oobref -= size(oobpredictions[c],1)
-                        c += 1
-                    end
-                    randomclassoobs[i] = (c,oobref)
-                end
-                classalpha = Array(Float64,noclasses)
-                classalphas = Array(Any,noclasses)
-                for c = 1:noclasses
-                    alphas = Float64[]
-                    noclassoob = 0
-                    for i = 1:size(oobpredictions[c],1)
-                        oobpredcount = oobpredictions[c][i][1]
-                        if oobpredcount > 0
-                            alphavalue = oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount
-                            push!(alphas,alphavalue)
-                            noobcorrect += 1-abs(sign(indmax(oobpredictions[c][i][2:end])-c))
-                            noclassoob += 1
-                        end
-                    end
-                    classalphas[c] = alphas
-                    thresholdindex = Int(floor((noclassoob+1)*(1-methods[m].confidence)))
-                    if thresholdindex >= 1
-                        classalpha[c] = sort(alphas)[thresholdindex]
-                    else
-                        classalpha[c] = -Inf
-                    end
-                    nooob += noclassoob
-                end
+        elseif conformal == :normalized
+            delta = squaredpredictions[i]-predictions[i]^2
+            errorrange = alpha*(delta+0.01)
+            if isnan(errorrange) || errorrange > largestrange
+                errorrange = largestrange
             end
-            oobacc = noobcorrect/nooob
-            testdata = Array(Any,noclasses)
-            nocorrect = 0
-            briersum = 0.0
-            marginsum = 0.0
-            probsum = 0.0
-            noinrangesum = 0
-            nolabelssum = 0
-            noonec = 0
-            testexamplecounter = 0
-            for c = 1:noclasses
-                correctclassvector = zeros(noclasses)
-                correctclassvector[c] = 1.0
-                allbutclassvector = [1:c-1;c+1:noclasses]
-                testdata[c] = classdata[c][classdata[c][:TEST] .== true,:]
-                if size(testdata[c],1) > 0
-                    for i=testexamplecounter+1:testexamplecounter+size(testdata[c],1)
-                        mostprobable = indmax(predictions[i])
-                        correct = 1-abs(sign(mostprobable-c))
-                        nocorrect += correct
-                        briersum += sqL2dist(correctclassvector,predictions[i])
-                        margin = predictions[i][c]-maximum(predictions[i][allbutclassvector])
-                        marginsum += margin
-                        probsum += maximum(predictions[i])
-                        if methods[m].modpred
-                            if conformal == :std
-                                randomoob = randomoobs[i]
-                                thresholdindex = Int(floor(nooob*(1-methods[m].confidence)))
-                                if thresholdindex >= 1
-                                    alpha = sort(alphas[[1:randomoob-1;randomoob+1:end]])[thresholdindex] # NOTE: assumes oobpredcount > 0 always is true!
-                                else
-                                    alpha = -Inf
-                                end
-                            else # conformal == :classcond
-                                randomoobclass, randomoobref = randomclassoobs[i]
-                                thresholdindex = Int(floor(size(classalphas[randomoobclass],1)*(1-methods[m].confidence)))
-                                origclassalpha = classalpha[randomoobclass]
-                                if thresholdindex >= 1
-                                    classalpha[randomoobclass] = sort(classalphas[randomoobclass][[1:randomoobref-1;randomoobref+1:end]])[thresholdindex] # NOTE: assumes oobpredcount > 0 always is true!
-                                else
-                                    classalpha[randomoobclass] = -Inf
-                                end
-                                alpha = classalpha[c]
-                            end
-                        else
-                            if conformal == :classcond
-                                alpha = classalpha[c]
-                            end
-                        end
-                        if margin >= alpha
-                            noinrangesum += 1
-                        end
-                        nolabels = 0
-                        if conformal == :std
-                            for j = 1:noclasses
-                                if j == mostprobable
-                                    if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= alpha
-                                        nolabels += 1
-                                    end
-                            else
-                                if predictions[i][j]-predictions[i][mostprobable] >= alpha # classalphas[j]
-                                    nolabels += 1
-                                end
-                                end
-                            end
-                        else # conformal == :classcond
-                            for j = 1:noclasses
-                                if j == mostprobable
-                                    if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= classalpha[j]
-                                        nolabels += 1
-                                    end
-                            else
-                                if predictions[i][j]-predictions[i][mostprobable] >= classalpha[j]
-                                    nolabels += 1
-                                end
-                                end
-                            end
-                            if methods[m].modpred
-                                classalpha[randomoobclass] = origclassalpha
-                            end
-                        end
-                        nolabelssum += nolabels
-                        if nolabels == 1
-                            noonec += correct
-                        end
-                    end
-                end
-                testexamplecounter += size(testdata[c],1)
-            end
-            notestexamples = sum([size(testdata[c],1) for c = 1:noclasses])
-            accuracy = nocorrect/notestexamples
-            esterr = oobacc-accuracy
-            absesterr = abs(esterr)
-            brierscore = briersum/notestexamples
-            margin = marginsum/notestexamples
-            prob = probsum/notestexamples
-            validity = noinrangesum/notestexamples
-            avc = nolabelssum/notestexamples
-            onec = noonec/notestexamples
-            auc = Array(Float64,noclasses)
-            testexamplecounter = 0
-            for c = 1:noclasses
-                if size(testdata[c],1) > 0
-                    classprobs = [predictions[i][c] for i=1:length(predictions)]
-                    auc[c] = calculate_auc(sort(classprobs[testexamplecounter+1:testexamplecounter+size(testdata[c],1)],rev = true),
-                                           sort([classprobs[1:testexamplecounter];classprobs[testexamplecounter+size(testdata[c],1)+1:end]], rev = true))
-                else
-                    auc[c] = 0.0
-                end
-                testexamplecounter += size(testdata[c],1)
-            end
-            classweights = [size(testdata[c],1)/notestexamples for c = 1:noclasses]
-            weightedauc = sum(auc .* classweights)
-            totalnotrees = sum([results[r][3][1][1] for r = 1:length(results)])
-            totalnocorrect = sum([results[r][3][1][2] for r = 1:length(results)])
-            avacc = totalnocorrect/totalnotrees
-            totalsquarederror = sum([results[r][3][2][2] for r = 1:length(results)])
-            avbrier = totalsquarederror/totalnotrees
-            varbrier = avbrier-brierscore
-            extratime = toq()
-            methodresults[m] = ClassificationResult(accuracy,weightedauc,brierscore,avacc,esterr,absesterr,avbrier,varbrier,margin,prob,validity,avc,onec,modelsize,noirregularleafs,time+extratime)
+        ## elseif conformal == :rfok
+        ##     testrow = convert(Array{Float64},testdata[i,labels])
+        ##     distanceerrors = Array(Float64,nooob,2)
+        ##     for n = 1:nooob
+        ##         distanceerrors[n,1] = sqL2dist(testrow,rows[n][2:end])+0.001 # Small term added to prevent infinite weights
+        ##         distanceerrors[n,2] = rows[n][1]
+        ##     end
+        ##     distanceerrors = sortrows(distanceerrors,by=x->x[1])
+        ##     knndelta = 0.0
+        ##     distancesum = 0.0
+        ##     for j = 1:bestk
+        ##         knndelta += distanceerrors[j,2]/distanceerrors[j,1]
+        ##         distancesum += 1/distanceerrors[j,1]
+        ##     end
+        ##     knndelta /= distancesum
+        ##     errorrange = alpha*(knndelta+0.01)
+        ##     if isnan(errorrange) || errorrange > largestrange
+        ##         errorrange = largestrange
+        ##     end
+        ## elseif conformal == :isotonic
+        ##     delta = squaredpredictions[i]-predictions[i]^2
+        ##     foundthreshold = false
+        ##     thresholdcounter = size(isotonicthresholds,1)
+        ##     while ~foundthreshold && thresholdcounter > 0
+        ##         if delta >= isotonicthresholds[thresholdcounter][1]
+        ##             errorrange = isotonicthresholds[thresholdcounter][2]*2
+        ##             foundthreshold = true
+        ##         else
+        ##             thresholdcounter -= 1
+        ##         end
+        ## end
+        end
+        rangesum += errorrange
+        if error <= errorrange/2
+            validity += 1
         end
     end
-    return methodresults
+    mse = mse/nopredictions
+    esterr = oobmse-mse
+    absesterr = abs(esterr)
+    validity = validity/nopredictions
+    region = rangesum/nopredictions
+    corrcoeff = cor(correctvalues,predictions)
+    totalnotrees = sum([results[r][3][1] for r = 1:length(results)])
+    totalsquarederror = sum([results[r][3][2] for r = 1:length(results)])
+    avmse = totalsquarederror/totalnotrees
+    varmse = avmse-mse
+    extratime = toq()
+    return RegressionResult(mse,corrcoeff,avmse,varmse,esterr,absesterr,validity,region,modelsize,noirregularleafs,time+extratime)
+end
+
+function run_split_internal(method::LearningMethod{Classifier}, results)
+    modelsize = sum([result[1] for result in results])
+    noirregularleafs = sum([result[5] for result in results])
+    predictions = results[1][2]
+    for r = 2:length(results)
+        predictions += results[r][2]
+    end
+    nopredictions = size(predictions,1)
+    
+    predictions = [predictions[i][2:end]/predictions[i][1] for i = 1:nopredictions]
+    classes = unique(globaldata[:CLASS])
+    noclasses = length(classes)
+    classdata = Array(Any,noclasses)
+    for c = 1:noclasses
+        classdata[c] = globaldata[globaldata[:CLASS] .== classes[c],:]
+    end
+    if methods[m].conformal == :default
+        conformal = :std
+    else
+        conformal = methods[m].conformal
+    end
+    oobpredictions = results[1][4]
+    for c = 1:noclasses
+        for r = 2:length(results)
+            oobpredictions[c] += results[r][4][c]
+        end
+    end
+    noobcorrect = 0
+    nooob = 0
+    if conformal == :std
+        alphas = Float64[]
+        for c = 1:noclasses
+            for i = 1:size(oobpredictions[c],1)
+                oobpredcount = oobpredictions[c][i][1]
+                if oobpredcount > 0
+                    alpha = oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount
+                    push!(alphas,alpha)
+                    noobcorrect += 1-abs(sign(indmax(oobpredictions[c][i][2:end])-c))
+                    nooob += 1
+                end
+            end
+        end
+        thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
+        if thresholdindex >= 1
+            alpha = sort(alphas)[thresholdindex]
+        else
+            alpha = -Inf
+        end
+    elseif conformal == :classcond
+        randomclassoobs = Array(Any,size(randomoobs,1))
+        for i = 1:size(randomclassoobs,1)
+            oobref = randomoobs[i]
+            c = 1
+            while oobref > size(oobpredictions[c],1)
+                oobref -= size(oobpredictions[c],1)
+                c += 1
+            end
+            randomclassoobs[i] = (c,oobref)
+        end
+        classalpha = Array(Float64,noclasses)
+        classalphas = Array(Any,noclasses)
+        for c = 1:noclasses
+            alphas = Float64[]
+            noclassoob = 0
+            for i = 1:size(oobpredictions[c],1)
+                oobpredcount = oobpredictions[c][i][1]
+                if oobpredcount > 0
+                    alphavalue = oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount
+                    push!(alphas,alphavalue)
+                    noobcorrect += 1-abs(sign(indmax(oobpredictions[c][i][2:end])-c))
+                    noclassoob += 1
+                end
+            end
+            classalphas[c] = alphas
+            thresholdindex = Int(floor((noclassoob+1)*(1-methods[m].confidence)))
+            if thresholdindex >= 1
+                classalpha[c] = sort(alphas)[thresholdindex]
+            else
+                classalpha[c] = -Inf
+            end
+            nooob += noclassoob
+        end
+    end
+    oobacc = noobcorrect/nooob
+    testdata = Array(Any,noclasses)
+    nocorrect = 0
+    briersum = 0.0
+    marginsum = 0.0
+    probsum = 0.0
+    noinrangesum = 0
+    nolabelssum = 0
+    noonec = 0
+    testexamplecounter = 0
+    for c = 1:noclasses
+        correctclassvector = zeros(noclasses)
+        correctclassvector[c] = 1.0
+        allbutclassvector = [1:c-1;c+1:noclasses]
+        testdata[c] = classdata[c][classdata[c][:TEST] .== true,:]
+        if size(testdata[c],1) > 0
+            for i=testexamplecounter+1:testexamplecounter+size(testdata[c],1)
+                mostprobable = indmax(predictions[i])
+                correct = 1-abs(sign(mostprobable-c))
+                nocorrect += correct
+                briersum += sqL2dist(correctclassvector,predictions[i])
+                margin = predictions[i][c]-maximum(predictions[i][allbutclassvector])
+                marginsum += margin
+                probsum += maximum(predictions[i])
+                if methods[m].modpred
+                    if conformal == :std
+                        randomoob = randomoobs[i]
+                        thresholdindex = Int(floor(nooob*(1-methods[m].confidence)))
+                        if thresholdindex >= 1
+                            alpha = sort(alphas[[1:randomoob-1;randomoob+1:end]])[thresholdindex] # NOTE: assumes oobpredcount > 0 always is true!
+                        else
+                            alpha = -Inf
+                        end
+                    else # conformal == :classcond
+                        randomoobclass, randomoobref = randomclassoobs[i]
+                        thresholdindex = Int(floor(size(classalphas[randomoobclass],1)*(1-methods[m].confidence)))
+                        origclassalpha = classalpha[randomoobclass]
+                        if thresholdindex >= 1
+                            classalpha[randomoobclass] = sort(classalphas[randomoobclass][[1:randomoobref-1;randomoobref+1:end]])[thresholdindex] # NOTE: assumes oobpredcount > 0 always is true!
+                        else
+                            classalpha[randomoobclass] = -Inf
+                        end
+                        alpha = classalpha[c]
+                    end
+                else
+                    if conformal == :classcond
+                        alpha = classalpha[c]
+                    end
+                end
+                if margin >= alpha
+                    noinrangesum += 1
+                end
+                nolabels = 0
+                if conformal == :std
+                    for j = 1:noclasses
+                        if j == mostprobable
+                            if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= alpha
+                                nolabels += 1
+                            end
+                    else
+                        if predictions[i][j]-predictions[i][mostprobable] >= alpha # classalphas[j]
+                            nolabels += 1
+                        end
+                        end
+                    end
+                else # conformal == :classcond
+                    for j = 1:noclasses
+                        if j == mostprobable
+                            if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= classalpha[j]
+                                nolabels += 1
+                            end
+                    else
+                        if predictions[i][j]-predictions[i][mostprobable] >= classalpha[j]
+                            nolabels += 1
+                        end
+                        end
+                    end
+                    if methods[m].modpred
+                        classalpha[randomoobclass] = origclassalpha
+                    end
+                end
+                nolabelssum += nolabels
+                if nolabels == 1
+                    noonec += correct
+                end
+            end
+        end
+        testexamplecounter += size(testdata[c],1)
+    end
+    notestexamples = sum([size(testdata[c],1) for c = 1:noclasses])
+    accuracy = nocorrect/notestexamples
+    esterr = oobacc-accuracy
+    absesterr = abs(esterr)
+    brierscore = briersum/notestexamples
+    margin = marginsum/notestexamples
+    prob = probsum/notestexamples
+    validity = noinrangesum/notestexamples
+    avc = nolabelssum/notestexamples
+    onec = noonec/notestexamples
+    auc = Array(Float64,noclasses)
+    testexamplecounter = 0
+    for c = 1:noclasses
+        if size(testdata[c],1) > 0
+            classprobs = [predictions[i][c] for i=1:length(predictions)]
+            auc[c] = calculate_auc(sort(classprobs[testexamplecounter+1:testexamplecounter+size(testdata[c],1)],rev = true),
+                                   sort([classprobs[1:testexamplecounter];classprobs[testexamplecounter+size(testdata[c],1)+1:end]], rev = true))
+        else
+            auc[c] = 0.0
+        end
+        testexamplecounter += size(testdata[c],1)
+    end
+    classweights = [size(testdata[c],1)/notestexamples for c = 1:noclasses]
+    weightedauc = sum(auc .* classweights)
+    totalnotrees = sum([results[r][3][1][1] for r = 1:length(results)])
+    totalnocorrect = sum([results[r][3][1][2] for r = 1:length(results)])
+    avacc = totalnocorrect/totalnotrees
+    totalsquarederror = sum([results[r][3][2][2] for r = 1:length(results)])
+    avbrier = totalsquarederror/totalnotrees
+    varbrier = avbrier-brierscore
+    extratime = toq()
+    return ClassificationResult(accuracy,weightedauc,brierscore,avacc,esterr,absesterr,avbrier,varbrier,margin,prob,validity,avc,onec,modelsize,noirregularleafs,time+extratime)
+    
 end
 
 function calculate_auc(posclassprobabilities,negclassprobabilities)
@@ -810,270 +820,272 @@ function run_cross_validation(protocol,predictiontask,methods)
         for r = 2:length(allmodelsizes)
             modelsizes += allmodelsizes[r]
         end
-        if predictiontask == :REGRESSION
-            allnoirregularleafs = [result[6] for result in results]
-        else
-            allnoirregularleafs = [result[5] for result in results]
-        end
-        noirregularleafs = allnoirregularleafs[1]
-        for r = 2:length(allnoirregularleafs)
-            noirregularleafs += allnoirregularleafs[r]
-        end
-        predictions = results[1][2]
-        for r = 2:length(results)
-            predictions += results[r][2]
-        end
-        nopredictions = size(globaldata,1)
-        testexamplecounter = 0
-        if predictiontask == :REGRESSION
-            predictions = [predictions[i][2]/predictions[i][1] for i = 1:nopredictions]
-            mse = Array(Float64,nofolds)
-            corrcoeff = Array(Float64,nofolds)
-            avmse = Array(Float64,nofolds)
-            varmse = Array(Float64,nofolds)
-            oobmse = Array(Float64,nofolds)
-            esterr = Array(Float64,nofolds)
-            absesterr = Array(Float64,nofolds)
-            validity = Array(Float64,nofolds)
-            region = Array(Float64,nofolds)
+        methodresults[m] = run_cross_validation_internal(methods[m], results, modelsizes)
+    end
+    return methodresults
+end
+
+function run_cross_validation_internal(method::LearningMethod{Regressor}, results, modelsizes)
+    allnoirregularleafs = [result[6] for result in results]
+    noirregularleafs = allnoirregularleafs[1]
+    for r = 2:length(allnoirregularleafs)
+        noirregularleafs += allnoirregularleafs[r]
+    end
+    predictions = results[1][2]
+    for r = 2:length(results)
+        predictions += results[r][2]
+    end
+    nopredictions = size(globaldata,1)
+    testexamplecounter = 0
+    
+    predictions = [predictions[i][2]/predictions[i][1] for i = 1:nopredictions]
+    mse = Array(Float64,nofolds)
+    corrcoeff = Array(Float64,nofolds)
+    avmse = Array(Float64,nofolds)
+    varmse = Array(Float64,nofolds)
+    oobmse = Array(Float64,nofolds)
+    esterr = Array(Float64,nofolds)
+    absesterr = Array(Float64,nofolds)
+    validity = Array(Float64,nofolds)
+    region = Array(Float64,nofolds)
 #            errcor = Array(Float64,nofolds)
 #            errcor = Float64[]
-            foldno = 0
-            if conformal == :normalized ## || conformal == :isotonic
-                squaredpredictions = results[1][5]
-                for r = 2:length(results)
-                    squaredpredictions += results[r][5]
-                end
-                squaredpredictions = [squaredpredictions[i][2]/squaredpredictions[i][1] for i = 1:nopredictions]
-            end
-            for fold in folds
-                foldno += 1
-                testdata = globaldata[globaldata[:FOLD] .== fold,:]
-                correctvalues = testdata[:REGRESSION]
-                correcttrainingvalues = globaldata[globaldata[:FOLD] .!= fold,:REGRESSION]
-                oobpredictions = results[1][4][foldno]
-                for r = 2:length(results)
-                    oobpredictions += results[r][4][foldno]
-                end
-                oobse = 0.0
-                nooob = 0
-                ooberrors = Float64[]
-                alphas = Float64[]
-                deltas = Float64[]
-                ## if conformal == :rfok
-                ##     trainingdata = globaldata[globaldata[:FOLD] .!= fold,:]
-                ##     labels = names(trainingdata)[[!(l in [:REGRESSION,:WEIGHT,:TEST,:FOLD,:ID]) for l in names(trainingdata)]]
-                ##     rows = Array{Float64}[]
-                ##     knnalphas = Float64[]
-                ## end
-                largestrange = maximum(correcttrainingvalues)-minimum(correcttrainingvalues)
-                for i = 1:length(correcttrainingvalues)
-                    oobpredcount = oobpredictions[i][1]
-                    if oobpredcount > 0
-                        ooberror = abs(correcttrainingvalues[i]-(oobpredictions[i][2]/oobpredcount))
-                        push!(ooberrors,ooberror)
-                        if conformal == :normalized ## || conformal == :isotonic
-                            delta = (oobpredictions[i][3]/oobpredcount)-(oobpredictions[i][2]/oobpredcount)^2
-                            if 2*ooberror > largestrange
-                                alpha = largestrange/(delta+0.01)
-                            else
-                                alpha = 2*ooberror/(delta+0.01)
-                            end
-                            push!(alphas,alpha)
-                            push!(deltas,delta)
-                        end
-                        ## if conformal == :rfok
-                        ##     push!(rows,hcat(ooberror,convert(Array{Float64},trainingdata[i,labels])))
-                        ## end
-                        oobse += ooberror^2
-                        nooob += 1
-                    end
-                end
-                ## if conformal == :rfok
-                ##     maxk = minimum([45,nooob-1])
-                ##     deltasalphas = Array(Float64,nooob,maxk,2)
-                ##     distancematrix = Array(Float64,nooob,nooob)
-                ##     for r = 1:nooob-1
-                ##         distancematrix[r,r] = 0.001
-                ##         for k = r+1:nooob
-                ##             distance = sqL2dist(rows[r][2:end],rows[k][2:end])+0.001 # Small term added to prevent infinite weights
-                ##             distancematrix[r,k] = distance
-                ##             distancematrix[k,r] = distance
-                ##         end
-                ##     end
-                ##     distancematrix[nooob,nooob] = 0.001
-                ##     for r = 1:nooob
-                ##         distanceerrors = Array(Float64,nooob,2)
-                ##         for n = 1:nooob
-                ##             distanceerrors[n,1] = distancematrix[r,n]
-                ##             distanceerrors[n,2] = rows[n][1]
-                ##         end
-                ##         distanceerrors = sortrows(distanceerrors,by=x->x[1])
-                ##         knndelta = 0.0
-                ##         distancesum = 0.0
-                ##         for k = 2:maxk+1
-                ##             knndelta += distanceerrors[k,2]/distanceerrors[k,1]
-                ##             distancesum += 1/distanceerrors[k,1]
-                ##             deltasalphas[r,k-1,1] = knndelta/distancesum
-                ##             if 2*rows[r][1] > largestrange
-                ##                 deltasalphas[r,k-1,2] = largestrange/(deltasalphas[r,k-1,1]+0.01)
-                ##             else
-                ##                 deltasalphas[r,k-1,2] = 2*rows[r][1]/(deltasalphas[r,k-1,1]+0.01)
-                ##             end
-                ##         end
-                ##     end
-                ##     thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
-                ##     if thresholdindex >= 1
-                ##         lowestrangesum = Inf
-                ##         bestk = Inf
-                ##         bestalpha = Inf
-                ##         for k = 1:maxk
-                ##             knnalpha = sort(deltasalphas[:,k,2],rev=true)[thresholdindex]
-                ##             knnrangesum = 0.0
-                ##             for j = 1:nooob
-                ##                 knnrangesum += knnalpha*(deltasalphas[j,k,1]+0.01)
-                ##             end
-                ##             if knnrangesum < lowestrangesum
-                ##                 lowestrangesum = knnrangesum
-                ##                 bestk = k
-                ##                 bestalpha = knnalpha
-                ##             end
-                ##         end
-                ##     else
-                ##         bestalpha = Inf
-                ##         bestk = 1
-                ##     end
-                ## end
-                thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
-                if conformal == :std
-                    if thresholdindex >= 1
-                        errorrange = minimum([largestrange,2*sort(ooberrors, rev=true)[thresholdindex]])
+    foldno = 0
+    if conformal == :normalized ## || conformal == :isotonic
+        squaredpredictions = results[1][5]
+        for r = 2:length(results)
+            squaredpredictions += results[r][5]
+        end
+        squaredpredictions = [squaredpredictions[i][2]/squaredpredictions[i][1] for i = 1:nopredictions]
+    end
+    for fold in folds
+        foldno += 1
+        testdata = globaldata[globaldata[:FOLD] .== fold,:]
+        correctvalues = testdata[:REGRESSION]
+        correcttrainingvalues = globaldata[globaldata[:FOLD] .!= fold,:REGRESSION]
+        oobpredictions = results[1][4][foldno]
+        for r = 2:length(results)
+            oobpredictions += results[r][4][foldno]
+        end
+        oobse = 0.0
+        nooob = 0
+        ooberrors = Float64[]
+        alphas = Float64[]
+        deltas = Float64[]
+        ## if conformal == :rfok
+        ##     trainingdata = globaldata[globaldata[:FOLD] .!= fold,:]
+        ##     labels = names(trainingdata)[[!(l in [:REGRESSION,:WEIGHT,:TEST,:FOLD,:ID]) for l in names(trainingdata)]]
+        ##     rows = Array{Float64}[]
+        ##     knnalphas = Float64[]
+        ## end
+        largestrange = maximum(correcttrainingvalues)-minimum(correcttrainingvalues)
+        for i = 1:length(correcttrainingvalues)
+            oobpredcount = oobpredictions[i][1]
+            if oobpredcount > 0
+                ooberror = abs(correcttrainingvalues[i]-(oobpredictions[i][2]/oobpredcount))
+                push!(ooberrors,ooberror)
+                if conformal == :normalized ## || conformal == :isotonic
+                    delta = (oobpredictions[i][3]/oobpredcount)-(oobpredictions[i][2]/oobpredcount)^2
+                    if 2*ooberror > largestrange
+                        alpha = largestrange/(delta+0.01)
                     else
-                        errorrange = largestrange
+                        alpha = 2*ooberror/(delta+0.01)
                     end
-                elseif conformal == :normalized
+                    push!(alphas,alpha)
+                    push!(deltas,delta)
+                end
+                ## if conformal == :rfok
+                ##     push!(rows,hcat(ooberror,convert(Array{Float64},trainingdata[i,labels])))
+                ## end
+                oobse += ooberror^2
+                nooob += 1
+            end
+        end
+        ## if conformal == :rfok
+        ##     maxk = minimum([45,nooob-1])
+        ##     deltasalphas = Array(Float64,nooob,maxk,2)
+        ##     distancematrix = Array(Float64,nooob,nooob)
+        ##     for r = 1:nooob-1
+        ##         distancematrix[r,r] = 0.001
+        ##         for k = r+1:nooob
+        ##             distance = sqL2dist(rows[r][2:end],rows[k][2:end])+0.001 # Small term added to prevent infinite weights
+        ##             distancematrix[r,k] = distance
+        ##             distancematrix[k,r] = distance
+        ##         end
+        ##     end
+        ##     distancematrix[nooob,nooob] = 0.001
+        ##     for r = 1:nooob
+        ##         distanceerrors = Array(Float64,nooob,2)
+        ##         for n = 1:nooob
+        ##             distanceerrors[n,1] = distancematrix[r,n]
+        ##             distanceerrors[n,2] = rows[n][1]
+        ##         end
+        ##         distanceerrors = sortrows(distanceerrors,by=x->x[1])
+        ##         knndelta = 0.0
+        ##         distancesum = 0.0
+        ##         for k = 2:maxk+1
+        ##             knndelta += distanceerrors[k,2]/distanceerrors[k,1]
+        ##             distancesum += 1/distanceerrors[k,1]
+        ##             deltasalphas[r,k-1,1] = knndelta/distancesum
+        ##             if 2*rows[r][1] > largestrange
+        ##                 deltasalphas[r,k-1,2] = largestrange/(deltasalphas[r,k-1,1]+0.01)
+        ##             else
+        ##                 deltasalphas[r,k-1,2] = 2*rows[r][1]/(deltasalphas[r,k-1,1]+0.01)
+        ##             end
+        ##         end
+        ##     end
+        ##     thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
+        ##     if thresholdindex >= 1
+        ##         lowestrangesum = Inf
+        ##         bestk = Inf
+        ##         bestalpha = Inf
+        ##         for k = 1:maxk
+        ##             knnalpha = sort(deltasalphas[:,k,2],rev=true)[thresholdindex]
+        ##             knnrangesum = 0.0
+        ##             for j = 1:nooob
+        ##                 knnrangesum += knnalpha*(deltasalphas[j,k,1]+0.01)
+        ##             end
+        ##             if knnrangesum < lowestrangesum
+        ##                 lowestrangesum = knnrangesum
+        ##                 bestk = k
+        ##                 bestalpha = knnalpha
+        ##             end
+        ##         end
+        ##     else
+        ##         bestalpha = Inf
+        ##         bestk = 1
+        ##     end
+        ## end
+        thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
+        if conformal == :std
+            if thresholdindex >= 1
+                errorrange = minimum([largestrange,2*sort(ooberrors, rev=true)[thresholdindex]])
+            else
+                errorrange = largestrange
+            end
+        elseif conformal == :normalized
+            if thresholdindex >= 1
+                alpha = sort(alphas,rev=true)[thresholdindex]
+            else
+                alpha = Inf
+            end
+        ## elseif conformal == :rfok
+        ##     alpha = bestalpha
+        ## elseif conformal == :isotonic
+        ##     eds = Array(Float64,nooob,2)
+        ##     eds[:,1] = ooberrors
+        ##     eds[:,2] = deltas
+        ##     eds = sortrows(eds,by=x->x[2])
+        ##     isotonicthresholds = Any[]
+        ##     mincalibrationsize = maximum([10;Int(floor(1/(round((1-methods[m].confidence)*1000000)/1000000))-1)])
+        ##     oobindex = 0
+        ##     while size(eds,1)-oobindex >= 2*mincalibrationsize
+        ##         isotonicgroup = eds[oobindex+1:oobindex+mincalibrationsize,:]
+        ##         threshold = isotonicgroup[1,2]
+        ##         isotonicgroup = sortrows(isotonicgroup,by=x->x[1],rev=true)
+        ##         push!(isotonicthresholds,(threshold,isotonicgroup[1,1],isotonicgroup))
+        ##         oobindex += mincalibrationsize
+        ##     end
+        ##     isotonicgroup = eds[oobindex+1:end,:]
+        ##     threshold = isotonicgroup[1,2]
+        ##     isotonicgroup = sortrows(isotonicgroup,by=x->x[1],rev=true)
+        ##     thresholdindex = maximum([1,Int(floor(size(isotonicgroup,1)*(1-methods[m].confidence)))])
+        ##     push!(isotonicthresholds,(threshold,isotonicgroup[thresholdindex][1],isotonicgroup))
+        ##     originalthresholds = copy(isotonicthresholds)
+        ##     change = true
+        ##     while change
+        ##         change = false
+        ##         counter = 1
+        ##         while counter < size(isotonicthresholds,1) && ~change
+        ##             if isotonicthresholds[counter][2] > isotonicthresholds[counter+1][2]
+        ##                 newisotonicgroup = [isotonicthresholds[counter][3];isotonicthresholds[counter+1][3]]
+        ##                 threshold = minimum(newisotonicgroup[:,2])
+        ##                 newisotonicgroup = sortrows(newisotonicgroup,by=x->x[1],rev=true)
+        ##                 thresholdindex = maximum([1,Int(floor(size(newisotonicgroup,1)*(1-methods[m].confidence)))])
+        ##                 splice!(isotonicthresholds,counter:counter+1,[(threshold,newisotonicgroup[thresholdindex][1],newisotonicgroup)])
+        ##                 change = true
+        ##             else
+        ##                 counter += 1
+        ##             end
+        ##         end
+        ##     end
+        end
+        msesum = 0.0
+        noinregion = 0.0
+        rangesum = 0.0
+#                testdeltas = Array(Float64,length(correctvalues))
+#                testerrors = Array(Float64,length(correctvalues))
+        for i = 1:length(correctvalues)
+            error = abs(correctvalues[i]-predictions[testexamplecounter+i])
+#                    testerrors[i] = error
+            msesum += error^2
+            if conformal == :normalized && methods[m].modpred
+                randomoob = randomoobs[foldno][i]
+                oobpredcount = oobpredictions[randomoob][1]
+                if oobpredcount > 0.0
+                    thresholdindex = Int(floor(nooob*(1-methods[m].confidence)))
                     if thresholdindex >= 1
-                        alpha = sort(alphas,rev=true)[thresholdindex]
+                        alpha = sort(alphas[[1:randomoob-1;randomoob+1:end]], rev=true)[thresholdindex]
                     else
                         alpha = Inf
                     end
-                ## elseif conformal == :rfok
-                ##     alpha = bestalpha
-                ## elseif conformal == :isotonic
-                ##     eds = Array(Float64,nooob,2)
-                ##     eds[:,1] = ooberrors
-                ##     eds[:,2] = deltas
-                ##     eds = sortrows(eds,by=x->x[2])
-                ##     isotonicthresholds = Any[]
-                ##     mincalibrationsize = maximum([10;Int(floor(1/(round((1-methods[m].confidence)*1000000)/1000000))-1)])
-                ##     oobindex = 0
-                ##     while size(eds,1)-oobindex >= 2*mincalibrationsize
-                ##         isotonicgroup = eds[oobindex+1:oobindex+mincalibrationsize,:]
-                ##         threshold = isotonicgroup[1,2]
-                ##         isotonicgroup = sortrows(isotonicgroup,by=x->x[1],rev=true)
-                ##         push!(isotonicthresholds,(threshold,isotonicgroup[1,1],isotonicgroup))
-                ##         oobindex += mincalibrationsize
-                ##     end
-                ##     isotonicgroup = eds[oobindex+1:end,:]
-                ##     threshold = isotonicgroup[1,2]
-                ##     isotonicgroup = sortrows(isotonicgroup,by=x->x[1],rev=true)
-                ##     thresholdindex = maximum([1,Int(floor(size(isotonicgroup,1)*(1-methods[m].confidence)))])
-                ##     push!(isotonicthresholds,(threshold,isotonicgroup[thresholdindex][1],isotonicgroup))
-                ##     originalthresholds = copy(isotonicthresholds)
-                ##     change = true
-                ##     while change
-                ##         change = false
-                ##         counter = 1
-                ##         while counter < size(isotonicthresholds,1) && ~change
-                ##             if isotonicthresholds[counter][2] > isotonicthresholds[counter+1][2]
-                ##                 newisotonicgroup = [isotonicthresholds[counter][3];isotonicthresholds[counter+1][3]]
-                ##                 threshold = minimum(newisotonicgroup[:,2])
-                ##                 newisotonicgroup = sortrows(newisotonicgroup,by=x->x[1],rev=true)
-                ##                 thresholdindex = maximum([1,Int(floor(size(newisotonicgroup,1)*(1-methods[m].confidence)))])
-                ##                 splice!(isotonicthresholds,counter:counter+1,[(threshold,newisotonicgroup[thresholdindex][1],newisotonicgroup)])
-                ##                 change = true
-                ##             else
-                ##                 counter += 1
-                ##             end
-                ##         end
-                ##     end
+                else
+                    println("oobpredcount = $oobpredcount !!! This is almost surely impossible!")
                 end
-                msesum = 0.0
-                noinregion = 0.0
-                rangesum = 0.0
-#                testdeltas = Array(Float64,length(correctvalues))
-#                testerrors = Array(Float64,length(correctvalues))
-                for i = 1:length(correctvalues)
-                    error = abs(correctvalues[i]-predictions[testexamplecounter+i])
-#                    testerrors[i] = error
-                    msesum += error^2
-                    if conformal == :normalized && methods[m].modpred
-                        randomoob = randomoobs[foldno][i]
-                        oobpredcount = oobpredictions[randomoob][1]
-                        if oobpredcount > 0.0
-                            thresholdindex = Int(floor(nooob*(1-methods[m].confidence)))
-                            if thresholdindex >= 1
-                                alpha = sort(alphas[[1:randomoob-1;randomoob+1:end]], rev=true)[thresholdindex]
-                            else
-                                alpha = Inf
-                            end
-                        else
-                            println("oobpredcount = $oobpredcount !!! This is almost surely impossible!")
-                        end
-                        delta = (squaredpredictions[testexamplecounter+i]-predictions[testexamplecounter+i]^2)
+                delta = (squaredpredictions[testexamplecounter+i]-predictions[testexamplecounter+i]^2)
 #                        testdeltas[i] = delta
-                        errorrange = alpha*(delta+0.01)
-                        if isnan(errorrange) || errorrange > largestrange
-                            errorrange = largestrange
-                        end
-                    elseif conformal == :normalized
-                        delta = (squaredpredictions[testexamplecounter+i]-predictions[testexamplecounter+i]^2)
+                errorrange = alpha*(delta+0.01)
+                if isnan(errorrange) || errorrange > largestrange
+                    errorrange = largestrange
+                end
+            elseif conformal == :normalized
+                delta = (squaredpredictions[testexamplecounter+i]-predictions[testexamplecounter+i]^2)
 #                        testdeltas[i] = delta
-                        errorrange = alpha*(delta+0.01)
-                        if isnan(errorrange) || errorrange > largestrange
-                            errorrange = largestrange
-                        end
-                    ## elseif conformal == :rfok
-                    ##     testrow = convert(Array{Float64},testdata[i,labels])
-                    ##     distanceerrors = Array(Float64,nooob,2)
-                    ##     for n = 1:size(rows,1)
-                    ##         distanceerrors[n,1] = sqL2dist(testrow,rows[n][2:end])+0.001 # Small term added to prevent infinite weights
-                    ##         distanceerrors[n,2] = rows[n][1]
-                    ##     end
-                    ##     distanceerrors = sortrows(distanceerrors,by=x->x[1])
-                    ##     knndelta = 0.0
-                    ##     distancesum = 0.0
-                    ##     for j = 1:bestk
-                    ##         knndelta += distanceerrors[j,2]/distanceerrors[j,1]
-                    ##         distancesum += 1/distanceerrors[j,1]
-                    ##     end
-                    ##     knndelta /= distancesum
-                    ##     testdeltas[i] = knndelta
-                    ##     errorrange = alpha*(knndelta+0.01)
-                    ##     if isnan(errorrange) || errorrange > largestrange
-                    ##         errorrange = largestrange
-                    ##     end
-                    ## elseif conformal == :isotonic
-                    ##     delta = (squaredpredictions[testexamplecounter+i]-predictions[testexamplecounter+i]^2)
-                    ##     foundthreshold = false
-                    ##     thresholdcounter = size(isotonicthresholds,1)
-                    ##     while ~foundthreshold && thresholdcounter > 0
-                    ##         if delta >= isotonicthresholds[thresholdcounter][1]
-                    ##             errorrange = isotonicthresholds[thresholdcounter][2]*2
-                    ##             foundthreshold = true
-                    ##         else
-                    ##             thresholdcounter -= 1
-                    ##         end
-                    ##     end
-                    end
-                    rangesum += errorrange
-                    if error <= errorrange/2
-                        noinregion += 1
+                errorrange = alpha*(delta+0.01)
+                if isnan(errorrange) || errorrange > largestrange
+                    errorrange = largestrange
+                end
+            ## elseif conformal == :rfok
+            ##     testrow = convert(Array{Float64},testdata[i,labels])
+            ##     distanceerrors = Array(Float64,nooob,2)
+            ##     for n = 1:size(rows,1)
+            ##         distanceerrors[n,1] = sqL2dist(testrow,rows[n][2:end])+0.001 # Small term added to prevent infinite weights
+            ##         distanceerrors[n,2] = rows[n][1]
+            ##     end
+            ##     distanceerrors = sortrows(distanceerrors,by=x->x[1])
+            ##     knndelta = 0.0
+            ##     distancesum = 0.0
+            ##     for j = 1:bestk
+            ##         knndelta += distanceerrors[j,2]/distanceerrors[j,1]
+            ##         distancesum += 1/distanceerrors[j,1]
+            ##     end
+            ##     knndelta /= distancesum
+            ##     testdeltas[i] = knndelta
+            ##     errorrange = alpha*(knndelta+0.01)
+            ##     if isnan(errorrange) || errorrange > largestrange
+            ##         errorrange = largestrange
+            ##     end
+            ## elseif conformal == :isotonic
+            ##     delta = (squaredpredictions[testexamplecounter+i]-predictions[testexamplecounter+i]^2)
+            ##     foundthreshold = false
+            ##     thresholdcounter = size(isotonicthresholds,1)
+            ##     while ~foundthreshold && thresholdcounter > 0
+            ##         if delta >= isotonicthresholds[thresholdcounter][1]
+            ##             errorrange = isotonicthresholds[thresholdcounter][2]*2
+            ##             foundthreshold = true
+            ##         else
+            ##             thresholdcounter -= 1
+            ##         end
+            ##     end
+            end
+            rangesum += errorrange
+            if error <= errorrange/2
+                noinregion += 1
 #                        testerrors[i] = 0
 #                    else
 #                        testerrors[i] = 1
-                    end
-                end
+            end
+        end
 #                if sum(testerrors) > 0 && sum(testerrors) < length(testerrors)
 #                    println("****************************************")
 #                    println("ranges: $testdeltas")
@@ -1081,261 +1093,232 @@ function run_cross_validation(protocol,predictiontask,methods)
 #                    push!(errcor,cor(testdeltas,testerrors))
 #                    println("corr: $(cor(testdeltas,testerrors))")
 #                end
-                mse[foldno] = msesum/length(correctvalues)
-                corrcoeff[foldno] = cor(correctvalues,predictions[testexamplecounter+1:testexamplecounter+length(correctvalues)])
-                testexamplecounter += length(correctvalues)
-                totalnotrees = sum([results[r][3][foldno][1] for r = 1:length(results)])
-                totalsquarederror = sum([results[r][3][foldno][2] for r = 1:length(results)])
-                avmse[foldno] = totalsquarederror/totalnotrees
-                varmse[foldno] = avmse[foldno]-mse[foldno]
-                oobmse[foldno] = oobse/nooob
-                esterr[foldno] = oobmse[foldno]-mse[foldno]
-                absesterr[foldno] = abs(oobmse[foldno]-mse[foldno])
-                validity[foldno] = noinregion/length(correctvalues)
-                region[foldno] = rangesum/length(correctvalues)
-            end
-        else # predictiontask == :CLASS
-            predictions = [predictions[i][2:end]/predictions[i][1] for i = 1:nopredictions]
-            if methods[m].conformal == :default
-                conformal = :std
-            else
-                conformal = methods[m].conformal
-            end
-            accuracy = Array(Float64,nofolds)
-            auc = Array(Float64,nofolds)
-            brierscore = Array(Float64,nofolds)
-            avacc = Array(Float64,nofolds)
-            avbrier = Array(Float64,nofolds)
-            varbrier = Array(Float64,nofolds)
-            margin = Array(Float64,nofolds)
-            prob = Array(Float64,nofolds)
-            oobacc = Array(Float64,nofolds)
-            esterr = Array(Float64,nofolds)
-            absesterr = Array(Float64,nofolds)
-            validity = Array(Float64,nofolds)
-            avc = Array(Float64,nofolds)
-            onec = Array(Float64,nofolds)
-            classes = unique(globaldata[:CLASS])
-            noclasses = length(classes)
-            foldauc = Array(Float64,noclasses)
-            classdata = Array(Any,noclasses)
-            for c = 1:noclasses
-                classdata[c] = globaldata[globaldata[:CLASS] .== classes[c],:]
-            end
-            testdata = Array(Any,noclasses)
-            foldno = 0
-            for fold in folds
-                foldno += 1
-                oobpredictions = results[1][4][foldno]
-                for c = 1:noclasses
-                    for r = 2:length(results)
-                        oobpredictions[c] += results[r][4][foldno][c]
-                    end
-                end
-                noobcorrect = 0
-                nooob = 0
-                if conformal == :std
-                    alphas = Float64[]
-                    for c = 1:noclasses
-                        for i = 1:size(oobpredictions[c],1)
-                            oobpredcount = oobpredictions[c][i][1]
-                            if oobpredcount > 0
-                                alpha = oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount
-                                push!(alphas,alpha)
-                                noobcorrect += 1-abs(sign(indmax(oobpredictions[c][i][2:end])-c))
-                                nooob += 1
-                            end
-                    end
-                    end
-                    thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
-                    if thresholdindex >= 1
-                        alpha = sort(alphas)[thresholdindex]
-                    else
-                        alpha = -Inf
-                    end
-                    classalphas = [alpha for j=1:noclasses]
-                elseif conformal == :classcond
-                    classalphas = Array(Float64,noclasses)
-                    for c = 1:noclasses
-                        alphas = Float64[]
-                        noclassoob = 0
-                        for i = 1:size(oobpredictions[c],1)
-                            oobpredcount = oobpredictions[c][i][1]
-                            if oobpredcount > 0
-                                alphavalue = oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount
-                                push!(alphas,alphavalue)
-                                noobcorrect += 1-abs(sign(indmax(oobpredictions[c][i][2:end])-c))
-                                noclassoob += 1
-                            end
-                        end
-                        thresholdindex = Int(floor((noclassoob+1)*(1-methods[m].confidence)))
-                        if thresholdindex >= 1
-                            classalphas[c] = sort(alphas)[thresholdindex]
-                        else
-                        classalphas[c] = -Inf
-                        end
-                        nooob += noclassoob
-                    end
-                end
-                oobacc[foldno] = noobcorrect/nooob
-                nocorrect = 0
-                briersum = 0.0
-                marginsum = 0.0
-                probsum = 0.0
-                noinrangesum = 0
-                nolabelssum = 0
-                noonec = 0
-                origtestexamplecounter = testexamplecounter
-                for c = 1:noclasses
-                    correctclassvector = zeros(noclasses)
-                    correctclassvector[c] = 1.0
-                    allbutclassvector = [1:c-1;c+1:noclasses]
-                    testdata[c] = classdata[c][classdata[c][:FOLD] .== fold,:]
-                    if size(testdata[c],1) > 0
-                        for i=testexamplecounter+1:testexamplecounter+size(testdata[c],1)
-                            mostprobable = indmax(predictions[i])
-                            correct = 1-abs(sign(mostprobable-c))
-                            nocorrect += correct
-                            briersum += sqL2dist(correctclassvector,predictions[i])
-                            examplemargin = predictions[i][c]-maximum(predictions[i][allbutclassvector])
-                            marginsum += examplemargin
-                            probsum += maximum(predictions[i])
-                            if examplemargin >= classalphas[c]
-                                noinrangesum += 1
-                            end
-                            nolabels = 0
-                            for j = 1:noclasses
-                                if j == mostprobable
-                                    if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= classalphas[j]
-                                        nolabels += 1
-                                    end
-                                else
-                                    if predictions[i][j]-predictions[i][mostprobable] >= classalphas[j]
-                                        nolabels += 1
-                                    end
-                                end
-                            end
-                            nolabelssum += nolabels
-                            if nolabels == 1
-                                noonec += correct
-                            end
-                        end
-                        testexamplecounter += size(testdata[c],1)
-                    end
-                end
-                foldpredictions = predictions[origtestexamplecounter+1:testexamplecounter]
-                tempexamplecounter = 0
-                for c = 1:noclasses
-                    if size(testdata[c],1) > 0
-                        classprobs = [foldpredictions[i][c] for i=1:length(foldpredictions)]
-                        foldauc[c] = calculate_auc(sort(classprobs[tempexamplecounter+1:tempexamplecounter+size(testdata[c],1)],rev = true),
-                                                   sort([classprobs[1:tempexamplecounter];classprobs[tempexamplecounter+size(testdata[c],1):end]], rev = true))
-                        tempexamplecounter += size(testdata[c],1)
-                    else
-                        foldauc[c] = 0.0
-                    end
-                end
-                notestexamples = sum([size(testdata[c],1) for c = 1:noclasses])
-                accuracy[foldno] = nocorrect/notestexamples
-                esterr[foldno] = oobacc[foldno]-accuracy[foldno]
-                absesterr[foldno] = abs(oobacc[foldno]-accuracy[foldno])
-                brierscore[foldno] = briersum/notestexamples
-                margin[foldno] = marginsum/notestexamples
-                prob[foldno] = probsum/notestexamples
-                validity[foldno] = noinrangesum/notestexamples
-                avc[foldno] = nolabelssum/notestexamples
-                onec[foldno] = noonec/notestexamples
-                classweights = [size(testdata[c],1)/notestexamples for c = 1:noclasses]
-                auc[foldno] = sum(foldauc .* classweights)
-                totalnotrees = sum([results[r][3][1][foldno][1] for r = 1:length(results)])
-                totalnocorrect = sum([results[r][3][1][foldno][2] for r = 1:length(results)])
-                avacc[foldno] = totalnocorrect/totalnotrees
-                totalsquarederror = sum([results[r][3][2][foldno][2] for r = 1:length(results)])
-                avbrier[foldno] = totalsquarederror/totalnotrees
-                varbrier[foldno] = avbrier[foldno] - brierscore[foldno]
-            end
-        end
-        extratime = toq()
-        if predictiontask == :CLASS
-            methodresults[m] = ClassificationResult(mean(accuracy),mean(auc),mean(brierscore),mean(avacc),mean(esterr),mean(absesterr),mean(avbrier),mean(varbrier),mean(margin),mean(prob),
-                                                    mean(validity),mean(avc),mean(onec),mean(modelsizes),mean(noirregularleafs),time+extratime)
-        else
-            methodresults[m] = RegressionResult(mean(mse),mean(corrcoeff),mean(avmse),mean(varmse),mean(esterr),mean(absesterr),mean(validity),mean(region),mean(modelsizes),mean(noirregularleafs),
-                                                time+extratime)
-        end
+        mse[foldno] = msesum/length(correctvalues)
+        corrcoeff[foldno] = cor(correctvalues,predictions[testexamplecounter+1:testexamplecounter+length(correctvalues)])
+        testexamplecounter += length(correctvalues)
+        totalnotrees = sum([results[r][3][foldno][1] for r = 1:length(results)])
+        totalsquarederror = sum([results[r][3][foldno][2] for r = 1:length(results)])
+        avmse[foldno] = totalsquarederror/totalnotrees
+        varmse[foldno] = avmse[foldno]-mse[foldno]
+        oobmse[foldno] = oobse/nooob
+        esterr[foldno] = oobmse[foldno]-mse[foldno]
+        absesterr[foldno] = abs(oobmse[foldno]-mse[foldno])
+        validity[foldno] = noinregion/length(correctvalues)
+        region[foldno] = rangesum/length(correctvalues)
     end
-    return methodresults
+    extratime = toq()
+    return RegressionResult(mean(mse),mean(corrcoeff),mean(avmse),mean(varmse),mean(esterr),mean(absesterr),mean(validity),mean(region),mean(modelsizes),mean(noirregularleafs),
+                                            time+extratime)
 end
 
-function prediction_task(data)
-    allnames = names(data)
-    if :CLASS in allnames
-        return :CLASS
-    elseif :REGRESSION in allnames
-        return :REGRESSION
-    else
-        return :NONE
+function run_cross_validation_internal(method::LearningMethod{Classifier}, results, modelsizes)
+    allnoirregularleafs = [result[5] for result in results]
+    noirregularleafs = allnoirregularleafs[1]
+    for r = 2:length(allnoirregularleafs)
+        noirregularleafs += allnoirregularleafs[r]
     end
+    predictions = results[1][2]
+    for r = 2:length(results)
+        predictions += results[r][2]
+    end
+    nopredictions = size(globaldata,1)
+    testexamplecounter = 0
+    
+    predictions = [predictions[i][2:end]/predictions[i][1] for i = 1:nopredictions]
+    if methods[m].conformal == :default
+        conformal = :std
+    else
+        conformal = methods[m].conformal
+    end
+    accuracy = Array(Float64,nofolds)
+    auc = Array(Float64,nofolds)
+    brierscore = Array(Float64,nofolds)
+    avacc = Array(Float64,nofolds)
+    avbrier = Array(Float64,nofolds)
+    varbrier = Array(Float64,nofolds)
+    margin = Array(Float64,nofolds)
+    prob = Array(Float64,nofolds)
+    oobacc = Array(Float64,nofolds)
+    esterr = Array(Float64,nofolds)
+    absesterr = Array(Float64,nofolds)
+    validity = Array(Float64,nofolds)
+    avc = Array(Float64,nofolds)
+    onec = Array(Float64,nofolds)
+    classes = unique(globaldata[:CLASS])
+    noclasses = length(classes)
+    foldauc = Array(Float64,noclasses)
+    classdata = Array(Any,noclasses)
+    for c = 1:noclasses
+        classdata[c] = globaldata[globaldata[:CLASS] .== classes[c],:]
+    end
+    testdata = Array(Any,noclasses)
+    foldno = 0
+    for fold in folds
+        foldno += 1
+        oobpredictions = results[1][4][foldno]
+        for c = 1:noclasses
+            for r = 2:length(results)
+                oobpredictions[c] += results[r][4][foldno][c]
+            end
+        end
+        noobcorrect = 0
+        nooob = 0
+        if conformal == :std
+            alphas = Float64[]
+            for c = 1:noclasses
+                for i = 1:size(oobpredictions[c],1)
+                    oobpredcount = oobpredictions[c][i][1]
+                    if oobpredcount > 0
+                        alpha = oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount
+                        push!(alphas,alpha)
+                        noobcorrect += 1-abs(sign(indmax(oobpredictions[c][i][2:end])-c))
+                        nooob += 1
+                    end
+            end
+            end
+            thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
+            if thresholdindex >= 1
+                alpha = sort(alphas)[thresholdindex]
+            else
+                alpha = -Inf
+            end
+            classalphas = [alpha for j=1:noclasses]
+        elseif conformal == :classcond
+            classalphas = Array(Float64,noclasses)
+            for c = 1:noclasses
+                alphas = Float64[]
+                noclassoob = 0
+                for i = 1:size(oobpredictions[c],1)
+                    oobpredcount = oobpredictions[c][i][1]
+                    if oobpredcount > 0
+                        alphavalue = oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount
+                        push!(alphas,alphavalue)
+                        noobcorrect += 1-abs(sign(indmax(oobpredictions[c][i][2:end])-c))
+                        noclassoob += 1
+                    end
+                end
+                thresholdindex = Int(floor((noclassoob+1)*(1-methods[m].confidence)))
+                if thresholdindex >= 1
+                    classalphas[c] = sort(alphas)[thresholdindex]
+                else
+                classalphas[c] = -Inf
+                end
+                nooob += noclassoob
+            end
+        end
+        oobacc[foldno] = noobcorrect/nooob
+        nocorrect = 0
+        briersum = 0.0
+        marginsum = 0.0
+        probsum = 0.0
+        noinrangesum = 0
+        nolabelssum = 0
+        noonec = 0
+        origtestexamplecounter = testexamplecounter
+        for c = 1:noclasses
+            correctclassvector = zeros(noclasses)
+            correctclassvector[c] = 1.0
+            allbutclassvector = [1:c-1;c+1:noclasses]
+            testdata[c] = classdata[c][classdata[c][:FOLD] .== fold,:]
+            if size(testdata[c],1) > 0
+                for i=testexamplecounter+1:testexamplecounter+size(testdata[c],1)
+                    mostprobable = indmax(predictions[i])
+                    correct = 1-abs(sign(mostprobable-c))
+                    nocorrect += correct
+                    briersum += sqL2dist(correctclassvector,predictions[i])
+                    examplemargin = predictions[i][c]-maximum(predictions[i][allbutclassvector])
+                    marginsum += examplemargin
+                    probsum += maximum(predictions[i])
+                    if examplemargin >= classalphas[c]
+                        noinrangesum += 1
+                    end
+                    nolabels = 0
+                    for j = 1:noclasses
+                        if j == mostprobable
+                            if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= classalphas[j]
+                                nolabels += 1
+                            end
+                        else
+                            if predictions[i][j]-predictions[i][mostprobable] >= classalphas[j]
+                                nolabels += 1
+                            end
+                        end
+                    end
+                    nolabelssum += nolabels
+                    if nolabels == 1
+                        noonec += correct
+                    end
+                end
+                testexamplecounter += size(testdata[c],1)
+            end
+        end
+        foldpredictions = predictions[origtestexamplecounter+1:testexamplecounter]
+        tempexamplecounter = 0
+        for c = 1:noclasses
+            if size(testdata[c],1) > 0
+                classprobs = [foldpredictions[i][c] for i=1:length(foldpredictions)]
+                foldauc[c] = calculate_auc(sort(classprobs[tempexamplecounter+1:tempexamplecounter+size(testdata[c],1)],rev = true),
+                                           sort([classprobs[1:tempexamplecounter];classprobs[tempexamplecounter+size(testdata[c],1):end]], rev = true))
+                tempexamplecounter += size(testdata[c],1)
+            else
+                foldauc[c] = 0.0
+            end
+        end
+        notestexamples = sum([size(testdata[c],1) for c = 1:noclasses])
+        accuracy[foldno] = nocorrect/notestexamples
+        esterr[foldno] = oobacc[foldno]-accuracy[foldno]
+        absesterr[foldno] = abs(oobacc[foldno]-accuracy[foldno])
+        brierscore[foldno] = briersum/notestexamples
+        margin[foldno] = marginsum/notestexamples
+        prob[foldno] = probsum/notestexamples
+        validity[foldno] = noinrangesum/notestexamples
+        avc[foldno] = nolabelssum/notestexamples
+        onec[foldno] = noonec/notestexamples
+        classweights = [size(testdata[c],1)/notestexamples for c = 1:noclasses]
+        auc[foldno] = sum(foldauc .* classweights)
+        totalnotrees = sum([results[r][3][1][foldno][1] for r = 1:length(results)])
+        totalnocorrect = sum([results[r][3][1][foldno][2] for r = 1:length(results)])
+        avacc[foldno] = totalnocorrect/totalnotrees
+        totalsquarederror = sum([results[r][3][2][foldno][2] for r = 1:length(results)])
+        avbrier[foldno] = totalsquarederror/totalnotrees
+        varbrier[foldno] = avbrier[foldno] - brierscore[foldno]
+    end
+    extratime = toq()
+    return ClassificationResult(mean(accuracy),mean(auc),mean(brierscore),mean(avacc),mean(esterr),mean(absesterr),mean(avbrier),mean(varbrier),mean(margin),mean(prob),
+                                                mean(validity),mean(avc),mean(onec),mean(modelsizes),mean(noirregularleafs),time+extratime)
+end
+
+function prediction_task(method::LearningMethod{Regressor})
+    return :REGRESSION
+end
+
+function prediction_task(method::LearningMethod{Classifier})
+    return :CLASS
+end
+
+function prediction_task(method) # AMGAD: why there is none prediction task ?
+    return :NONE
 end
 
 ##
 ## Functions to be executed on each worker
 ##
 
-function generate_and_test_trees(Argument)
-    method,predictiontask,experimentype,notrees,randseed,randomoobs = Argument
+function generate_and_test_trees(method::LearningMethod{Regressor},predictiontask,experimentype,notrees,randseed,randomoobs)
     s = size(globaldata,1)
     srand(randseed)
     if experimentype == :test
-        if predictiontask == :CLASS
-            classes = unique(globaldata[:CLASS])
-            noclasses = length(classes)
-            classdata = Array(Any,noclasses)
-            for c = 1:noclasses
-                classdata[c] = globaldata[globaldata[:CLASS] .== classes[c],:]
-            end
-        end
         variables, types = get_variables_and_types(globaldata)
         modelsize = 0
         noirregularleafs = 0
-        if predictiontask == :REGRESSION
-            testdata = globaldata[globaldata[:TEST] .== true,:]
-            trainingdata = globaldata[globaldata[:TEST] .== false,:]
-            trainingrefs = collect(1:size(trainingdata,1))
-            trainingweights = trainingdata[:WEIGHT]
-            regressionvalues = trainingdata[:REGRESSION]
-            oobpredictions = Array(Any,size(trainingdata,1))
-            for i = 1:size(trainingdata,1)
-                oobpredictions[i] = [0,0,0]
-            end
-        else # predictiontask == :CLASS
-            trainingdata = Array(Any,noclasses)
-            trainingrefs = Array(Any,noclasses)
-            trainingweights = Array(Any,noclasses)
-            testdata = Array(Any,noclasses)
-            oobpredictions = Array(Any,noclasses)
-            emptyprediction = zeros(noclasses)
-            for c = 1:noclasses
-                testdata[c] = classdata[c][classdata[c][:TEST] .== true,:]
-                trainingdata[c] = classdata[c][classdata[c][:TEST] .== false,:]
-                trainingrefs[c] = collect(1:size(trainingdata[c],1))
-                trainingweights[c] = trainingdata[c][:WEIGHT]
-                oobpredictions[c] = Array(Any,size(trainingdata[c],1))
-                for i = 1:size(trainingdata[c],1)
-                    oobpredictions[c][i] = [0;emptyprediction]
-                end
-            end
-            randomclassoobs = Array(Any,size(randomoobs,1))
-            for i = 1:size(randomclassoobs,1)
-                oobref = randomoobs[i]
-                c = 1
-                while oobref > size(trainingrefs[c],1)
-                    oobref -= size(trainingrefs[c],1)
-                    c += 1
-                end
-                randomclassoobs[i] = (c,oobref)
-            end
-            regressionvalues = []
+        testdata = globaldata[globaldata[:TEST] .== true,:]
+        trainingdata = globaldata[globaldata[:TEST] .== false,:]
+        trainingrefs = collect(1:size(trainingdata,1))
+        trainingweights = trainingdata[:WEIGHT]
+        regressionvalues = trainingdata[:REGRESSION]
+        oobpredictions = Array(Any,size(trainingdata,1))
+        for i = 1:size(trainingdata,1)
+            oobpredictions[i] = [0,0,0]
         end
         missingvalues, nonmissingvalues = find_missing_values(predictiontask,variables,trainingdata)
         newtrainingdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,trainingdata,missingvalues)
@@ -1349,18 +1332,93 @@ function generate_and_test_trees(Argument)
             modelsize += noleafs
             noirregularleafs += treenoirregularleafs
         end
-        if predictiontask == :REGRESSION
-            nopredictions = size(testdata,1)
-            predictions = Array(Any,nopredictions)
-            squaredpredictions = Array(Any,nopredictions)
-            squarederror = 0.0
+        nopredictions = size(testdata,1)
+        predictions = Array(Any,nopredictions)
+        squaredpredictions = Array(Any,nopredictions)
+        squarederror = 0.0
+        totalnotrees = 0
+        for i = 1:nopredictions
+            correctvalue = testdata[i,:REGRESSION]
+            prediction = 0.0
+            squaredprediction = 0.0
+            nosampledtrees = 0
+            randomoob = randomoobs[i]
+            for t = 1:length(model)
+                if method.modpred
+                    if oob[t][randomoob]
+                        leafstats = make_prediction(model[t],newtestdata,i,0)
+                        treeprediction = leafstats[2]/leafstats[1]
+                        prediction += treeprediction
+                        squaredprediction += treeprediction^2
+                        squarederror += (treeprediction-correctvalue)^2
+                        nosampledtrees += 1
+                    end
+                else
+                    leafstats = make_prediction(model[t],newtestdata,i,0)
+                    treeprediction = leafstats[2]/leafstats[1]
+                    prediction += treeprediction
+                    squaredprediction += treeprediction^2
+                    squarederror += (treeprediction-correctvalue)^2
+                end
+            end
+            if ~method.modpred
+                nosampledtrees = length(model)
+            end
+            totalnotrees += nosampledtrees
+            predictions[i] = [nosampledtrees;prediction]
+            squaredpredictions[i] = [nosampledtrees;squaredprediction]
+        end
+        squarederrors = [totalnotrees;squarederror]
+        return (modelsize,predictions,squarederrors,oobpredictions,squaredpredictions,noirregularleafs)
+    else # experimentype == :cv
+        folds = sort(unique(globaldata[:FOLD]))
+        nofolds = length(folds)
+        squarederrors = Array(Any,nofolds)
+        predictions = Array(Any,size(globaldata,1))
+        squaredpredictions = Array(Any,size(globaldata,1))
+        variables, types = get_variables_and_types(globaldata)
+        oobpredictions = Array(Any,nofolds)
+        modelsizes = Array(Int64,nofolds)
+        noirregularleafs = Array(Int64,nofolds)
+        testexamplecounter = 0
+        foldno = 0
+        for fold in folds
+            foldno += 1
+            trainingdata = globaldata[globaldata[:FOLD] .!= fold,:]
+            testdata = globaldata[globaldata[:FOLD] .== fold,:]
+            trainingrefs = collect(1:size(trainingdata,1))
+            trainingweights = trainingdata[:WEIGHT]
+            regressionvalues = trainingdata[:REGRESSION]
+            oobpredictions[foldno] = Array(Any,size(trainingdata,1))
+            for i = 1:size(trainingdata,1)
+                oobpredictions[foldno][i] = [0,0,0]
+            end
+            missingvalues, nonmissingvalues = find_missing_values(predictiontask,variables,trainingdata)
+            newtrainingdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,trainingdata,missingvalues)
+            testmissingvalues, testnonmissingvalues = find_missing_values(predictiontask,variables,testdata)
+            newtestdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,testdata,testmissingvalues)
+            model = Array(Any,notrees)
+            modelsize = 0
+            totalnoirregularleafs = 0
+            oob = Array(Any,notrees)
+            for treeno = 1:notrees
+                sample_replacements_for_missing_values!(newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+                model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,newtrainingdata,variables,types,predictiontask,oobpredictions[foldno])
+                modelsize += noleafs
+                totalnoirregularleafs += treenoirregularleafs
+            end
+            modelsizes[foldno] = modelsize
+            noirregularleafs[foldno] = totalnoirregularleafs
+                squarederror = 0.0
             totalnotrees = 0
-            for i = 1:nopredictions
+            for i = 1:size(testdata,1)
                 correctvalue = testdata[i,:REGRESSION]
                 prediction = 0.0
-                squaredprediction = 0.0
                 nosampledtrees = 0
-                randomoob = randomoobs[i]
+                squaredprediction = 0.0
+                if method.modpred
+                    randomoob = randomoobs[foldno][i]
+                end
                 for t = 1:length(model)
                     if method.modpred
                         if oob[t][randomoob]
@@ -1383,27 +1441,186 @@ function generate_and_test_trees(Argument)
                     nosampledtrees = length(model)
                 end
                 totalnotrees += nosampledtrees
-                predictions[i] = [nosampledtrees;prediction]
-                squaredpredictions[i] = [nosampledtrees;squaredprediction]
+                testexamplecounter += 1
+                predictions[testexamplecounter] = [nosampledtrees;prediction]
+                squaredpredictions[testexamplecounter] = [nosampledtrees;squaredprediction]
             end
-            squarederrors = [totalnotrees;squarederror]
-            return (modelsize,predictions,squarederrors,oobpredictions,squaredpredictions,noirregularleafs)
-        else # predictiontask == :CLASS
-            nopredictions = sum([size(testdata[c],1) for c = 1:noclasses])
-            testexamplecounter = 0
-            predictions = Array(Any,nopredictions)
-            correctclassificationcounter = 0.0
-            totalnotrees = 0
+            squarederrors[foldno] = [totalnotrees;squarederror]
+        end
+        return (modelsizes,predictions,squarederrors,oobpredictions,squaredpredictions,noirregularleafs)
+    end
+end
+
+function generate_and_test_trees(method::LearningMethod{Classifier},predictiontask,experimentype,notrees,randseed,randomoobs)
+    s = size(globaldata,1)
+    srand(randseed)
+    if experimentype == :test
+        classes = unique(globaldata[:CLASS])
+        noclasses = length(classes)
+        classdata = Array(Any,noclasses)
+        for c = 1:noclasses
+            classdata[c] = globaldata[globaldata[:CLASS] .== classes[c],:]
+        end
+        variables, types = get_variables_and_types(globaldata)
+        modelsize = 0
+        noirregularleafs = 0
+        trainingdata = Array(Any,noclasses)
+        trainingrefs = Array(Any,noclasses)
+        trainingweights = Array(Any,noclasses)
+        testdata = Array(Any,noclasses)
+        oobpredictions = Array(Any,noclasses)
+        emptyprediction = zeros(noclasses)
+        for c = 1:noclasses
+            testdata[c] = classdata[c][classdata[c][:TEST] .== true,:]
+            trainingdata[c] = classdata[c][classdata[c][:TEST] .== false,:]
+            trainingrefs[c] = collect(1:size(trainingdata[c],1))
+            trainingweights[c] = trainingdata[c][:WEIGHT]
+            oobpredictions[c] = Array(Any,size(trainingdata[c],1))
+            for i = 1:size(trainingdata[c],1)
+                oobpredictions[c][i] = [0;emptyprediction]
+            end
+        end
+        randomclassoobs = Array(Any,size(randomoobs,1))
+        for i = 1:size(randomclassoobs,1)
+            oobref = randomoobs[i]
+            c = 1
+            while oobref > size(trainingrefs[c],1)
+                oobref -= size(trainingrefs[c],1)
+                c += 1
+            end
+            randomclassoobs[i] = (c,oobref)
+        end
+        regressionvalues = []
+        missingvalues, nonmissingvalues = find_missing_values(predictiontask,variables,trainingdata)
+        newtrainingdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,trainingdata,missingvalues)
+        testmissingvalues, testnonmissingvalues = find_missing_values(predictiontask,variables,testdata)
+        newtestdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,testdata,testmissingvalues)
+        model = Array(Any,notrees)
+        oob = Array(Any,notrees)
+        for treeno = 1:notrees
+            sample_replacements_for_missing_values!(newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+            model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,newtrainingdata,variables,types,predictiontask,oobpredictions)
+            modelsize += noleafs
+            noirregularleafs += treenoirregularleafs
+        end
+        nopredictions = sum([size(testdata[c],1) for c = 1:noclasses])
+        testexamplecounter = 0
+        predictions = Array(Any,nopredictions)
+        correctclassificationcounter = 0.0
+        totalnotrees = 0
+        squaredproberror = 0.0
+        for c = 1:noclasses
+            correctclassvector = zeros(noclasses)
+            correctclassvector[c] = 1.0
+            for i = 1:size(testdata[c],1)
+                classprobabilities = zeros(noclasses)
+                nosampledtrees = 0
+                testexamplecounter += 1
+                if method.modpred
+                    randomoobclass, randomoobref = randomclassoobs[testexamplecounter]
+                end
+                for t = 1:length(model)
+                    if method.modpred
+                        if oob[t][randomoobclass][randomoobref]
+                            prediction = make_prediction(model[t],newtestdata[c],i,zeros(noclasses))
+                            classprobabilities += prediction
+                            correctclassificationcounter += 1-abs(sign(indmax(prediction)-c))
+                            squaredproberror += sqL2dist(correctclassvector,prediction)
+                            nosampledtrees += 1
+                        end
+                    else
+                        prediction = make_prediction(model[t],newtestdata[c],i,zeros(noclasses))
+                        classprobabilities += prediction
+                        correctclassificationcounter += 1-abs(sign(indmax(prediction)-c))
+                        squaredproberror += sqL2dist(correctclassvector,prediction)
+                    end
+                end
+                if ~method.modpred
+                    nosampledtrees = length(model)
+                end
+                totalnotrees += nosampledtrees
+                predictions[testexamplecounter] = [nosampledtrees;classprobabilities]
+            end
+        end
+        return (modelsize,predictions,([totalnotrees;correctclassificationcounter],[totalnotrees;squaredproberror]),oobpredictions,noirregularleafs)
+    else # experimentype == :cv
+        folds = sort(unique(globaldata[:FOLD]))
+        nofolds = length(folds)
+        classes = unique(globaldata[:CLASS])
+        noclasses = length(classes)
+        classdata = Array(Any,noclasses)
+        for c = 1:noclasses
+            classdata[c] = globaldata[globaldata[:CLASS] .== classes[c],:]
+        end
+        nocorrectclassifications = Array(Any,nofolds)
+        squaredproberrors = Array(Any,nofolds)
+        predictions = Array(Any,size(globaldata,1))
+        variables, types = get_variables_and_types(globaldata)
+        oobpredictions = Array(Any,nofolds)
+        modelsizes = Array(Int64,nofolds)
+        noirregularleafs = Array(Int64,nofolds)
+        testexamplecounter = 0
+        foldno = 0
+        for fold in folds
+            foldno += 1
+            trainingdata = Array(Any,noclasses)
+            trainingrefs = Array(Any,noclasses)
+            trainingweights = Array(Any,noclasses)
+            testdata = Array(Any,noclasses)
+            oobpredictions[foldno] = Array(Any,noclasses)
+            emptyprediction = zeros(noclasses)
+            for c = 1:noclasses
+                trainingdata[c] = classdata[c][classdata[c][:FOLD] .!= fold,:]
+                testdata[c] = classdata[c][classdata[c][:FOLD] .== fold,:]
+                trainingrefs[c] = collect(1:size(trainingdata[c],1))
+                trainingweights[c] = trainingdata[c][:WEIGHT]
+                oobpredictions[foldno][c] = Array(Any,size(trainingdata[c],1))
+                for i = 1:size(trainingdata[c],1)
+                    oobpredictions[foldno][c][i] = [0;emptyprediction]
+                end
+            end
+            if size(randomoobs,1) > 0
+                randomclassoobs = Array(Any,size(randomoobs[foldno],1))
+                for i = 1:size(randomclassoobs,1)
+                    oobref = randomoobs[foldno][i]
+                    c = 1
+                    while oobref > size(trainingrefs[c],1)
+                        oobref -= size(trainingrefs[c],1)
+                        c += 1
+                    end
+                    randomclassoobs[i] = (c,oobref)
+                end
+            end
+            regressionvalues = []
+            missingvalues, nonmissingvalues = find_missing_values(predictiontask,variables,trainingdata)
+            newtrainingdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,trainingdata,missingvalues)
+            testmissingvalues, testnonmissingvalues = find_missing_values(predictiontask,variables,testdata)
+            newtestdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,testdata,testmissingvalues)
+            model = Array(Any,notrees)
+            modelsize = 0
+            totalnoirregularleafs = 0
+            oob = Array(Any,notrees)
+            for treeno = 1:notrees
+                sample_replacements_for_missing_values!(newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+                model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,newtrainingdata,variables,types,predictiontask,oobpredictions[foldno])
+                modelsize += noleafs
+                totalnoirregularleafs += treenoirregularleafs
+            end
+            modelsizes[foldno] = modelsize
+            noirregularleafs[foldno] = totalnoirregularleafs
+            correctclassificationcounter = 0
             squaredproberror = 0.0
+            totalnotrees = 0
+            foldtestexamplecounter = 0
             for c = 1:noclasses
                 correctclassvector = zeros(noclasses)
                 correctclassvector[c] = 1.0
                 for i = 1:size(testdata[c],1)
+                    foldtestexamplecounter += 1
                     classprobabilities = zeros(noclasses)
                     nosampledtrees = 0
-                    testexamplecounter += 1
                     if method.modpred
-                        randomoobclass, randomoobref = randomclassoobs[testexamplecounter]
+                        randomoobclass, randomoobref = randomclassoobs[foldtestexamplecounter]
                     end
                     for t = 1:length(model)
                         if method.modpred
@@ -1424,216 +1641,31 @@ function generate_and_test_trees(Argument)
                     if ~method.modpred
                         nosampledtrees = length(model)
                     end
+                    testexamplecounter += 1
                     totalnotrees += nosampledtrees
                     predictions[testexamplecounter] = [nosampledtrees;classprobabilities]
                 end
             end
-            return (modelsize,predictions,([totalnotrees;correctclassificationcounter],[totalnotrees;squaredproberror]),oobpredictions,noirregularleafs)
+            nocorrectclassifications[foldno] = [totalnotrees;correctclassificationcounter]
+            squaredproberrors[foldno] = [totalnotrees;squaredproberror]
         end
-    else # experimentype == :cv
-        folds = sort(unique(globaldata[:FOLD]))
-        nofolds = length(folds)
-        if predictiontask == :REGRESSION
-            squarederrors = Array(Any,nofolds)
-            predictions = Array(Any,size(globaldata,1))
-            squaredpredictions = Array(Any,size(globaldata,1))
-            variables, types = get_variables_and_types(globaldata)
-        else  # predictiontask == :CLASS
-            classes = unique(globaldata[:CLASS])
-            noclasses = length(classes)
-            classdata = Array(Any,noclasses)
-            for c = 1:noclasses
-                classdata[c] = globaldata[globaldata[:CLASS] .== classes[c],:]
-            end
-            nocorrectclassifications = Array(Any,nofolds)
-            squaredproberrors = Array(Any,nofolds)
-            predictions = Array(Any,size(globaldata,1))
-            variables, types = get_variables_and_types(globaldata)
-        end
-        oobpredictions = Array(Any,nofolds)
-        modelsizes = Array(Int64,nofolds)
-        noirregularleafs = Array(Int64,nofolds)
-        testexamplecounter = 0
-        foldno = 0
-        for fold in folds
-            foldno += 1
-            if predictiontask == :REGRESSION
-                trainingdata = globaldata[globaldata[:FOLD] .!= fold,:]
-                testdata = globaldata[globaldata[:FOLD] .== fold,:]
-                trainingrefs = collect(1:size(trainingdata,1))
-                trainingweights = trainingdata[:WEIGHT]
-                regressionvalues = trainingdata[:REGRESSION]
-                oobpredictions[foldno] = Array(Any,size(trainingdata,1))
-                for i = 1:size(trainingdata,1)
-                    oobpredictions[foldno][i] = [0,0,0]
-                end
-            else  # predictiontask == :CLASS
-                trainingdata = Array(Any,noclasses)
-                trainingrefs = Array(Any,noclasses)
-                trainingweights = Array(Any,noclasses)
-                testdata = Array(Any,noclasses)
-                oobpredictions[foldno] = Array(Any,noclasses)
-                emptyprediction = zeros(noclasses)
-                for c = 1:noclasses
-                    trainingdata[c] = classdata[c][classdata[c][:FOLD] .!= fold,:]
-                    testdata[c] = classdata[c][classdata[c][:FOLD] .== fold,:]
-                    trainingrefs[c] = collect(1:size(trainingdata[c],1))
-                    trainingweights[c] = trainingdata[c][:WEIGHT]
-                    oobpredictions[foldno][c] = Array(Any,size(trainingdata[c],1))
-                    for i = 1:size(trainingdata[c],1)
-                        oobpredictions[foldno][c][i] = [0;emptyprediction]
-                    end
-                end
-                if size(randomoobs,1) > 0
-                    randomclassoobs = Array(Any,size(randomoobs[foldno],1))
-                    for i = 1:size(randomclassoobs,1)
-                        oobref = randomoobs[foldno][i]
-                        c = 1
-                        while oobref > size(trainingrefs[c],1)
-                            oobref -= size(trainingrefs[c],1)
-                            c += 1
-                        end
-                        randomclassoobs[i] = (c,oobref)
-                    end
-                end
-                regressionvalues = []
-            end
-            missingvalues, nonmissingvalues = find_missing_values(predictiontask,variables,trainingdata)
-            newtrainingdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,trainingdata,missingvalues)
-            testmissingvalues, testnonmissingvalues = find_missing_values(predictiontask,variables,testdata)
-            newtestdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,testdata,testmissingvalues)
-            model = Array(Any,notrees)
-            modelsize = 0
-            totalnoirregularleafs = 0
-            oob = Array(Any,notrees)
-            for treeno = 1:notrees
-                sample_replacements_for_missing_values!(newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
-                model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,newtrainingdata,variables,types,predictiontask,oobpredictions[foldno])
-                modelsize += noleafs
-                totalnoirregularleafs += treenoirregularleafs
-            end
-            modelsizes[foldno] = modelsize
-            noirregularleafs[foldno] = totalnoirregularleafs
-            if predictiontask == :REGRESSION
-                squarederror = 0.0
-                totalnotrees = 0
-                for i = 1:size(testdata,1)
-                    correctvalue = testdata[i,:REGRESSION]
-                    prediction = 0.0
-                    nosampledtrees = 0
-                    squaredprediction = 0.0
-                    if method.modpred
-                        randomoob = randomoobs[foldno][i]
-                    end
-                    for t = 1:length(model)
-                        if method.modpred
-                            if oob[t][randomoob]
-                                leafstats = make_prediction(model[t],newtestdata,i,0)
-                                treeprediction = leafstats[2]/leafstats[1]
-                                prediction += treeprediction
-                                squaredprediction += treeprediction^2
-                                squarederror += (treeprediction-correctvalue)^2
-                                nosampledtrees += 1
-                            end
-                        else
-                            leafstats = make_prediction(model[t],newtestdata,i,0)
-                            treeprediction = leafstats[2]/leafstats[1]
-                            prediction += treeprediction
-                            squaredprediction += treeprediction^2
-                            squarederror += (treeprediction-correctvalue)^2
-                        end
-                    end
-                    if ~method.modpred
-                        nosampledtrees = length(model)
-                    end
-                    totalnotrees += nosampledtrees
-                    testexamplecounter += 1
-                    predictions[testexamplecounter] = [nosampledtrees;prediction]
-                    squaredpredictions[testexamplecounter] = [nosampledtrees;squaredprediction]
-                end
-                squarederrors[foldno] = [totalnotrees;squarederror]
-            else  # predictiontask == :CLASS
-                correctclassificationcounter = 0
-                squaredproberror = 0.0
-                totalnotrees = 0
-                foldtestexamplecounter = 0
-                for c = 1:noclasses
-                    correctclassvector = zeros(noclasses)
-                    correctclassvector[c] = 1.0
-                    for i = 1:size(testdata[c],1)
-                        foldtestexamplecounter += 1
-                        classprobabilities = zeros(noclasses)
-                        nosampledtrees = 0
-                        if method.modpred
-                            randomoobclass, randomoobref = randomclassoobs[foldtestexamplecounter]
-                        end
-                        for t = 1:length(model)
-                            if method.modpred
-                                if oob[t][randomoobclass][randomoobref]
-                                    prediction = make_prediction(model[t],newtestdata[c],i,zeros(noclasses))
-                                    classprobabilities += prediction
-                                    correctclassificationcounter += 1-abs(sign(indmax(prediction)-c))
-                                    squaredproberror += sqL2dist(correctclassvector,prediction)
-                                    nosampledtrees += 1
-                                end
-                            else
-                                prediction = make_prediction(model[t],newtestdata[c],i,zeros(noclasses))
-                                classprobabilities += prediction
-                                correctclassificationcounter += 1-abs(sign(indmax(prediction)-c))
-                                squaredproberror += sqL2dist(correctclassvector,prediction)
-                            end
-                        end
-                        if ~method.modpred
-                            nosampledtrees = length(model)
-                        end
-                        testexamplecounter += 1
-                        totalnotrees += nosampledtrees
-                        predictions[testexamplecounter] = [nosampledtrees;classprobabilities]
-                    end
-                end
-                nocorrectclassifications[foldno] = [totalnotrees;correctclassificationcounter]
-                squaredproberrors[foldno] = [totalnotrees;squaredproberror]
-            end
-        end
-        if predictiontask == :REGRESSION
-            return (modelsizes,predictions,squarederrors,oobpredictions,squaredpredictions,noirregularleafs)
-        else
-            return (modelsizes,predictions,(nocorrectclassifications,squaredproberrors),oobpredictions,noirregularleafs)
-        end
+        return (modelsizes,predictions,(nocorrectclassifications,squaredproberrors),oobpredictions,noirregularleafs)
     end
 end
 
-function generate_trees(Argument)
-    method,predictiontask,classes,notrees,randseed = Argument
+function generate_trees(method::LearningMethod{Regressor},predictiontask,classes,notrees,randseed)
     s = size(globaldata,1)
     srand(randseed)
-    if predictiontask == :CLASS
-        noclasses = length(classes)
-        trainingdata = Array(Any,noclasses)
-        trainingrefs = Array(Any,noclasses)
-        trainingweights = Array(Any,noclasses)
-        oobpredictions = Array(Any,noclasses)
-        emptyprediction = zeros(noclasses)
-        for c = 1:noclasses
-            trainingdata[c] = globaldata[globaldata[:CLASS] .== classes[c],:]
-            trainingrefs[c] = collect(1:size(trainingdata[c],1))
-            trainingweights[c] = trainingdata[c][:WEIGHT]
-            oobpredictions[c] = Array(Any,size(trainingdata[c],1))
-            for i = 1:size(trainingdata[c],1)
-                oobpredictions[c][i] = [0;emptyprediction]
-            end
-        end
-        regressionvalues = []
-    else
-        trainingdata = globaldata
-        trainingrefs = collect(1:size(trainingdata,1))
-        trainingweights = trainingdata[:WEIGHT]
-        regressionvalues = trainingdata[:REGRESSION]
-        oobpredictions = Array(Any,size(trainingdata,1))
-        for i = 1:size(trainingdata,1)
-            oobpredictions[i] = [0,0,0]
-        end
+    trainingdata = globaldata
+    trainingrefs = collect(1:size(trainingdata,1))
+    trainingweights = trainingdata[:WEIGHT]
+    regressionvalues = trainingdata[:REGRESSION]
+    oobpredictions = Array(Any,size(trainingdata,1))
+    for i = 1:size(trainingdata,1)
+        oobpredictions[i] = [0,0,0]
     end
+    
+    # AMGAD: starting from here till the end of the function is duplicated between here and the classifier dispatcher
     variables, types = get_variables_and_types(globaldata)
     modelsize = 0
     missingvalues, nonmissingvalues = find_missing_values(predictiontask,variables,trainingdata)
@@ -1649,46 +1681,83 @@ function generate_trees(Argument)
    return (model,oobpredictions,variableimportance)
 end
 
-function find_missing_values(predictiontask,variables,trainingdata)
-    if predictiontask == :CLASS
-        noclasses = size(trainingdata,1)
-        missingvalues = Array(Any,noclasses)
-        nonmissingvalues = Array(Any,noclasses)
-        for c = 1:noclasses
-            missingvalues[c] = Array(Any,length(variables))
-            nonmissingvalues[c] = Array(Any,length(variables))
-            for v = 1:length(variables)
-                missingvalues[c][v] = Int[]
-                nonmissingvalues[c][v] = Any[]
-                variable = variables[v]
-                if check_variable(variable)
-                    values = trainingdata[c][variable]
-                    for val = 1:length(values)
-                        value = values[val]
-                        if isna(value)
-                            push!(missingvalues[c][v],val)
-                        else
-                            push!(nonmissingvalues[c][v],value)
-                        end
-                    end
+function generate_trees(method::LearningMethod{Classifier},predictiontask,classes,notrees,randseed)
+    s = size(globaldata,1)
+    srand(randseed)
+    noclasses = length(classes)
+    trainingdata = Array(Any,noclasses)
+    trainingrefs = Array(Any,noclasses)
+    trainingweights = Array(Any,noclasses)
+    oobpredictions = Array(Any,noclasses)
+    emptyprediction = zeros(noclasses)
+    for c = 1:noclasses
+        trainingdata[c] = globaldata[globaldata[:CLASS] .== classes[c],:]
+        trainingrefs[c] = collect(1:size(trainingdata[c],1))
+        trainingweights[c] = trainingdata[c][:WEIGHT]
+        oobpredictions[c] = Array(Any,size(trainingdata[c],1))
+        for i = 1:size(trainingdata[c],1)
+            oobpredictions[c][i] = [0;emptyprediction]
+        end
+    end
+    regressionvalues = []
+    
+    # AMGAD: starting from here till the end of the function is duplicated between here and the regressor dispatcher
+    variables, types = get_variables_and_types(globaldata)
+    modelsize = 0
+    missingvalues, nonmissingvalues = find_missing_values(predictiontask,variables,trainingdata)
+    newtrainingdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,trainingdata,missingvalues)
+    model = Array(Any,notrees)
+    variableimportance = zeros(size(variables,1))
+    for treeno = 1:notrees
+        sample_replacements_for_missing_values!(newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+        model[treeno], treevariableimportance, noleafs, noirregularleafs = generate_tree(method,trainingrefs,trainingweights,regressionvalues,newtrainingdata,variables,types,predictiontask,oobpredictions,varimp = true)
+        modelsize += noleafs
+        variableimportance += treevariableimportance
+    end
+    return (model,oobpredictions,variableimportance)
+end
+
+function find_missing_values(mathod::LearningMethod{Regressor},variables,trainingdata)
+    missingvalues = Array(Any,length(variables))
+    nonmissingvalues = Array(Any,length(variables))
+    for v = 1:length(variables)
+        missingvalues[v] = Int[]
+        nonmissingvalues[v] = Any[]
+        variable = variables[v]
+        if check_variable(variable)
+            values = trainingdata[variable]
+            for val = 1:length(values)
+                value = values[val]
+                if isna(value)
+                    push!(missingvalues[v],val)
+                else
+                    push!(nonmissingvalues[v],value)
                 end
             end
         end
-    else
-        missingvalues = Array(Any,length(variables))
-        nonmissingvalues = Array(Any,length(variables))
+    end
+    return (missingvalues,nonmissingvalues)
+end
+
+function find_missing_values(mathod::LearningMethod{Classifier},variables,trainingdata)
+    noclasses = size(trainingdata,1)
+    missingvalues = Array(Any,noclasses)
+    nonmissingvalues = Array(Any,noclasses)
+    for c = 1:noclasses
+        missingvalues[c] = Array(Any,length(variables))
+        nonmissingvalues[c] = Array(Any,length(variables))
         for v = 1:length(variables)
-            missingvalues[v] = Int[]
-            nonmissingvalues[v] = Any[]
+            missingvalues[c][v] = Int[]
+            nonmissingvalues[c][v] = Any[]
             variable = variables[v]
             if check_variable(variable)
-                values = trainingdata[variable]
+                values = trainingdata[c][variable]
                 for val = 1:length(values)
                     value = values[val]
                     if isna(value)
-                        push!(missingvalues[v],val)
+                        push!(missingvalues[c][v],val)
                     else
-                        push!(nonmissingvalues[v],value)
+                        push!(nonmissingvalues[c][v],value)
                     end
                 end
             end
@@ -1697,68 +1766,45 @@ function find_missing_values(predictiontask,variables,trainingdata)
     return (missingvalues,nonmissingvalues)
 end
 
-function transform_nonmissing_columns_to_arrays(predictiontask,variables,trainingdata,missingvalues)
-    if predictiontask == :CLASS
-        noclasses = size(trainingdata,1)
-        newdata = Array(Any,noclasses)
-        for c = 1:noclasses
-            newdata[c] = Array(Any,length(variables))
-            for v = 1:length(variables)
-                if missingvalues[c][v] == []
-                    newdata[c][v] = convert(Array,trainingdata[c][variables[v]])
-                else
-                    newdata[c][v] = trainingdata[c][variables[v]]
-                end
-            end
+function transform_nonmissing_columns_to_arrays(mathod::LearningMethod{Regressor},variables,trainingdata,missingvalues)
+    newdata = Array(Any,length(variables))
+    for v = 1:length(variables)
+        if missingvalues[v] == []
+            newdata[v] = convert(Array,trainingdata[variables[v]])
+        else
+            newdata[v] = trainingdata[variables[v]]
         end
-    else
-        newdata = Array(Any,length(variables))
+    end
+    return newdata
+end
+
+function transform_nonmissing_columns_to_arrays(mathod::LearningMethod{Classifier},variables,trainingdata,missingvalues)
+    noclasses = size(trainingdata,1)
+    newdata = Array(Any,noclasses)
+    for c = 1:noclasses
+        newdata[c] = Array(Any,length(variables))
         for v = 1:length(variables)
-            if missingvalues[v] == []
-                newdata[v] = convert(Array,trainingdata[variables[v]])
+            if missingvalues[c][v] == []
+                newdata[c][v] = convert(Array,trainingdata[c][variables[v]])
             else
-                newdata[v] = trainingdata[variables[v]]
+                newdata[c][v] = trainingdata[c][variables[v]]
             end
         end
     end
     return newdata
 end
 
-function sample_replacements_for_missing_values!(newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
-    if predictiontask == :CLASS
-        noclasses = size(newtrainingdata,1)
-        for c = 1:noclasses
-            for v = 1:length(variables)
-                if missingvalues[c][v] != []
-                    values = trainingdata[c][variables[v]]
-                    valuefrequencies = map(Float64,[length(nonmissingvalues[cl][v]) for cl = 1:noclasses])
-                    if sum(valuefrequencies) > 0
-                        for i in missingvalues[c][v]
-                            sampleclass = wsample(1:noclasses,valuefrequencies)
-                            newvalue = nonmissingvalues[sampleclass][v][rand(1:length(nonmissingvalues[sampleclass][v]))]
-                            values[i] = newvalue
-                        end
-                    else
-                        if types[v] == :NUMERIC
-                            newvalue = 0
-                        else
-                            newvalue = ""
-                        end
-                        for i in missingvalues[c][v]
-                            values[i] =  newvalue # NOTE: The variable (and type) should be removed
-                        end
-                    end
-                    newtrainingdata[c][v] = convert(Array,values)
-                end
-            end
-        end
-    else
+function sample_replacements_for_missing_values!(method::LearningMethod{Classifier},newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+    noclasses = size(newtrainingdata,1)
+    for c = 1:noclasses
         for v = 1:length(variables)
-            if missingvalues[v] != []
-                values = trainingdata[variables[v]]
-                if length(nonmissingvalues[v]) > 0
-                    for i in missingvalues[v]
-                        newvalue = nonmissingvalues[v][rand(1:length(nonmissingvalues[v]))]
+            if missingvalues[c][v] != []
+                values = trainingdata[c][variables[v]]
+                valuefrequencies = map(Float64,[length(nonmissingvalues[cl][v]) for cl = 1:noclasses])
+                if sum(valuefrequencies) > 0
+                    for i in missingvalues[c][v]
+                        sampleclass = wsample(1:noclasses,valuefrequencies)
+                        newvalue = nonmissingvalues[sampleclass][v][rand(1:length(nonmissingvalues[sampleclass][v]))]
                         values[i] = newvalue
                     end
                 else
@@ -1767,113 +1813,142 @@ function sample_replacements_for_missing_values!(newtrainingdata,trainingdata,pr
                     else
                         newvalue = ""
                     end
-                    for i in missingvalues[v]
+                    for i in missingvalues[c][v]
                         values[i] =  newvalue # NOTE: The variable (and type) should be removed
                     end
                 end
-                newtrainingdata[v] = convert(Array,values)
+                newtrainingdata[c][v] = convert(Array,values)
             end
         end
     end
-    return nothing
 end
 
-function replacements_for_missing_values!(newtestdata,testdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
-    if predictiontask == :CLASS
-        noclasses = size(newtestdata,1)
-        for c = 1:noclasses
-            for v = 1:length(variables)
-                if missingvalues[c][v] != []
-                    values = convert(DataArray,testdata[c][variables[v]])
-                    for i in missingvalues[c][v]
-                        values[i] =  NA
-                    end
-                    newtestdata[c][v] = values
+function sample_replacements_for_missing_values!(method::LearningMethod{Regressor},newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+    for v = 1:length(variables)
+        if missingvalues[v] != []
+            values = trainingdata[variables[v]]
+            if length(nonmissingvalues[v]) > 0
+                for i in missingvalues[v]
+                    newvalue = nonmissingvalues[v][rand(1:length(nonmissingvalues[v]))]
+                    values[i] = newvalue
+                end
+            else
+                if types[v] == :NUMERIC
+                    newvalue = 0
+                else
+                    newvalue = ""
+                end
+                for i in missingvalues[v]
+                    values[i] =  newvalue # NOTE: The variable (and type) should be removed
                 end
             end
+            newtrainingdata[v] = convert(Array,values)
         end
-    else
+    end
+end
+
+function replacements_for_missing_values!(method::LearningMethod{Classifier},newtestdata,testdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+    noclasses = size(newtestdata,1)
+    for c = 1:noclasses
         for v = 1:length(variables)
-            if missingvalues[v] != []
-                values = convert(DataArray,testdata[variables[v]])
-                for i in missingvalues[v]
+            if missingvalues[c][v] != []
+                values = convert(DataArray,testdata[c][variables[v]])
+                for i in missingvalues[c][v]
                     values[i] =  NA
                 end
-                newtestdata[v] = values
+                newtestdata[c][v] = values
             end
         end
     end
-    return nothing
+end
+    
+function replacements_for_missing_values!(method::LearningMethod{Regressor},newtestdata,testdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+    for v = 1:length(variables)
+        if missingvalues[v] != []
+            values = convert(DataArray,testdata[variables[v]])
+            for i in missingvalues[v]
+                values[i] =  NA
+            end
+            newtestdata[v] = values
+        end
+    end
 end
 
-function generate_tree(method,trainingrefs,trainingweights,regressionvalues,trainingdata,variables,types,predictiontask,oobpredictions; varimp = false)
+function generate_tree(method::LearningMethod{Classifier},trainingrefs,trainingweights,regressionvalues,trainingdata,variables,types,predictiontask,oobpredictions; varimp = false)
     if method.bagging
-        if predictiontask == :REGRESSION
-            newtrainingweights = zeros(length(trainingweights))
-            if typeof(method.bagsize) == Int
-                samplesize = method.bagsize
-            else
-                samplesize = convert(Int,round(length(trainingrefs)*method.bagsize))
-            end
-            selectedsample = rand(1:length(trainingrefs),samplesize)
-            newtrainingweights[selectedsample] += 1.0
-            nonzeroweights = [newtrainingweights[i] > 0 for i=1:length(trainingweights)]
-            newtrainingrefs = trainingrefs[nonzeroweights]
-            newtrainingweights = newtrainingweights[nonzeroweights]
-            newregressionvalues = regressionvalues[nonzeroweights]
-            model, variableimportance, noleafs, noirregularleafs = build_tree(method,newtrainingrefs,newtrainingweights,newregressionvalues,trainingdata,variables,types,predictiontask,varimp)
-            zeroweights = ~nonzeroweights
-            oobrefs = trainingrefs[zeroweights]
-            for oobref in oobrefs
-                leafstats = make_prediction(model,trainingdata,oobref,0)
-                oobprediction = leafstats[2]/leafstats[1]
-                oobpredictions[oobref] += [1,oobprediction,oobprediction^2]
-            end
+        noclasses = length(trainingweights)
+        classweights = map(Float64,[length(t) for t in trainingrefs])
+        if typeof(method.bagsize) == Int
+            samplesize = method.bagsize
         else
-            noclasses = length(trainingweights)
-            classweights = map(Float64,[length(t) for t in trainingrefs])
-            if typeof(method.bagsize) == Int
-                samplesize = method.bagsize
-            else
-                samplesize = convert(Int,round(sum(classweights)*method.bagsize))
-            end
-            newtrainingweights = Array(Any,noclasses)
-            newtrainingrefs = Array(Any,noclasses)
-            for c = 1:noclasses
-                newtrainingweights[c] = zeros(length(trainingweights[c]))
-            end
-            for i = 1:samplesize
-                class = wsample(1:noclasses,classweights)
-                newtrainingweights[class][rand(1:end)] += 1.0
-            end
-            zeroweights = Array(Any,noclasses)
-            for c = 1:noclasses
-                nonzeroweights = [newtrainingweights[c][i] > 0 for i=1:length(newtrainingweights[c])]
-                zeroweights[c] = ~nonzeroweights
-                newtrainingrefs[c] = trainingrefs[c][nonzeroweights]
-                newtrainingweights[c] = newtrainingweights[c][nonzeroweights]
-            end
-            model, variableimportance, noleafs, noirregularleafs = build_tree(method,newtrainingrefs,newtrainingweights,regressionvalues,trainingdata,variables,types,predictiontask,varimp)
-            for c = 1:noclasses
-                oobrefs = trainingrefs[c][zeroweights[c]]
-                for oobref in oobrefs
-                    oobpredictions[c][oobref] += [1;make_prediction(model,trainingdata[c],oobref,zeros(noclasses))]
-                end
+            samplesize = convert(Int,round(sum(classweights)*method.bagsize))
+        end
+        newtrainingweights = Array(Any,noclasses)
+        newtrainingrefs = Array(Any,noclasses)
+        for c = 1:noclasses
+            newtrainingweights[c] = zeros(length(trainingweights[c]))
+        end
+        for i = 1:samplesize
+            class = wsample(1:noclasses,classweights)
+            newtrainingweights[class][rand(1:end)] += 1.0
+        end
+        zeroweights = Array(Any,noclasses)
+        for c = 1:noclasses
+            nonzeroweights = [newtrainingweights[c][i] > 0 for i=1:length(newtrainingweights[c])]
+            zeroweights[c] = ~nonzeroweights
+            newtrainingrefs[c] = trainingrefs[c][nonzeroweights]
+            newtrainingweights[c] = newtrainingweights[c][nonzeroweights]
+        end
+        model, variableimportance, noleafs, noirregularleafs = build_tree(method,newtrainingrefs,newtrainingweights,regressionvalues,trainingdata,variables,types,predictiontask,varimp)
+        for c = 1:noclasses
+            oobrefs = trainingrefs[c][zeroweights[c]]
+            for oobref in oobrefs
+                oobpredictions[c][oobref] += [1;make_prediction(model,trainingdata[c],oobref,zeros(noclasses))]
             end
         end
     else
         model, variableimportance, noleafs, noirregularleafs = build_tree(method,trainingrefs,trainingweights,regressionvalues,trainingdata,variables,types,predictiontask,varimp)
-        if predictiontask == :REGRESSION
-            for i = 1:size(trainingrefs,1)
-                trainingref = trainingrefs[i]
-                emptyleaf, leafstats = make_loo_prediction(model,trainingdata,trainingref,0)
-                if emptyleaf
-                    oobprediction = leafstats[2]/leafstats[1]
-                else
-                    oobprediction = (leafstats[2]-regressionvalues[i])/(leafstats[1]-1)
-                end
-                oobpredictions[trainingref] += [1,oobprediction,oobprediction^2]
+    end
+    if varimp
+        return model, variableimportance, noleafs, noirregularleafs, zeroweights
+    else
+        return model, noleafs, noirregularleafs, zeroweights
+    end
+end
+
+function generate_tree(method::LearningMethod{Regressor},trainingrefs,trainingweights,regressionvalues,trainingdata,variables,types,predictiontask,oobpredictions; varimp = false)
+    if method.bagging
+        newtrainingweights = zeros(length(trainingweights))
+        if typeof(method.bagsize) == Int
+            samplesize = method.bagsize
+        else
+            samplesize = convert(Int,round(length(trainingrefs)*method.bagsize))
+        end
+        selectedsample = rand(1:length(trainingrefs),samplesize)
+        newtrainingweights[selectedsample] += 1.0
+        nonzeroweights = [newtrainingweights[i] > 0 for i=1:length(trainingweights)]
+        newtrainingrefs = trainingrefs[nonzeroweights]
+        newtrainingweights = newtrainingweights[nonzeroweights]
+        newregressionvalues = regressionvalues[nonzeroweights]
+        model, variableimportance, noleafs, noirregularleafs = build_tree(method,newtrainingrefs,newtrainingweights,newregressionvalues,trainingdata,variables,types,predictiontask,varimp)
+        zeroweights = ~nonzeroweights
+        oobrefs = trainingrefs[zeroweights]
+        for oobref in oobrefs
+            leafstats = make_prediction(model,trainingdata,oobref,0)
+            oobprediction = leafstats[2]/leafstats[1]
+            oobpredictions[oobref] += [1,oobprediction,oobprediction^2]
+        end
+    else
+        model, variableimportance, noleafs, noirregularleafs = build_tree(method,trainingrefs,trainingweights,regressionvalues,trainingdata,variables,types,predictiontask,varimp)
+        for i = 1:size(trainingrefs,1)
+            trainingref = trainingrefs[i]
+            emptyleaf, leafstats = make_loo_prediction(model,trainingdata,trainingref,0)
+            if emptyleaf
+                oobprediction = leafstats[2]/leafstats[1]
+            else
+                oobprediction = (leafstats[2]-regressionvalues[i])/(leafstats[1]-1)
             end
+            oobpredictions[trainingref] += [1,oobprediction,oobprediction^2]
         end
     end
     if varimp
@@ -1916,7 +1991,7 @@ function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalue
                     make_split(trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
                 varno, variable, splittype, splitpoint = bestsplit
                 if varimp
-                    if predictiontask == :REGRESSION
+                    if typeof(method.learningType) == Regressor #predictiontask == :REGRESSION
                         variableimp = variance_reduction(trainingweights,regressionvalues,leftweights,leftregressionvalues,rightweights,rightregressionvalues)
                     else
                         variableimp = information_gain(trainingweights,leftweights,rightweights)
@@ -1966,103 +2041,108 @@ function check_variable(v)
     end
 end
 
-function default_prediction(trainingweights,regressionvalues,predictiontask,method)
-    if predictiontask == :CLASS
-        noclasses = size(trainingweights,1)
-        classcounts = [sum(trainingweights[i]) for i=1:noclasses]
-        noinstances = sum(classcounts)
-        if method.laplace
-            return [(classcounts[i]+1)/(noinstances+noclasses) for i=1:noclasses]
-        else
-            if noinstances > 0
-                return [classcounts[i]/noinstances for i=1:noclasses]
-            else
-                return [1/noclasses for i=1:noclasses]
-            end
-        end
+function default_prediction(trainingweights,regressionvalues,predictiontask,method::LearningMethod{Classifier})
+    noclasses = size(trainingweights,1)
+    classcounts = [sum(trainingweights[i]) for i=1:noclasses]
+    noinstances = sum(classcounts)
+    if method.laplace
+        return [(classcounts[i]+1)/(noinstances+noclasses) for i=1:noclasses]
     else
-        sumweights = sum(trainingweights)
-        sumregressionvalues = sum(regressionvalues)
-        return [sumweights,sumregressionvalues]
-        ## if sumweights > 0
-        ##     return sum(trainingweights .* regressionvalues)/sumweights
-        ## else
-        ##     return :NA
-        ## end
+        if noinstances > 0
+            return [classcounts[i]/noinstances for i=1:noclasses]
+        else
+            return [1/noclasses for i=1:noclasses]
+        end
     end
 end
 
-function leaf_node(trainingweights,regressionvalues,predictiontask,depth,method)
+function default_prediction(trainingweights,regressionvalues,predictiontask,method::LearningMethod{Regressor})
+    sumweights = sum(trainingweights)
+    sumregressionvalues = sum(regressionvalues)
+    return [sumweights,sumregressionvalues]
+    ## if sumweights > 0
+    ##     return sum(trainingweights .* regressionvalues)/sumweights
+    ## else
+    ##     return :NA
+    ## end
+end
+
+function leaf_node(trainingweights,regressionvalues,predictiontask,depth,method::LearningMethod{Classifier})
     if method.maxdepth > 0 && method.maxdepth == depth
         return true
     else
-        if predictiontask == :REGRESSION
-            noinstances = sum(trainingweights)
-            if noinstances >= 2*method.minleaf
-                firstvalue = regressionvalues[1]
-                i = 2
-                multiplevalues = false
-                novalues = length(regressionvalues)
-                while i <= novalues &&  ~multiplevalues
-                    multiplevalues = firstvalue != regressionvalues[i]
-                    i += 1
+        noclasses = size(trainingweights,1)
+        classweights = [sum(trainingweights[c]) for c = 1:noclasses]
+        noinstances = sum(classweights)
+        if noinstances >= 2*method.minleaf
+            i = 1
+            nonzero = 0
+            while i <= noclasses &&  nonzero < 2
+                if classweights[i] > 0
+                    nonzero += 1
                 end
-                return ~multiplevalues
+                i += 1
+            end
+            if nonzero >= 2
+                return false
             else
                 return true
             end
-        else # predictiontask == :CLASS
-            noclasses = size(trainingweights,1)
-            classweights = [sum(trainingweights[c]) for c = 1:noclasses]
-            noinstances = sum(classweights)
-            if noinstances >= 2*method.minleaf
-                i = 1
-                nonzero = 0
-                while i <= noclasses &&  nonzero < 2
-                    if classweights[i] > 0
-                        nonzero += 1
-                    end
-                    i += 1
-                end
-                if nonzero >= 2
-                    return false
-                else
-                    return true
-                end
-            else
-                return true
-            end
+        else
+            return true
         end
     end
 end
 
-function make_leaf(trainingweights,regressionvalues,predictiontask,defaultprediction,method)
-    if predictiontask == :CLASS
-        noclasses = size(trainingweights,1)
-        classcounts = zeros(noclasses)
-        for i=1:noclasses
-            classcounts[i] = sum(trainingweights[i])
-        end
-        noinstances = sum(classcounts)
-        if noinstances > 0
-            if method.laplace
-                prediction = [(classcounts[i]+1)/(noinstances+noclasses) for i=1:noclasses]
-            else
-                prediction = [classcounts[i]/noinstances for i=1:noclasses]
+function leaf_node(trainingweights,regressionvalues,predictiontask,depth,method::LearningMethod{Regressor})
+    if method.maxdepth > 0 && method.maxdepth == depth
+        return true
+    else
+        noinstances = sum(trainingweights)
+        if noinstances >= 2*method.minleaf
+            firstvalue = regressionvalues[1]
+            i = 2
+            multiplevalues = false
+            novalues = length(regressionvalues)
+            while i <= novalues &&  ~multiplevalues
+                multiplevalues = firstvalue != regressionvalues[i]
+                i += 1
             end
+            return ~multiplevalues
         else
-            prediction = defaultprediction
+            return true
+        end
+    end
+end
+
+function make_leaf(trainingweights,regressionvalues,predictiontask,defaultprediction,method::LearningMethod{Classifier})
+    noclasses = size(trainingweights,1)
+    classcounts = zeros(noclasses)
+    for i=1:noclasses
+        classcounts[i] = sum(trainingweights[i])
+    end
+    noinstances = sum(classcounts)
+    if noinstances > 0
+        if method.laplace
+            prediction = [(classcounts[i]+1)/(noinstances+noclasses) for i=1:noclasses]
+        else
+            prediction = [classcounts[i]/noinstances for i=1:noclasses]
         end
     else
-        sumweights = sum(trainingweights)
-        sumregressionvalues = sum(regressionvalues)
-        return [sumweights,sumregressionvalues]
-        ## if sumweights > 0
-        ##     prediction = sum(trainingweights .* regressionvalues)/sumweights
-        ## else
-        ##     prediction = defaultprediction
-        ## end
+        prediction = defaultprediction
     end
+    return prediction
+end
+
+function make_leaf(trainingweights,regressionvalues,predictiontask,defaultprediction,method::LearningMethod{Classifier})
+    sumweights = sum(trainingweights)
+    sumregressionvalues = sum(regressionvalues)
+    return [sumweights,sumregressionvalues]
+    ## if sumweights > 0
+    ##     prediction = sum(trainingweights .* regressionvalues)/sumweights
+    ## else
+    ##     prediction = defaultprediction
+    ## end
     return prediction
 end
 
