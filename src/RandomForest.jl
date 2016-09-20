@@ -46,7 +46,7 @@ module RandomForest
 
 using DataFrames
 
-export 
+export
     experiment,
     tree,
     forest,
@@ -1267,6 +1267,9 @@ function run_cross_validation(protocol,predictiontask,methods)
     return methodresults
 end
 
+"""
+Infers the prediction task from the data
+"""
 function prediction_task(data)
     allnames = names(data)
     if :CLASS in allnames
@@ -2450,93 +2453,101 @@ function evaluate_regression_numeric_variable_allvals(bestsplit,varno,variable,s
     return bestsplit
 end
 
+"""
+The classification version
+"""
 function make_split(trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
     (varno, variable, splittype, splitpoint) = bestsplit
-    if predictiontask == :CLASS
-        noclasses = size(trainingrefs,1)
-        leftrefs = Array(Any,noclasses)
-        leftweights = Array(Any,noclasses)
-        rightrefs = Array(Any,noclasses)
-        rightweights = Array(Any,noclasses)
-        values = Array(Any,noclasses)
-        for c = 1:noclasses
-            leftrefs[c] = Int[]
-            leftweights[c] = Float64[]
-            rightrefs[c] = Int[]
-            rightweights[c] = Float64[]
-            values[c] = trainingdata[c][varno][trainingrefs[c]]
-            if splittype == :NUMERIC
-                for r = 1:length(trainingrefs[c])
-                    ref = trainingrefs[c][r]
-                    if values[c][r] <= splitpoint
-                        push!(leftrefs[c],ref)
-                        push!(leftweights[c],trainingweights[c][r])
-                    else
-                        push!(rightrefs[c],ref)
-                        push!(rightweights[c],trainingweights[c][r])
-                    end
-                end
-            else
-                for r = 1:length(trainingrefs[c])
-                    ref = trainingrefs[c][r]
-                    if values[c][r] == splitpoint
-                        push!(leftrefs[c],ref)
-                        push!(leftweights[c],trainingweights[c][r])
-                    else
-                        push!(rightrefs[c],ref)
-                        push!(rightweights[c],trainingweights[c][r])
-                    end
-                end
-            end
-        end
-        noleftexamples = sum([sum(leftweights[i]) for i=1:noclasses])
-        norightexamples = sum([sum(rightweights[i]) for i=1:noclasses])
-        leftweight = noleftexamples/(noleftexamples+norightexamples)
-        return leftrefs,leftweights,[],rightrefs,rightweights,[],leftweight
-    else
-        leftrefs = Int[]
-        leftweights = Float64[]
-        leftregressionvalues = Float64[]
-        rightrefs = Int[]
-        rightweights = Float64[]
-        rightregressionvalues = Float64[]
-        values = trainingdata[varno][trainingrefs]
-        sumleftweights = 0.0
-        sumrightweights = 0.0
+    noclasses = size(trainingrefs,1)
+    leftrefs = Array(Any,noclasses)
+    leftweights = Array(Any,noclasses)
+    rightrefs = Array(Any,noclasses)
+    rightweights = Array(Any,noclasses)
+    values = Array(Any,noclasses)
+    for c = 1:noclasses
+        leftrefs[c] = Int[]
+        leftweights[c] = Float64[]
+        rightrefs[c] = Int[]
+        rightweights[c] = Float64[]
+        values[c] = trainingdata[c][varno][trainingrefs[c]]
         if splittype == :NUMERIC
-            for r = 1:length(trainingrefs)
-                ref = trainingrefs[r]
-                if values[r] <= splitpoint
-                    push!(leftrefs,ref)
-                    push!(leftweights,trainingweights[r])
-                    sumleftweights += trainingweights[r]
-                    push!(leftregressionvalues,regressionvalues[r])
+            for r = 1:length(trainingrefs[c])
+                ref = trainingrefs[c][r]
+                if values[c][r] <= splitpoint
+                    push!(leftrefs[c],ref)
+                    push!(leftweights[c],trainingweights[c][r])
                 else
-                    push!(rightrefs,ref)
-                    push!(rightweights,trainingweights[r])
-                    sumrightweights += trainingweights[r]
-                    push!(rightregressionvalues,regressionvalues[r])
+                    push!(rightrefs[c],ref)
+                    push!(rightweights[c],trainingweights[c][r])
                 end
             end
         else
-            for r = 1:length(trainingrefs)
-                ref = trainingrefs[r]
-                if values[r] == splitpoint
-                    push!(leftrefs,ref)
-                    push!(leftweights,trainingweights[r])
-                    sumleftweights += trainingweights[r]
-                    push!(leftregressionvalues,regressionvalues[r])
+            for r = 1:length(trainingrefs[c])
+                ref = trainingrefs[c][r]
+                if values[c][r] == splitpoint
+                    push!(leftrefs[c],ref)
+                    push!(leftweights[c],trainingweights[c][r])
                 else
-                    push!(rightrefs,ref)
-                    push!(rightweights,trainingweights[r])
-                    sumrightweights += trainingweights[r]
-                    push!(rightregressionvalues,regressionvalues[r])
+                    push!(rightrefs[c],ref)
+                    push!(rightweights[c],trainingweights[c][r])
                 end
             end
         end
     end
-    leftweight = sumleftweights/(sumleftweights+sumrightweights)
-    return leftrefs,leftweights,leftregressionvalues,rightrefs,rightweights,rightregressionvalues,leftweight
+    noleftexamples = sum([sum(leftweights[i]) for i=1:noclasses])
+    norightexamples = sum([sum(rightweights[i]) for i=1:noclasses])
+    leftweight = noleftexamples/(noleftexamples+norightexamples)
+    return leftrefs,leftweights,[],rightrefs,rightweights,[],leftweight
+end
+
+"""
+The regression version
+"""
+function make_split(trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
+    (varno, variable, splittype, splitpoint) = bestsplit
+    leftrefs = Int[]
+    leftweights = Float64[]
+    leftregressionvalues = Float64[]
+    rightrefs = Int[]
+    rightweights = Float64[]
+    rightregressionvalues = Float64[]
+    values = trainingdata[varno][trainingrefs]
+    sumleftweights = 0.0
+    sumrightweights = 0.0
+    if splittype == :NUMERIC
+        for r = 1:length(trainingrefs)
+            ref = trainingrefs[r]
+            if values[r] <= splitpoint
+                push!(leftrefs,ref)
+                push!(leftweights,trainingweights[r])
+                sumleftweights += trainingweights[r]
+                push!(leftregressionvalues,regressionvalues[r])
+            else
+                push!(rightrefs,ref)
+                push!(rightweights,trainingweights[r])
+                sumrightweights += trainingweights[r]
+                push!(rightregressionvalues,regressionvalues[r])
+            end
+        end
+    else
+        for r = 1:length(trainingrefs)
+            ref = trainingrefs[r]
+            if values[r] == splitpoint
+                push!(leftrefs,ref)
+                push!(leftweights,trainingweights[r])
+                sumleftweights += trainingweights[r]
+                push!(leftregressionvalues,regressionvalues[r])
+            else
+                push!(rightrefs,ref)
+                push!(rightweights,trainingweights[r])
+                sumrightweights += trainingweights[r]
+                push!(rightregressionvalues,regressionvalues[r])
+            end
+        end
+    end
+  end
+  leftweight = sumleftweights/(sumleftweights+sumrightweights)
+  return leftrefs,leftweights,leftregressionvalues,rightrefs,rightweights,rightregressionvalues,leftweight
 end
 
 function variance_reduction(trainingweights,regressionvalues,leftweights,leftregressionvalues,rightweights,rightregressionvalues)
