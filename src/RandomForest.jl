@@ -2149,6 +2149,7 @@ function make_leaf(trainingweights,regressionvalues,predictiontask,defaultpredic
     return prediction
 end
 
+# AMG: this is not split yet
 function find_best_split(trainingrefs,trainingweights,regressionvalues,trainingdata,variables,types,predictiontask,method)
     if method.randsub == :all
         sampleselection = collect(1:length(variables))
@@ -2533,10 +2534,7 @@ function evaluate_regression_numeric_variable_allvals(bestsplit,varno,variable,s
     return bestsplit
 end
 
-"""
-The classification version
-"""
-function make_split(trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
+function make_split(method::LearningMethod{Classiffier},trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
     (varno, variable, splittype, splitpoint) = bestsplit
     noclasses = size(trainingrefs,1)
     leftrefs = Array(Any,noclasses)
@@ -2580,10 +2578,7 @@ function make_split(trainingrefs,trainingweights,regressionvalues,trainingdata,p
     return leftrefs,leftweights,[],rightrefs,rightweights,[],leftweight
 end
 
-"""
-The regression version
-"""
-function make_split(trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
+function make_split(method::LearningMethod{Regressor},trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
     (varno, variable, splittype, splitpoint) = bestsplit
     leftrefs = Int[]
     leftweights = Float64[]
@@ -3027,14 +3022,14 @@ function run_single_experiment(protocol, methods)
     return result
 end
 
-function generate_model(;method = forest())
+function generate_model(method)
     predictiontask = prediction_task(globaldata)
     if predictiontask == :NONE # FIXME: We should not be doing this
         println("The loaded dataset is not on the correct format: CLASS/REGRESSION column missing")
         println("This may be due to an incorrectly specified separator, e.g., use: separator = \'\\t\'")
         result = :NONE
     else
-        if predictiontask == :CLASS
+        if typeof(method.learningType) == Classifier
             classes = unique(globaldata[:CLASS])
         else
             classes = []
@@ -3058,162 +3053,168 @@ function generate_model(;method = forest())
         variableimportance = variableimportance/method.notrees
         variables, types = get_variables_and_types(globaldata)
         variableimportance = hcat(variables,variableimportance)
-        if predictiontask == :CLASS
-            if method.conformal == :default
-                conformal = :std
-            else
-                conformal = method.conformal
-            end
-            oobpredictions = oobs[1]
-            noclasses = length(classes)
-            for c = 1:noclasses
-                for r = 2:length(oobs)
-                    oobpredictions[c] += oobs[r][c]
-                end
-            end
-            noobcorrect = 0
-            nooob = 0
-            if conformal == :std
-                alphas = Float64[]
-                for c = 1:noclasses
-                    for i = 1:size(oobpredictions[c],1)
-                        oobpredcount = oobpredictions[c][i][1]
-                        if oobpredcount > 0
-                            alpha = oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount
-                            push!(alphas,alpha)
-                            noobcorrect += 1-abs(sign(indmax(oobpredictions[c][i][2:end])-c))
-                            nooob += 1
-                        end
-                    end
-                end
-                thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
-                if thresholdindex >= 1
-                    sortedalphas = sort(alphas)
-                    alpha = sortedalphas[thresholdindex]
-                else
-                    alpha = -Inf
-                end
-                conformalfunction = (:std,alpha,sortedalphas)
-            elseif conformal == :classcond
-                classalpha = Array(Float64,noclasses)
-                classalphas = Array(Any,noclasses)
-                for c = 1:noclasses
-                    classalphas[c] = Float64[]
-                    noclassoob = 0
-                    for i = 1:size(oobpredictions[c],1)
-                        oobpredcount = oobpredictions[c][i][1]
-                        if oobpredcount > 0
-                            alphavalue = oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount
-                            push!(classalphas[c],alphavalue)
-                            noobcorrect += 1-abs(sign(indmax(oobpredictions[c][i][2:end])-c))
-                            noclassoob += 1
-                        end
-                    end
-                    thresholdindex = Int(floor((noclassoob+1)*(1-method.confidence)))
-                    if thresholdindex >= 1
-                        classalphas[c] = sort(classalphas[c])
-                        classalpha[c] = classalphas[c][thresholdindex]
-                    else
-                        classalpha[c] = -Inf
-                    end
-                    nooob += noclassoob
-                end
-                conformalfunction = (:classcond,classalpha,classalphas)
-            end
-            oobperformance = noobcorrect/nooob
-        else
-            oobpredictions = oobs[1]
-            for r = 2:length(oobs)
-                oobpredictions += oobs[r]
-            end
-            correcttrainingvalues = globaldata[:REGRESSION]
-            oobse = 0.0
-            nooob = 0
-            ooberrors = Float64[]
-            alphas = Float64[]
-#            deltas = Float64[]
-            for i = 1:length(correcttrainingvalues)
-                oobpredcount = oobpredictions[i][1]
-                if oobpredcount > 0.0
-                    ooberror = abs(correcttrainingvalues[i]-(oobpredictions[i][2]/oobpredcount))
-                    push!(ooberrors,ooberror)
-                    delta = (oobpredictions[i][3]/oobpredcount-(oobpredictions[i][2]/oobpredcount)^2)
-                    alpha = 2*ooberror/(delta+0.01)
-                    push!(alphas,alpha)
-#                    push!(deltas,delta)
-                    oobse += ooberror^2
-                    nooob += 1
-                end
-            end
-            oobperformance = oobse/nooob
-            thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
-            largestrange = maximum(correcttrainingvalues)-minimum(correcttrainingvalues)
-            if method.conformal == :default
-                conformal = :normalized
-            else
-                conformal = method.conformal
-            end
-            if conformal == :std
-                if thresholdindex >= 1
-                    sortedooberrors = sort(ooberrors, rev=true)
-                    errorrange = minimum([largestrange,2*sortedooberrors[thresholdindex]])
-                else
-                    errorrange = largestrange
-                end
-                conformalfunction = (:std,errorrange,largestrange,sortedooberrors)
-            elseif conformal == :normalized
-                sortedalphas = sort(alphas,rev=true)
-                if thresholdindex >= 1
-                    alpha = sortedalphas[thresholdindex]
-                else
-                    alpha = Inf
-                end
-                conformalfunction = (:normalized,alpha,largestrange,sortedalphas)
-            ## elseif conformal == :isotonic
-            ##     eds = Array(Float64,nooob,2)
-            ##     eds[:,1] = ooberrors
-            ##     eds[:,2] = deltas
-            ##     eds = sortrows(eds,by=x->x[2])
-            ##     isotonicthresholds = Any[]
-            ##     mincalibrationsize = maximum([10;Int(floor(1/(round((1-method.confidence)*1000000)/1000000))-1)])
-            ##     oobindex = 0
-            ##     while size(eds,1)-oobindex >= 2*mincalibrationsize
-            ##         isotonicgroup = eds[oobindex+1:oobindex+mincalibrationsize,:]
-            ##         threshold = isotonicgroup[1,2]
-            ##         isotonicgroup = sortrows(isotonicgroup,by=x->x[1],rev=true)
-            ##         push!(isotonicthresholds,(threshold,isotonicgroup[1,1],isotonicgroup))
-            ##         oobindex += mincalibrationsize
-            ##     end
-            ##     isotonicgroup = eds[oobindex+1:end,:]
-            ##     threshold = isotonicgroup[1,2]
-            ##     isotonicgroup = sortrows(isotonicgroup,by=x->x[1],rev=true)
-            ##     thresholdindex = maximum([1,Int(floor(size(isotonicgroup,1)*(1-method.confidence)))])
-            ##     push!(isotonicthresholds,(threshold,isotonicgroup[thresholdindex][1],isotonicgroup))
-            ##     originalthresholds = copy(isotonicthresholds)
-            ##     change = true
-            ##     while change
-            ##         change = false
-            ##         counter = 1
-            ##         while counter < size(isotonicthresholds,1) && ~change
-            ##             if isotonicthresholds[counter][2] > isotonicthresholds[counter+1][2]
-            ##                 newisotonicgroup = [isotonicthresholds[counter][3];isotonicthresholds[counter+1][3]]
-            ##                 threshold = minimum(newisotonicgroup[:,2])
-            ##                 newisotonicgroup = sortrows(newisotonicgroup,by=x->x[1],rev=true)
-            ##                 thresholdindex = maximum([1,Int(floor(size(newisotonicgroup,1)*(1-method.confidence)))])
-            ##                 splice!(isotonicthresholds,counter:counter+1,[(threshold,newisotonicgroup[thresholdindex][1],newisotonicgroup)])
-            ##                 change = true
-            ##             else
-            ##                 counter += 1
-            ##             end
-            ##         end
-            ##     end
-            ##     conformalfunction = (:isotonic,isotonicthresholds,largestrange)
-            end
-        end
+        oobperformance, conformalfunction = generate_model_internal(method, oobs)
         result = PredictionModel(predictiontask,classes,(majorversion,minorversion,patchversion),method,oobperformance,variableimportance,vcat(trees...),conformalfunction)
         println("Model generated")
     end
     return result
+end
+
+function generate_model_internal(method::LearningMethod{Classifier})
+    if method.conformal == :default
+        conformal = :std
+    else
+        conformal = method.conformal
+    end
+    oobpredictions = oobs[1]
+    noclasses = length(classes)
+    for c = 1:noclasses
+        for r = 2:length(oobs)
+            oobpredictions[c] += oobs[r][c]
+        end
+    end
+    noobcorrect = 0
+    nooob = 0
+    if conformal == :std
+        alphas = Float64[]
+        for c = 1:noclasses
+            for i = 1:size(oobpredictions[c],1)
+                oobpredcount = oobpredictions[c][i][1]
+                if oobpredcount > 0
+                    alpha = oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount
+                    push!(alphas,alpha)
+                    noobcorrect += 1-abs(sign(indmax(oobpredictions[c][i][2:end])-c))
+                    nooob += 1
+                end
+            end
+        end
+        thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
+        if thresholdindex >= 1
+            sortedalphas = sort(alphas)
+            alpha = sortedalphas[thresholdindex]
+        else
+            alpha = -Inf
+        end
+        conformalfunction = (:std,alpha,sortedalphas)
+    elseif conformal == :classcond
+        classalpha = Array(Float64,noclasses)
+        classalphas = Array(Any,noclasses)
+        for c = 1:noclasses
+            classalphas[c] = Float64[]
+            noclassoob = 0
+            for i = 1:size(oobpredictions[c],1)
+                oobpredcount = oobpredictions[c][i][1]
+                if oobpredcount > 0
+                    alphavalue = oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount
+                    push!(classalphas[c],alphavalue)
+                    noobcorrect += 1-abs(sign(indmax(oobpredictions[c][i][2:end])-c))
+                    noclassoob += 1
+                end
+            end
+            thresholdindex = Int(floor((noclassoob+1)*(1-method.confidence)))
+            if thresholdindex >= 1
+                classalphas[c] = sort(classalphas[c])
+                classalpha[c] = classalphas[c][thresholdindex]
+            else
+                classalpha[c] = -Inf
+            end
+            nooob += noclassoob
+        end
+        conformalfunction = (:classcond,classalpha,classalphas)
+    end
+    oobperformance = noobcorrect/nooob
+    return oobperformance, conformalfunction
+end
+
+function generate_model_internal(method::LearningMethod{Regressor})
+    oobpredictions = oobs[1]
+    for r = 2:length(oobs)
+        oobpredictions += oobs[r]
+    end
+    correcttrainingvalues = globaldata[:REGRESSION]
+    oobse = 0.0
+    nooob = 0
+    ooberrors = Float64[]
+    alphas = Float64[]
+#            deltas = Float64[]
+    for i = 1:length(correcttrainingvalues)
+        oobpredcount = oobpredictions[i][1]
+        if oobpredcount > 0.0
+            ooberror = abs(correcttrainingvalues[i]-(oobpredictions[i][2]/oobpredcount))
+            push!(ooberrors,ooberror)
+            delta = (oobpredictions[i][3]/oobpredcount-(oobpredictions[i][2]/oobpredcount)^2)
+            alpha = 2*ooberror/(delta+0.01)
+            push!(alphas,alpha)
+#                    push!(deltas,delta)
+            oobse += ooberror^2
+            nooob += 1
+        end
+    end
+    oobperformance = oobse/nooob
+    thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
+    largestrange = maximum(correcttrainingvalues)-minimum(correcttrainingvalues)
+    if method.conformal == :default
+        conformal = :normalized
+    else
+        conformal = method.conformal
+    end
+    if conformal == :std
+        if thresholdindex >= 1
+            sortedooberrors = sort(ooberrors, rev=true)
+            errorrange = minimum([largestrange,2*sortedooberrors[thresholdindex]])
+        else
+            errorrange = largestrange
+        end
+        conformalfunction = (:std,errorrange,largestrange,sortedooberrors)
+    elseif conformal == :normalized
+        sortedalphas = sort(alphas,rev=true)
+        if thresholdindex >= 1
+            alpha = sortedalphas[thresholdindex]
+        else
+            alpha = Inf
+        end
+        conformalfunction = (:normalized,alpha,largestrange,sortedalphas)
+    ## elseif conformal == :isotonic
+    ##     eds = Array(Float64,nooob,2)
+    ##     eds[:,1] = ooberrors
+    ##     eds[:,2] = deltas
+    ##     eds = sortrows(eds,by=x->x[2])
+    ##     isotonicthresholds = Any[]
+    ##     mincalibrationsize = maximum([10;Int(floor(1/(round((1-method.confidence)*1000000)/1000000))-1)])
+    ##     oobindex = 0
+    ##     while size(eds,1)-oobindex >= 2*mincalibrationsize
+    ##         isotonicgroup = eds[oobindex+1:oobindex+mincalibrationsize,:]
+    ##         threshold = isotonicgroup[1,2]
+    ##         isotonicgroup = sortrows(isotonicgroup,by=x->x[1],rev=true)
+    ##         push!(isotonicthresholds,(threshold,isotonicgroup[1,1],isotonicgroup))
+    ##         oobindex += mincalibrationsize
+    ##     end
+    ##     isotonicgroup = eds[oobindex+1:end,:]
+    ##     threshold = isotonicgroup[1,2]
+    ##     isotonicgroup = sortrows(isotonicgroup,by=x->x[1],rev=true)
+    ##     thresholdindex = maximum([1,Int(floor(size(isotonicgroup,1)*(1-method.confidence)))])
+    ##     push!(isotonicthresholds,(threshold,isotonicgroup[thresholdindex][1],isotonicgroup))
+    ##     originalthresholds = copy(isotonicthresholds)
+    ##     change = true
+    ##     while change
+    ##         change = false
+    ##         counter = 1
+    ##         while counter < size(isotonicthresholds,1) && ~change
+    ##             if isotonicthresholds[counter][2] > isotonicthresholds[counter+1][2]
+    ##                 newisotonicgroup = [isotonicthresholds[counter][3];isotonicthresholds[counter+1][3]]
+    ##                 threshold = minimum(newisotonicgroup[:,2])
+    ##                 newisotonicgroup = sortrows(newisotonicgroup,by=x->x[1],rev=true)
+    ##                 thresholdindex = maximum([1,Int(floor(size(newisotonicgroup,1)*(1-method.confidence)))])
+    ##                 splice!(isotonicthresholds,counter:counter+1,[(threshold,newisotonicgroup[thresholdindex][1],newisotonicgroup)])
+    ##                 change = true
+    ##             else
+    ##                 counter += 1
+    ##             end
+    ##         end
+    ##     end
+    ##     conformalfunction = (:isotonic,isotonicthresholds,largestrange)
+    end
+    return oobperformance, conformalfunction
 end
 
 function store_model(model::PredictionModel,file)
@@ -3253,6 +3254,7 @@ function describe_model(model::PredictionModel)
     end
 end
 
+# AMG: not dispatched yet
 function apply_model(model; confidence = :std)
     predictiontask = prediction_task(globaldata)
     if predictiontask != model.predictiontask
@@ -3401,8 +3403,8 @@ function apply_model(model; confidence = :std)
     return results
 end
 
-function apply_trees(Args)
-    predictiontask, classes, trees = Args
+# AMG: not dispatched yet
+function apply_trees(predictiontask, classes, trees)
     variables, types = get_variables_and_types(globaldata)
     testmissingvalues, testnonmissingvalues = find_missing_values(:UNKNOWN,variables,globaldata)
     newtestdata = transform_nonmissing_columns_to_arrays(:UNKNOWN,variables,globaldata,testmissingvalues)
