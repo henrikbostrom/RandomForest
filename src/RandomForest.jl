@@ -69,10 +69,10 @@ global patchversion = 9
 
 """`runexp` is used to test the performance of the library on a number of test sets"""
 function runexp()
-    experiment(files = ["uci/glass.txt"]) # Warmup
-    experiment(files="uci",methods=[forest(),forest(notrees=500)],resultfile="uci-results.txt")
-    experiment(files = ["regression/cooling.txt"]) # Warmup
-    experiment(files="regression",methods=[forest(),forest(notrees=500)],resultfile="regression-results.txt")
+    experiment([forestClassifier()], files = ["uci/glass.txt"]) # Warmup
+    experiment([forestClassifier(),forestClassifier(notrees=500)],files="uci",resultfile="uci-results.txt")
+    experiment([forestRegressor()],files = ["regression/cooling.txt"]) # Warmup
+    experiment([forestRegressor(),forestRegressor(notrees=500)],files="regression",resultfile="regression-results.txt")
 end
 
 include("types.jl")
@@ -81,7 +81,7 @@ include("types.jl")
 ## Functions for running experiments
 ##
 
-function experiment(;files = ".", separator = ',', protocol = 10, normalizetarget = false, normalizeinput = false, methods = [forest()], resultfile = :none)
+function experiment(methods::Array{LearningMethod,1};files = ".", separator = ',', protocol = 10, normalizetarget = false, normalizeinput = false,  resultfile = :none)
     println("RandomForest v. $(majorversion).$(minorversion).$(patchversion)")
     if typeof(files) == ASCIIString
         if isdir(files)
@@ -2534,7 +2534,7 @@ function evaluate_regression_numeric_variable_allvals(bestsplit,varno,variable,s
     return bestsplit
 end
 
-function make_split(method::LearningMethod{Classiffier},trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
+function make_split(method::LearningMethod{Classifier},trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
     (varno, variable, splittype, splitpoint) = bestsplit
     noclasses = size(trainingrefs,1)
     leftrefs = Array(Any,noclasses)
@@ -2579,47 +2579,46 @@ function make_split(method::LearningMethod{Classiffier},trainingrefs,trainingwei
 end
 
 function make_split(method::LearningMethod{Regressor},trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
-    (varno, variable, splittype, splitpoint) = bestsplit
-    leftrefs = Int[]
-    leftweights = Float64[]
-    leftregressionvalues = Float64[]
-    rightrefs = Int[]
-    rightweights = Float64[]
-    rightregressionvalues = Float64[]
-    values = trainingdata[varno][trainingrefs]
-    sumleftweights = 0.0
-    sumrightweights = 0.0
-    if splittype == :NUMERIC
-        for r = 1:length(trainingrefs)
-            ref = trainingrefs[r]
-            if values[r] <= splitpoint
-                push!(leftrefs,ref)
-                push!(leftweights,trainingweights[r])
-                sumleftweights += trainingweights[r]
-                push!(leftregressionvalues,regressionvalues[r])
-            else
-                push!(rightrefs,ref)
-                push!(rightweights,trainingweights[r])
-                sumrightweights += trainingweights[r]
-                push!(rightregressionvalues,regressionvalues[r])
-            end
-        end
-    else
-        for r = 1:length(trainingrefs)
-            ref = trainingrefs[r]
-            if values[r] == splitpoint
-                push!(leftrefs,ref)
-                push!(leftweights,trainingweights[r])
-                sumleftweights += trainingweights[r]
-                push!(leftregressionvalues,regressionvalues[r])
-            else
-                push!(rightrefs,ref)
-                push!(rightweights,trainingweights[r])
-                sumrightweights += trainingweights[r]
-                push!(rightregressionvalues,regressionvalues[r])
-            end
-        end
-    end
+  (varno, variable, splittype, splitpoint) = bestsplit
+  leftrefs = Int[]
+  leftweights = Float64[]
+  leftregressionvalues = Float64[]
+  rightrefs = Int[]
+  rightweights = Float64[]
+  rightregressionvalues = Float64[]
+  values = trainingdata[varno][trainingrefs]
+  sumleftweights = 0.0
+  sumrightweights = 0.0
+  if splittype == :NUMERIC
+      for r = 1:length(trainingrefs)
+          ref = trainingrefs[r]
+          if values[r] <= splitpoint
+              push!(leftrefs,ref)
+              push!(leftweights,trainingweights[r])
+              sumleftweights += trainingweights[r]
+              push!(leftregressionvalues,regressionvalues[r])
+          else
+              push!(rightrefs,ref)
+              push!(rightweights,trainingweights[r])
+              sumrightweights += trainingweights[r]
+              push!(rightregressionvalues,regressionvalues[r])
+          end
+      end
+  else
+      for r = 1:length(trainingrefs)
+          ref = trainingrefs[r]
+          if values[r] == splitpoint
+              push!(leftrefs,ref)
+              push!(leftweights,trainingweights[r])
+              sumleftweights += trainingweights[r]
+              push!(leftregressionvalues,regressionvalues[r])
+          else
+              push!(rightrefs,ref)
+              push!(rightweights,trainingweights[r])
+              sumrightweights += trainingweights[r]
+              push!(rightregressionvalues,regressionvalues[r])
+          end
+      end
   end
   leftweight = sumleftweights/(sumleftweights+sumrightweights)
   return leftrefs,leftweights,leftregressionvalues,rightrefs,rightweights,rightregressionvalues,leftweight
