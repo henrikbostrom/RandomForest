@@ -224,10 +224,10 @@ function run_split_internal(method::RandomForest.LearningMethod{RandomForest.Reg
     nopredictions = size(predictions,1)
 
     predictions = [predictions[i][2]/predictions[i][1] for i = 1:nopredictions]
-    if methods[m].conformal == :default
+    if method.conformal == :default
         conformal = :normalized
     else
-        conformal = methods[m].conformal
+        conformal = method.conformal
     end
     if conformal == :normalized ## || conformal == :isotonic
         squaredpredictions = results[1][5]
@@ -308,7 +308,7 @@ function run_split_internal(method::RandomForest.LearningMethod{RandomForest.Reg
     ##             end
     ##         end
     ##     end
-    ##     thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
+    ##     thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
     ##     if thresholdindex >= 1
     ##         lowestrangesum = Inf
     ##         bestk = Inf
@@ -331,7 +331,7 @@ function run_split_internal(method::RandomForest.LearningMethod{RandomForest.Reg
     ##     end
     ## end
     oobmse = oobse/nooob
-    thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
+    thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
     if conformal == :std
         if thresholdindex >= 1
             errorrange = minimum([largestrange,2*sort(ooberrors, rev=true)[thresholdindex]])
@@ -351,7 +351,7 @@ function run_split_internal(method::RandomForest.LearningMethod{RandomForest.Reg
     ##     eds[:,1] = ooberrors
     ##     eds[:,2] = deltas
     ##     eds = sortrows(eds,by=x->x[2])
-    ##     mincalibrationsize = maximum([10,Int(floor(1/(round((1-methods[m].confidence)*1000000)/1000000))-1)])
+    ##     mincalibrationsize = maximum([10,Int(floor(1/(round((1-method.confidence)*1000000)/1000000))-1)])
     ##     isotonicthresholds = Any[]
     ##     oobindex = 0
     ##     while size(eds,1)-oobindex >= 2*mincalibrationsize
@@ -364,7 +364,7 @@ function run_split_internal(method::RandomForest.LearningMethod{RandomForest.Reg
     ##     isotonicgroup = eds[oobindex+1:end,:]
     ##     threshold = isotonicgroup[1,2]
     ##     isotonicgroup = sortrows(isotonicgroup,by=x->x[1],rev=true)
-    ##     thresholdindex = maximum([1,Int(floor(size(isotonicgroup,1)*(1-methods[m].confidence)))])
+    ##     thresholdindex = maximum([1,Int(floor(size(isotonicgroup,1)*(1-method.confidence)))])
     ##     push!(isotonicthresholds,(threshold,isotonicgroup[thresholdindex][1],isotonicgroup))
     ##     originalthresholds = copy(isotonicthresholds)
     ##     change = true
@@ -376,7 +376,7 @@ function run_split_internal(method::RandomForest.LearningMethod{RandomForest.Reg
     ##                 newisotonicgroup = [isotonicthresholds[counter][3];isotonicthresholds[counter+1][3]]
     ##                 threshold = minimum(newisotonicgroup[:,2])
     ##                 newisotonicgroup = sortrows(newisotonicgroup,by=x->x[1],rev=true)
-    ##                 thresholdindex = maximum([1,Int(floor(size(newisotonicgroup,1)*(1-methods[m].confidence)))])
+    ##                 thresholdindex = maximum([1,Int(floor(size(newisotonicgroup,1)*(1-method.confidence)))])
     ##                 splice!(isotonicthresholds,counter:counter+1,[(threshold,newisotonicgroup[thresholdindex][1],newisotonicgroup)])
     ##                 change = true
     ##             else
@@ -393,11 +393,11 @@ function run_split_internal(method::RandomForest.LearningMethod{RandomForest.Reg
     for i = 1:nopredictions
         error = abs(correctvalues[i]-predictions[i])
         mse += error^2
-        if conformal == :normalized && methods[m].modpred
+        if conformal == :normalized && method.modpred
             randomoob = randomoobs[i]
             oobpredcount = oobpredictions[randomoob][1]
             if oobpredcount > 0.0
-                thresholdindex = Int(floor(nooob*(1-methods[m].confidence)))
+                thresholdindex = Int(floor(nooob*(1-method.confidence)))
                 if thresholdindex >= 1
                     alpha = sort(alphas[[1:randomoob-1;randomoob+1:end]], rev=true)[thresholdindex]
                 else
@@ -484,10 +484,10 @@ function run_split_internal(method::RandomForest.LearningMethod{RandomForest.Cla
     for c = 1:noclasses
         classdata[c] = globaldata[globaldata[:CLASS] .== classes[c],:]
     end
-    if methods[m].conformal == :default
+    if method.conformal == :default
         conformal = :std
     else
-        conformal = methods[m].conformal
+        conformal = method.conformal
     end
     oobpredictions = results[1][4]
     for c = 1:noclasses
@@ -510,7 +510,7 @@ function run_split_internal(method::RandomForest.LearningMethod{RandomForest.Cla
                 end
             end
         end
-        thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
+        thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
         if thresholdindex >= 1
             alpha = sort(alphas)[thresholdindex]
         else
@@ -542,7 +542,7 @@ function run_split_internal(method::RandomForest.LearningMethod{RandomForest.Cla
                 end
             end
             classalphas[c] = alphas
-            thresholdindex = Int(floor((noclassoob+1)*(1-methods[m].confidence)))
+            thresholdindex = Int(floor((noclassoob+1)*(1-method.confidence)))
             if thresholdindex >= 1
                 classalpha[c] = sort(alphas)[thresholdindex]
             else
@@ -575,10 +575,10 @@ function run_split_internal(method::RandomForest.LearningMethod{RandomForest.Cla
                 margin = predictions[i][c]-maximum(predictions[i][allbutclassvector])
                 marginsum += margin
                 probsum += maximum(predictions[i])
-                if methods[m].modpred
+                if method.modpred
                     if conformal == :std
                         randomoob = randomoobs[i]
-                        thresholdindex = Int(floor(nooob*(1-methods[m].confidence)))
+                        thresholdindex = Int(floor(nooob*(1-method.confidence)))
                         if thresholdindex >= 1
                             alpha = sort(alphas[[1:randomoob-1;randomoob+1:end]])[thresholdindex] # NOTE: assumes oobpredcount > 0 always is true!
                         else
@@ -586,7 +586,7 @@ function run_split_internal(method::RandomForest.LearningMethod{RandomForest.Cla
                         end
                     else # conformal == :classcond
                         randomoobclass, randomoobref = randomclassoobs[i]
-                        thresholdindex = Int(floor(size(classalphas[randomoobclass],1)*(1-methods[m].confidence)))
+                        thresholdindex = Int(floor(size(classalphas[randomoobclass],1)*(1-method.confidence)))
                         origclassalpha = classalpha[randomoobclass]
                         if thresholdindex >= 1
                             classalpha[randomoobclass] = sort(classalphas[randomoobclass][[1:randomoobref-1;randomoobref+1:end]])[thresholdindex] # NOTE: assumes oobpredcount > 0 always is true!
@@ -628,7 +628,7 @@ function run_split_internal(method::RandomForest.LearningMethod{RandomForest.Cla
                         end
                         end
                     end
-                    if methods[m].modpred
+                    if method.modpred
                         classalpha[randomoobclass] = origclassalpha
                     end
                 end
@@ -937,7 +937,7 @@ function run_cross_validation_internal(method::RandomForest.LearningMethod{Rando
         ##             end
         ##         end
         ##     end
-        ##     thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
+        ##     thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
         ##     if thresholdindex >= 1
         ##         lowestrangesum = Inf
         ##         bestk = Inf
@@ -959,7 +959,7 @@ function run_cross_validation_internal(method::RandomForest.LearningMethod{Rando
         ##         bestk = 1
         ##     end
         ## end
-        thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
+        thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
         if conformal == :std
             if thresholdindex >= 1
                 errorrange = minimum([largestrange,2*sort(ooberrors, rev=true)[thresholdindex]])
@@ -980,7 +980,7 @@ function run_cross_validation_internal(method::RandomForest.LearningMethod{Rando
         ##     eds[:,2] = deltas
         ##     eds = sortrows(eds,by=x->x[2])
         ##     isotonicthresholds = Any[]
-        ##     mincalibrationsize = maximum([10;Int(floor(1/(round((1-methods[m].confidence)*1000000)/1000000))-1)])
+        ##     mincalibrationsize = maximum([10;Int(floor(1/(round((1-method.confidence)*1000000)/1000000))-1)])
         ##     oobindex = 0
         ##     while size(eds,1)-oobindex >= 2*mincalibrationsize
         ##         isotonicgroup = eds[oobindex+1:oobindex+mincalibrationsize,:]
@@ -992,7 +992,7 @@ function run_cross_validation_internal(method::RandomForest.LearningMethod{Rando
         ##     isotonicgroup = eds[oobindex+1:end,:]
         ##     threshold = isotonicgroup[1,2]
         ##     isotonicgroup = sortrows(isotonicgroup,by=x->x[1],rev=true)
-        ##     thresholdindex = maximum([1,Int(floor(size(isotonicgroup,1)*(1-methods[m].confidence)))])
+        ##     thresholdindex = maximum([1,Int(floor(size(isotonicgroup,1)*(1-method.confidence)))])
         ##     push!(isotonicthresholds,(threshold,isotonicgroup[thresholdindex][1],isotonicgroup))
         ##     originalthresholds = copy(isotonicthresholds)
         ##     change = true
@@ -1004,7 +1004,7 @@ function run_cross_validation_internal(method::RandomForest.LearningMethod{Rando
         ##                 newisotonicgroup = [isotonicthresholds[counter][3];isotonicthresholds[counter+1][3]]
         ##                 threshold = minimum(newisotonicgroup[:,2])
         ##                 newisotonicgroup = sortrows(newisotonicgroup,by=x->x[1],rev=true)
-        ##                 thresholdindex = maximum([1,Int(floor(size(newisotonicgroup,1)*(1-methods[m].confidence)))])
+        ##                 thresholdindex = maximum([1,Int(floor(size(newisotonicgroup,1)*(1-method.confidence)))])
         ##                 splice!(isotonicthresholds,counter:counter+1,[(threshold,newisotonicgroup[thresholdindex][1],newisotonicgroup)])
         ##                 change = true
         ##             else
@@ -1022,11 +1022,11 @@ function run_cross_validation_internal(method::RandomForest.LearningMethod{Rando
             error = abs(correctvalues[i]-predictions[testexamplecounter+i])
 #                    testerrors[i] = error
             msesum += error^2
-            if conformal == :normalized && methods[m].modpred
+            if conformal == :normalized && method.modpred
                 randomoob = randomoobs[foldno][i]
                 oobpredcount = oobpredictions[randomoob][1]
                 if oobpredcount > 0.0
-                    thresholdindex = Int(floor(nooob*(1-methods[m].confidence)))
+                    thresholdindex = Int(floor(nooob*(1-method.confidence)))
                     if thresholdindex >= 1
                         alpha = sort(alphas[[1:randomoob-1;randomoob+1:end]], rev=true)[thresholdindex]
                     else
@@ -1128,10 +1128,10 @@ function run_cross_validation_internal(method::RandomForest.LearningMethod{Rando
     testexamplecounter = 0
 
     predictions = [predictions[i][2:end]/predictions[i][1] for i = 1:nopredictions]
-    if methods[m].conformal == :default
+    if method.conformal == :default
         conformal = :std
     else
-        conformal = methods[m].conformal
+        conformal = method.conformal
     end
     accuracy = Array(Float64,nofolds)
     auc = Array(Float64,nofolds)
@@ -1179,7 +1179,7 @@ function run_cross_validation_internal(method::RandomForest.LearningMethod{Rando
                     end
             end
             end
-            thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
+            thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
             if thresholdindex >= 1
                 alpha = sort(alphas)[thresholdindex]
             else
@@ -1200,7 +1200,7 @@ function run_cross_validation_internal(method::RandomForest.LearningMethod{Rando
                         noclassoob += 1
                     end
                 end
-                thresholdindex = Int(floor((noclassoob+1)*(1-methods[m].confidence)))
+                thresholdindex = Int(floor((noclassoob+1)*(1-method.confidence)))
                 if thresholdindex >= 1
                     classalphas[c] = sort(alphas)[thresholdindex]
                 else
