@@ -61,7 +61,10 @@ export
     load_model,
     describe_model,
     apply_model,
-    runexp
+    runexp,
+    LearningMethod,
+    Classifier,
+    Regressor
 
 global majorversion = 0
 global minorversion = 0
@@ -114,7 +117,7 @@ end
 
 function run_experiment(file, separator, protocol, normalizetarget, normalizeinput, methods)
     global globaldata = read_data(file, separator=separator) # Made global to allow access from workers
-    predictiontask = prediction_task(globaldata)
+    predictiontask = prediction_task(methods[1])
     if predictiontask == :NONE
         warn("File excluded: $file - no column is labeled CLASS or REGRESSION\n\tThis may be due to incorrectly specified separator, e.g., use: separator = \'\\t\'")
         result = (:NONE,:NONE,:NONE)
@@ -1323,14 +1326,14 @@ function generate_and_test_trees(method::LearningMethod{Regressor},predictiontas
         for i = 1:size(trainingdata,1)
             oobpredictions[i] = [0,0,0]
         end
-        missingvalues, nonmissingvalues = find_missing_values(predictiontask,variables,trainingdata)
-        newtrainingdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,trainingdata,missingvalues)
-        testmissingvalues, testnonmissingvalues = find_missing_values(predictiontask,variables,testdata)
-        newtestdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,testdata,testmissingvalues)
+        missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
+        newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
+        testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
+        newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
         model = Array(Any,notrees)
         oob = Array(Any,notrees)
         for treeno = 1:notrees
-            sample_replacements_for_missing_values!(newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+            sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
             model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,newtrainingdata,variables,types,predictiontask,oobpredictions)
             modelsize += noleafs
             noirregularleafs += treenoirregularleafs
@@ -1396,16 +1399,16 @@ function generate_and_test_trees(method::LearningMethod{Regressor},predictiontas
             for i = 1:size(trainingdata,1)
                 oobpredictions[foldno][i] = [0,0,0]
             end
-            missingvalues, nonmissingvalues = find_missing_values(predictiontask,variables,trainingdata)
-            newtrainingdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,trainingdata,missingvalues)
-            testmissingvalues, testnonmissingvalues = find_missing_values(predictiontask,variables,testdata)
-            newtestdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,testdata,testmissingvalues)
+            missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
+            newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
+            testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
+            newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
             model = Array(Any,notrees)
             modelsize = 0
             totalnoirregularleafs = 0
             oob = Array(Any,notrees)
             for treeno = 1:notrees
-                sample_replacements_for_missing_values!(newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+                sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
                 model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,newtrainingdata,variables,types,predictiontask,oobpredictions[foldno])
                 modelsize += noleafs
                 totalnoirregularleafs += treenoirregularleafs
@@ -1494,14 +1497,14 @@ function generate_and_test_trees(method::LearningMethod{Classifier},predictionta
             randomclassoobs[i] = (c,oobref)
         end
         regressionvalues = []
-        missingvalues, nonmissingvalues = find_missing_values(predictiontask,variables,trainingdata)
-        newtrainingdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,trainingdata,missingvalues)
-        testmissingvalues, testnonmissingvalues = find_missing_values(predictiontask,variables,testdata)
-        newtestdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,testdata,testmissingvalues)
+        missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
+        newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
+        testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
+        newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
         model = Array(Any,notrees)
         oob = Array(Any,notrees)
         for treeno = 1:notrees
-            sample_replacements_for_missing_values!(newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+            sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
             model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,newtrainingdata,variables,types,predictiontask,oobpredictions)
             modelsize += noleafs
             noirregularleafs += treenoirregularleafs
@@ -1595,16 +1598,16 @@ function generate_and_test_trees(method::LearningMethod{Classifier},predictionta
                 end
             end
             regressionvalues = []
-            missingvalues, nonmissingvalues = find_missing_values(predictiontask,variables,trainingdata)
-            newtrainingdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,trainingdata,missingvalues)
-            testmissingvalues, testnonmissingvalues = find_missing_values(predictiontask,variables,testdata)
-            newtestdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,testdata,testmissingvalues)
+            missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
+            newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
+            testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
+            newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
             model = Array(Any,notrees)
             modelsize = 0
             totalnoirregularleafs = 0
             oob = Array(Any,notrees)
             for treeno = 1:notrees
-                sample_replacements_for_missing_values!(newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+                sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
                 model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,newtrainingdata,variables,types,predictiontask,oobpredictions[foldno])
                 modelsize += noleafs
                 totalnoirregularleafs += treenoirregularleafs
@@ -1671,12 +1674,12 @@ function generate_trees(method::LearningMethod{Regressor},predictiontask,classes
     # AMGAD: starting from here till the end of the function is duplicated between here and the classifier dispatcher
     variables, types = get_variables_and_types(globaldata)
     modelsize = 0
-    missingvalues, nonmissingvalues = find_missing_values(predictiontask,variables,trainingdata)
-    newtrainingdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,trainingdata,missingvalues)
+    missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
+    newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
     model = Array(Any,notrees)
     variableimportance = zeros(size(variables,1))
     for treeno = 1:notrees
-        sample_replacements_for_missing_values!(newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+        sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
         model[treeno], treevariableimportance, noleafs, noirregularleafs = generate_tree(method,trainingrefs,trainingweights,regressionvalues,newtrainingdata,variables,types,predictiontask,oobpredictions,varimp = true)
         modelsize += noleafs
         variableimportance += treevariableimportance
@@ -1705,14 +1708,15 @@ function generate_trees(method::LearningMethod{Classifier},predictiontask,classe
     regressionvalues = []
 
     # AMGAD: starting from here till the end of the function is duplicated between here and the regressor dispatcher
+    # need to be cleaned 
     variables, types = get_variables_and_types(globaldata)
     modelsize = 0
-    missingvalues, nonmissingvalues = find_missing_values(predictiontask,variables,trainingdata)
-    newtrainingdata = transform_nonmissing_columns_to_arrays(predictiontask,variables,trainingdata,missingvalues)
+    missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
+    newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
     model = Array(Any,notrees)
     variableimportance = zeros(size(variables,1))
     for treeno = 1:notrees
-        sample_replacements_for_missing_values!(newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+        sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
         model[treeno], treevariableimportance, noleafs, noirregularleafs = generate_tree(method,trainingrefs,trainingweights,regressionvalues,newtrainingdata,variables,types,predictiontask,oobpredictions,varimp = true)
         modelsize += noleafs
         variableimportance += treevariableimportance
@@ -1769,7 +1773,7 @@ function find_missing_values(method::LearningMethod{Classifier},variables,traini
     return (missingvalues,nonmissingvalues)
 end
 
-function transform_nonmissing_columns_to_arrays(mathod::LearningMethod{Regressor},variables,trainingdata,missingvalues)
+function transform_nonmissing_columns_to_arrays(method::LearningMethod{Regressor},variables,trainingdata,missingvalues)
     newdata = Array(Any,length(variables))
     for v = 1:length(variables)
         if missingvalues[v] == []
@@ -1781,7 +1785,7 @@ function transform_nonmissing_columns_to_arrays(mathod::LearningMethod{Regressor
     return newdata
 end
 
-function transform_nonmissing_columns_to_arrays(mathod::LearningMethod{Classifier},variables,trainingdata,missingvalues)
+function transform_nonmissing_columns_to_arrays(method::LearningMethod{Classifier},variables,trainingdata,missingvalues)
     noclasses = size(trainingdata,1)
     newdata = Array(Any,noclasses)
     for c = 1:noclasses
@@ -1850,7 +1854,7 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Regresso
     end
 end
 
-function replacements_for_missing_values!(method::LearningMethod{Classifier},newtestdata,testdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+function replacements_for_missing_values!(method::LearningMethod{Classifier},newtestdata,testdata,variables,types,missingvalues,nonmissingvalues)
     noclasses = size(newtestdata,1)
     for c = 1:noclasses
         for v = 1:length(variables)
@@ -1865,7 +1869,7 @@ function replacements_for_missing_values!(method::LearningMethod{Classifier},new
     end
 end
 
-function replacements_for_missing_values!(method::LearningMethod{Regressor},newtestdata,testdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+function replacements_for_missing_values!(method::LearningMethod{Regressor},newtestdata,testdata,variables,types,missingvalues,nonmissingvalues)
     for v = 1:length(variables)
         if missingvalues[v] != []
             values = convert(DataArray,testdata[variables[v]])
@@ -1991,7 +1995,7 @@ function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalue
                 noirregularleafnodes += 1
             else
                 leftrefs,leftweights,leftregressionvalues,rightrefs,rightweights,rightregressionvalues,leftweight =
-                    make_split(trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
+                    make_split(method,trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
                 varno, variable, splittype, splitpoint = bestsplit
                 if varimp
                     if typeof(method.learningType) == Regressor #predictiontask == :REGRESSION
@@ -3001,7 +3005,7 @@ function evaluate_methods(;methods = [forest()],protocol = 10)
 end
 
 function run_single_experiment(protocol, methods)
-    predictiontask = prediction_task(globaldata)
+    predictiontask = prediction_task(methods[1])
     if predictiontask == :NONE
         println("The loaded dataset is not on the correct format")
         println("This may be due to an incorrectly specified separator, e.g., use: separator = \'\\t\'")
@@ -3022,7 +3026,7 @@ function run_single_experiment(protocol, methods)
 end
 
 function generate_model(method)
-    predictiontask = prediction_task(globaldata)
+    predictiontask = prediction_task(method)
     if predictiontask == :NONE # FIXME: MOH We should not be doing this...probably DEAD code
         println("The loaded dataset is not on the correct format: CLASS/REGRESSION column missing")
         println("This may be due to an incorrectly specified separator, e.g., use: separator = \'\\t\'")
@@ -3255,6 +3259,10 @@ end
 
 # AMG: not dispatched yet
 function apply_model(model; confidence = :std)
+    #= AMG: next line is broken, need to have a method, or it should be ommitted alltogether as we will not be 
+    having special columns in data.
+    Otherwise we need the model to contain feature column ids and target column id, where this can be either classification or 
+    regression based on the configurations =#
     predictiontask = prediction_task(globaldata)
     if predictiontask != model.predictiontask
         println("The model is not consistent with the loaded dataset")
@@ -3407,7 +3415,7 @@ function apply_trees(predictiontask, classes, trees)
     variables, types = get_variables_and_types(globaldata)
     testmissingvalues, testnonmissingvalues = find_missing_values(:UNKNOWN,variables,globaldata)
     newtestdata = transform_nonmissing_columns_to_arrays(:UNKNOWN,variables,globaldata,testmissingvalues)
-    replacements_for_missing_values!(newtestdata,globaldata,:UNKNOWN,variables,types,testmissingvalues,testnonmissingvalues)
+    replacements_for_missing_values!(:UNKNOWN,newtestdata,globaldata,variables,types,testmissingvalues,testnonmissingvalues)
     nopredictions = size(globaldata,1)
     if predictiontask == :CLASS
         noclasses = length(classes)
