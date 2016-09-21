@@ -1310,7 +1310,8 @@ end
 ## Functions to be executed on each worker
 ##
 
-function generate_and_test_trees(method::RandomForest.LearningMethod{RandomForest.Regressor},predictiontask,experimentype,notrees,randseed,randomoobs)
+function generate_and_test_trees(Argumnets::Tuple{RandomForest.LearningMethod{RandomForest.Regressor},Symbol,Symbol,Int64,Int64,Array{Int64,1}})
+    method,predictiontask,experimentype,notrees,randseed,randomoobs = Argumnets
     s = size(globaldata,1)
     srand(randseed)
     if experimentype == :test
@@ -1457,7 +1458,8 @@ function generate_and_test_trees(method::RandomForest.LearningMethod{RandomFores
     end
 end
 
-function generate_and_test_trees(method::RandomForest.LearningMethod{RandomForest.Classifier},predictiontask,experimentype,notrees,randseed,randomoobs)
+function generate_and_test_trees(Argumnets::Tuple{RandomForest.LearningMethod{RandomForest.Classifier},Symbol,Symbol,Int64,Int64,Array{Int64,1}})
+    method,predictiontask,experimentype,notrees,randseed,randomoobs = Argumnets
     s = size(globaldata,1)
     srand(randseed)
     if experimentype == :test
@@ -1659,7 +1661,8 @@ function generate_and_test_trees(method::RandomForest.LearningMethod{RandomFores
     end
 end
 
-function generate_trees(method::RandomForest.LearningMethod{RandomForest.Regressor},predictiontask,classes,notrees,randseed)
+function generate_trees(Arguments::Tuple{RandomForest.LearningMethod{RandomForest.Regressor},Any,Any,Any,Any})
+    method,predictiontask,classes,notrees,randseed = Arguments
     s = size(globaldata,1)
     srand(randseed)
     trainingdata = globaldata
@@ -1687,7 +1690,8 @@ function generate_trees(method::RandomForest.LearningMethod{RandomForest.Regress
    return (model,oobpredictions,variableimportance)
 end
 
-function generate_trees(method::RandomForest.LearningMethod{RandomForest.Classifier},predictiontask,classes,notrees,randseed)
+function generate_trees(Arguments::Tuple{RandomForest.LearningMethod{RandomForest.Classifier},Any,Any,Any,Any})
+    method,predictiontask,classes,notrees,randseed = Arguments
     s = size(globaldata,1)
     srand(randseed)
     noclasses = length(classes)
@@ -3411,7 +3415,8 @@ function apply_model(model; confidence = :std)
 end
 
 # AMG: not dispatched yet
-function apply_trees(predictiontask, classes, trees)
+function apply_trees(Arguments)
+    predictiontask, classes, trees = Arguments
     variables, types = get_variables_and_types(globaldata)
     testmissingvalues, testnonmissingvalues = find_missing_values(:UNKNOWN,variables,globaldata)
     newtestdata = transform_nonmissing_columns_to_arrays(:UNKNOWN,variables,globaldata,testmissingvalues)
