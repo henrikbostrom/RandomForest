@@ -84,7 +84,7 @@ include("types.jl")
 ## Functions for running experiments
 ##
 
-function experiment(methods::Array{LearningMethod,1};files = ".", separator = ',', protocol = 10, normalizetarget = false, normalizeinput = false,  resultfile = :none)
+function experiment(methods;files = ".", separator = ',', protocol = 10, normalizetarget = false, normalizeinput = false,  resultfile = :none)
     println("RandomForest v. $(majorversion).$(minorversion).$(patchversion)")
     if typeof(files) == ASCIIString
         if isdir(files)
@@ -214,7 +214,7 @@ function run_split(testoption,predictiontask,methods)
     return methodresults
 end
 
-function run_split_internal(method::LearningMethod{Regressor}, results)
+function run_split_internal(method::RandomForest.LearningMethod{RandomForest.Regressor}, results)
     modelsize = sum([result[1] for result in results])
     noirregularleafs = sum([result[6] for result in results])
     predictions = results[1][2]
@@ -468,7 +468,7 @@ function run_split_internal(method::LearningMethod{Regressor}, results)
     return RegressionResult(mse,corrcoeff,avmse,varmse,esterr,absesterr,validity,region,modelsize,noirregularleafs,time+extratime)
 end
 
-function run_split_internal(method::LearningMethod{Classifier}, results)
+function run_split_internal(method::RandomForest.LearningMethod{RandomForest.Classifier}, results)
     modelsize = sum([result[1] for result in results])
     noirregularleafs = sum([result[5] for result in results])
     predictions = results[1][2]
@@ -828,7 +828,7 @@ function run_cross_validation(protocol,predictiontask,methods)
     return methodresults
 end
 
-function run_cross_validation_internal(method::LearningMethod{Regressor}, results, modelsizes)
+function run_cross_validation_internal(method::RandomForest.LearningMethod{RandomForest.Regressor}, results, modelsizes)
     allnoirregularleafs = [result[6] for result in results]
     noirregularleafs = allnoirregularleafs[1]
     for r = 2:length(allnoirregularleafs)
@@ -1114,7 +1114,7 @@ function run_cross_validation_internal(method::LearningMethod{Regressor}, result
                                             time+extratime)
 end
 
-function run_cross_validation_internal(method::LearningMethod{Classifier}, results, modelsizes)
+function run_cross_validation_internal(method::RandomForest.LearningMethod{RandomForest.Classifier}, results, modelsizes)
     allnoirregularleafs = [result[5] for result in results]
     noirregularleafs = allnoirregularleafs[1]
     for r = 2:length(allnoirregularleafs)
@@ -1294,11 +1294,11 @@ end
 """
 Infers the prediction task from the data
 """
-function prediction_task(method::LearningMethod{Regressor})
+function prediction_task(method::RandomForest.LearningMethod{RandomForest.Regressor})
     return :REGRESSION
 end
 
-function prediction_task(method::LearningMethod{Classifier})
+function prediction_task(method::RandomForest.LearningMethod{RandomForest.Classifier})
     return :CLASS
 end
 
@@ -1310,7 +1310,7 @@ end
 ## Functions to be executed on each worker
 ##
 
-function generate_and_test_trees(method::LearningMethod{Regressor},predictiontask,experimentype,notrees,randseed,randomoobs)
+function generate_and_test_trees(method::RandomForest.LearningMethod{RandomForest.Regressor},predictiontask,experimentype,notrees,randseed,randomoobs)
     s = size(globaldata,1)
     srand(randseed)
     if experimentype == :test
@@ -1457,7 +1457,7 @@ function generate_and_test_trees(method::LearningMethod{Regressor},predictiontas
     end
 end
 
-function generate_and_test_trees(method::LearningMethod{Classifier},predictiontask,experimentype,notrees,randseed,randomoobs)
+function generate_and_test_trees(method::RandomForest.LearningMethod{RandomForest.Classifier},predictiontask,experimentype,notrees,randseed,randomoobs)
     s = size(globaldata,1)
     srand(randseed)
     if experimentype == :test
@@ -1659,7 +1659,7 @@ function generate_and_test_trees(method::LearningMethod{Classifier},predictionta
     end
 end
 
-function generate_trees(method::LearningMethod{Regressor},predictiontask,classes,notrees,randseed)
+function generate_trees(method::RandomForest.LearningMethod{RandomForest.Regressor},predictiontask,classes,notrees,randseed)
     s = size(globaldata,1)
     srand(randseed)
     trainingdata = globaldata
@@ -1671,7 +1671,7 @@ function generate_trees(method::LearningMethod{Regressor},predictiontask,classes
         oobpredictions[i] = [0,0,0]
     end
 
-    # AMGAD: starting from here till the end of the function is duplicated between here and the classifier dispatcher
+    # AMGAD: starting from here till the end of the function is duplicated between here and the RandomForest.Classifier dispatcher
     variables, types = get_variables_and_types(globaldata)
     modelsize = 0
     missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
@@ -1687,7 +1687,7 @@ function generate_trees(method::LearningMethod{Regressor},predictiontask,classes
    return (model,oobpredictions,variableimportance)
 end
 
-function generate_trees(method::LearningMethod{Classifier},predictiontask,classes,notrees,randseed)
+function generate_trees(method::RandomForest.LearningMethod{RandomForest.Classifier},predictiontask,classes,notrees,randseed)
     s = size(globaldata,1)
     srand(randseed)
     noclasses = length(classes)
@@ -1707,7 +1707,7 @@ function generate_trees(method::LearningMethod{Classifier},predictiontask,classe
     end
     regressionvalues = []
 
-    # AMGAD: starting from here till the end of the function is duplicated between here and the regressor dispatcher
+    # AMGAD: starting from here till the end of the function is duplicated between here and the RandomForest.Regressor dispatcher
     # need to be cleaned 
     variables, types = get_variables_and_types(globaldata)
     modelsize = 0
@@ -1724,7 +1724,7 @@ function generate_trees(method::LearningMethod{Classifier},predictiontask,classe
     return (model,oobpredictions,variableimportance)
 end
 
-function find_missing_values(method::LearningMethod{Regressor},variables,trainingdata)
+function find_missing_values(method::RandomForest.LearningMethod{RandomForest.Regressor},variables,trainingdata)
     missingvalues = Array(Any,length(variables))
     nonmissingvalues = Array(Any,length(variables))
     for v = 1:length(variables)
@@ -1746,7 +1746,7 @@ function find_missing_values(method::LearningMethod{Regressor},variables,trainin
     return (missingvalues,nonmissingvalues)
 end
 
-function find_missing_values(method::LearningMethod{Classifier},variables,trainingdata)
+function find_missing_values(method::RandomForest.LearningMethod{RandomForest.Classifier},variables,trainingdata)
     noclasses = size(trainingdata,1)
     missingvalues = Array(Any,noclasses)
     nonmissingvalues = Array(Any,noclasses)
@@ -1773,7 +1773,7 @@ function find_missing_values(method::LearningMethod{Classifier},variables,traini
     return (missingvalues,nonmissingvalues)
 end
 
-function transform_nonmissing_columns_to_arrays(method::LearningMethod{Regressor},variables,trainingdata,missingvalues)
+function transform_nonmissing_columns_to_arrays(method::RandomForest.LearningMethod{RandomForest.Regressor},variables,trainingdata,missingvalues)
     newdata = Array(Any,length(variables))
     for v = 1:length(variables)
         if missingvalues[v] == []
@@ -1785,7 +1785,7 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Regressor
     return newdata
 end
 
-function transform_nonmissing_columns_to_arrays(method::LearningMethod{Classifier},variables,trainingdata,missingvalues)
+function transform_nonmissing_columns_to_arrays(method::RandomForest.LearningMethod{RandomForest.Classifier},variables,trainingdata,missingvalues)
     noclasses = size(trainingdata,1)
     newdata = Array(Any,noclasses)
     for c = 1:noclasses
@@ -1801,7 +1801,7 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Classifie
     return newdata
 end
 
-function sample_replacements_for_missing_values!(method::LearningMethod{Classifier},newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+function sample_replacements_for_missing_values!(method::RandomForest.LearningMethod{RandomForest.Classifier},newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
     noclasses = size(newtrainingdata,1)
     for c = 1:noclasses
         for v = 1:length(variables)
@@ -1830,7 +1830,7 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Classifi
     end
 end
 
-function sample_replacements_for_missing_values!(method::LearningMethod{Regressor},newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+function sample_replacements_for_missing_values!(method::RandomForest.LearningMethod{RandomForest.Regressor},newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
     for v = 1:length(variables)
         if missingvalues[v] != []
             values = trainingdata[variables[v]]
@@ -1854,7 +1854,7 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Regresso
     end
 end
 
-function replacements_for_missing_values!(method::LearningMethod{Classifier},newtestdata,testdata,variables,types,missingvalues,nonmissingvalues)
+function replacements_for_missing_values!(method::RandomForest.LearningMethod{RandomForest.Classifier},newtestdata,testdata,variables,types,missingvalues,nonmissingvalues)
     noclasses = size(newtestdata,1)
     for c = 1:noclasses
         for v = 1:length(variables)
@@ -1869,7 +1869,7 @@ function replacements_for_missing_values!(method::LearningMethod{Classifier},new
     end
 end
 
-function replacements_for_missing_values!(method::LearningMethod{Regressor},newtestdata,testdata,variables,types,missingvalues,nonmissingvalues)
+function replacements_for_missing_values!(method::RandomForest.LearningMethod{RandomForest.Regressor},newtestdata,testdata,variables,types,missingvalues,nonmissingvalues)
     for v = 1:length(variables)
         if missingvalues[v] != []
             values = convert(DataArray,testdata[variables[v]])
@@ -1881,7 +1881,7 @@ function replacements_for_missing_values!(method::LearningMethod{Regressor},newt
     end
 end
 
-function generate_tree(method::LearningMethod{Classifier},trainingrefs,trainingweights,regressionvalues,trainingdata,variables,types,predictiontask,oobpredictions; varimp = false)
+function generate_tree(method::RandomForest.LearningMethod{RandomForest.Classifier},trainingrefs,trainingweights,regressionvalues,trainingdata,variables,types,predictiontask,oobpredictions; varimp = false)
     if method.bagging
         noclasses = length(trainingweights)
         classweights = map(Float64,[length(t) for t in trainingrefs])
@@ -1923,7 +1923,7 @@ function generate_tree(method::LearningMethod{Classifier},trainingrefs,trainingw
     end
 end
 
-function generate_tree(method::LearningMethod{Regressor},trainingrefs,trainingweights,regressionvalues,trainingdata,variables,types,predictiontask,oobpredictions; varimp = false)
+function generate_tree(method::RandomForest.LearningMethod{RandomForest.Regressor},trainingrefs,trainingweights,regressionvalues,trainingdata,variables,types,predictiontask,oobpredictions; varimp = false)
     if method.bagging
         newtrainingweights = zeros(length(trainingweights))
         if typeof(method.bagsize) == Int
@@ -1998,7 +1998,7 @@ function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalue
                     make_split(method,trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
                 varno, variable, splittype, splitpoint = bestsplit
                 if varimp
-                    if typeof(method.learningType) == Regressor #predictiontask == :REGRESSION
+                    if typeof(method.learningType) == RandomForest.Regressor #predictiontask == :REGRESSION
                         variableimp = variance_reduction(trainingweights,regressionvalues,leftweights,leftregressionvalues,rightweights,rightregressionvalues)
                     else
                         variableimp = information_gain(trainingweights,leftweights,rightweights)
@@ -2048,7 +2048,7 @@ function check_variable(v)
     end
 end
 
-function default_prediction(trainingweights,regressionvalues,predictiontask,method::LearningMethod{Classifier})
+function default_prediction(trainingweights,regressionvalues,predictiontask,method::RandomForest.LearningMethod{RandomForest.Classifier})
     noclasses = size(trainingweights,1)
     classcounts = [sum(trainingweights[i]) for i=1:noclasses]
     noinstances = sum(classcounts)
@@ -2063,7 +2063,7 @@ function default_prediction(trainingweights,regressionvalues,predictiontask,meth
     end
 end
 
-function default_prediction(trainingweights,regressionvalues,predictiontask,method::LearningMethod{Regressor})
+function default_prediction(trainingweights,regressionvalues,predictiontask,method::RandomForest.LearningMethod{RandomForest.Regressor})
     sumweights = sum(trainingweights)
     sumregressionvalues = sum(regressionvalues)
     return [sumweights,sumregressionvalues]
@@ -2074,7 +2074,7 @@ function default_prediction(trainingweights,regressionvalues,predictiontask,meth
     ## end
 end
 
-function leaf_node(trainingweights,regressionvalues,predictiontask,depth,method::LearningMethod{Classifier})
+function leaf_node(trainingweights,regressionvalues,predictiontask,depth,method::RandomForest.LearningMethod{RandomForest.Classifier})
     if method.maxdepth > 0 && method.maxdepth == depth
         return true
     else
@@ -2101,7 +2101,7 @@ function leaf_node(trainingweights,regressionvalues,predictiontask,depth,method:
     end
 end
 
-function leaf_node(trainingweights,regressionvalues,predictiontask,depth,method::LearningMethod{Regressor})
+function leaf_node(trainingweights,regressionvalues,predictiontask,depth,method::RandomForest.LearningMethod{RandomForest.Regressor})
     if method.maxdepth > 0 && method.maxdepth == depth
         return true
     else
@@ -2122,7 +2122,7 @@ function leaf_node(trainingweights,regressionvalues,predictiontask,depth,method:
     end
 end
 
-function make_leaf(trainingweights,regressionvalues,predictiontask,defaultprediction,method::LearningMethod{Classifier})
+function make_leaf(trainingweights,regressionvalues,predictiontask,defaultprediction,method::RandomForest.LearningMethod{RandomForest.Classifier})
     noclasses = size(trainingweights,1)
     classcounts = zeros(noclasses)
     for i=1:noclasses
@@ -2141,7 +2141,7 @@ function make_leaf(trainingweights,regressionvalues,predictiontask,defaultpredic
     return prediction
 end
 
-function make_leaf(trainingweights,regressionvalues,predictiontask,defaultprediction,method::LearningMethod{Classifier})
+function make_leaf(trainingweights,regressionvalues,predictiontask,defaultprediction,method::RandomForest.LearningMethod{RandomForest.Regressor})
     sumweights = sum(trainingweights)
     sumregressionvalues = sum(regressionvalues)
     return [sumweights,sumregressionvalues]
@@ -2538,7 +2538,7 @@ function evaluate_regression_numeric_variable_allvals(bestsplit,varno,variable,s
     return bestsplit
 end
 
-function make_split(method::LearningMethod{Classifier},trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
+function make_split(method::RandomForest.LearningMethod{RandomForest.Classifier},trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
     (varno, variable, splittype, splitpoint) = bestsplit
     noclasses = size(trainingrefs,1)
     leftrefs = Array(Any,noclasses)
@@ -2582,7 +2582,7 @@ function make_split(method::LearningMethod{Classifier},trainingrefs,trainingweig
     return leftrefs,leftweights,[],rightrefs,rightweights,[],leftweight
 end
 
-function make_split(method::LearningMethod{Regressor},trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
+function make_split(method::RandomForest.LearningMethod{RandomForest.Regressor},trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
   (varno, variable, splittype, splitpoint) = bestsplit
   leftrefs = Int[]
   leftweights = Float64[]
@@ -3032,7 +3032,7 @@ function generate_model(method)
         println("This may be due to an incorrectly specified separator, e.g., use: separator = \'\\t\'")
         result = :NONE
     else
-        if typeof(method.learningType) == Classifier
+        if typeof(method.learningType) == RandomForest.Classifier
             classes = unique(globaldata[:CLASS])
         else
             classes = []
@@ -3063,7 +3063,7 @@ function generate_model(method)
     return result
 end
 
-function generate_model_internal(method::LearningMethod{Classifier})
+function generate_model_internal(method::RandomForest.LearningMethod{RandomForest.Classifier})
     if method.conformal == :default
         conformal = :std
     else
@@ -3129,7 +3129,7 @@ function generate_model_internal(method::LearningMethod{Classifier})
     return oobperformance, conformalfunction
 end
 
-function generate_model_internal(method::LearningMethod{Regressor})
+function generate_model_internal(method::RandomForest.LearningMethod{RandomForest.Regressor})
     oobpredictions = oobs[1]
     for r = 2:length(oobs)
         oobpredictions += oobs[r]
