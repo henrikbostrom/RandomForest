@@ -70,19 +70,22 @@ export
     forestRegressor,
     treeRegressor
 
+
+include("types.jl")
+
+# MOH FIXME:should use Julia standardized versioning instead
 global majorversion = 0
 global minorversion = 0
 global patchversion = 9
 
 """`runexp` is used to test the performance of the library on a number of test sets"""
 function runexp()
-    experiment([forestClassifier()], files = ["uci/autos.txt"]) # Warmup
-    experiment([forestClassifier(),forestClassifier(notrees=500)],files="uci",resultfile="uci-results.txt")
-    experiment([forestRegressor()],files = ["regression/cooling.txt"]) # Warmup
-    experiment([forestRegressor(),forestRegressor(notrees=500)],files="regression",resultfile="regression-results.txt")
+    experiment(files = ["uci/glass.txt"]) # Warmup
+    experiment(files="uci",methods=[forest(),forest(notrees=500)],resultfile="uci-results.txt")
+    experiment(files = ["regression/cooling.txt"]) # Warmup
+    experiment(files="regression",methods=[forest(),forest(notrees=500)],resultfile="regression-results.txt")
 end
 
-include("types.jl")
 
 ##
 ## Functions for running experiments
@@ -191,10 +194,11 @@ function run_split(testoption,predictiontask,methods)
     end
     update_workers()
     nocoworkers = nprocs()-1
+    # MOH FIXME: At this point you should know that method result to expect
     methodresults = Array(Any,length(methods))
     origseed = rand(1:1000_000_000)
     for m = 1:length(methods)
-        srand(origseed)
+        srand(origseed) #NOTE: To remove configuration order dependance
         if nocoworkers > 0
             notrees = [div(methods[m].notrees,nocoworkers) for i=1:nocoworkers]
             for i = 1:mod(methods[m].notrees,nocoworkers)
