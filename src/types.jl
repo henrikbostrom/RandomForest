@@ -1,6 +1,17 @@
 ## Type declarations
 
-type LearningMethod{T}
+abstract LearningType
+
+type Undefined <: LearningType
+end
+
+type Classifier <: LearningType
+end
+
+type Regressor <: LearningType
+end
+
+type LearningMethod{T<:LearningType}
     learningType::T
     modeltype::Any
     notrees::Int
@@ -17,14 +28,16 @@ type LearningMethod{T}
     conformal::Any
 end
 
-abstract LearningType
 
-type Classifier <: LearningType
-    
+
+function tree(;minleaf = 5, maxdepth = 0, randsub = :all, randval = false,
+              splitsample = 0, bagging = false, bagsize = 1.0, modpred = false, laplace = true, confidence = 0.95, conformal = :default)
+    return LearningMethod(Undefined(),:tree,1,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
 end
 
-type Regressor <: LearningType
-    
+function forest(;minleaf = 1, maxdepth = 0, randsub = :default, randval = true,
+                splitsample = 0, bagging = true, bagsize = 1.0, modpred = false, laplace = false, confidence = 0.95, conformal = :default, notrees = 100)
+    return LearningMethod(Undefined(),:forest,notrees,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
 end
 
 function treeClassifier(;minleaf = 5, maxdepth = 0, randsub = :all, randval = false,
