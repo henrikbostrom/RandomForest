@@ -64,7 +64,11 @@ export
     runexp,
     LearningMethod,
     Classifier,
-    Regressor
+    Regressor,
+    forestClassifier,
+    treeClassifier,
+    forestRegressor,
+    treeRegressor
 
 global majorversion = 0
 global minorversion = 0
@@ -72,7 +76,7 @@ global patchversion = 9
 
 """`runexp` is used to test the performance of the library on a number of test sets"""
 function runexp()
-    experiment([forestClassifier()], files = ["uci/glass.txt"]) # Warmup
+    experiment([forestClassifier()], files = ["uci/autos.txt"]) # Warmup
     experiment([forestClassifier(),forestClassifier(notrees=500)],files="uci",resultfile="uci-results.txt")
     experiment([forestRegressor()],files = ["regression/cooling.txt"]) # Warmup
     experiment([forestRegressor(),forestRegressor(notrees=500)],files="regression",resultfile="regression-results.txt")
@@ -86,7 +90,7 @@ include("types.jl")
 
 function experiment(methods;files = ".", separator = ',', protocol = 10, normalizetarget = false, normalizeinput = false,  resultfile = :none)
     println("RandomForest v. $(majorversion).$(minorversion).$(patchversion)")
-    if typeof(files) == ASCIIString
+    if typeof(files) == String
         if isdir(files)
             dirfiles = readdir(files)
             datafiles = dirfiles[[splitext(file)[2] in [".txt",".csv"] for file in dirfiles]]
@@ -823,12 +827,13 @@ function run_cross_validation(protocol,predictiontask,methods)
         for r = 2:length(allmodelsizes)
             modelsizes += allmodelsizes[r]
         end
-        methodresults[m] = run_cross_validation_internal(methods[m], results, modelsizes)
+        methodresults[m] = run_cross_validation_internal(methods[m], results, modelsizes, nofolds, time)
     end
     return methodresults
 end
 
-function run_cross_validation_internal(method::RandomForest.LearningMethod{RandomForest.Regressor}, results, modelsizes)
+function run_cross_validation_internal(method::RandomForest.LearningMethod{RandomForest.Regressor}, results, modelsizes, nofolds, time)
+    folds = collect(1:nofolds)
     allnoirregularleafs = [result[6] for result in results]
     noirregularleafs = allnoirregularleafs[1]
     for r = 2:length(allnoirregularleafs)
@@ -1114,7 +1119,8 @@ function run_cross_validation_internal(method::RandomForest.LearningMethod{Rando
                                             time+extratime)
 end
 
-function run_cross_validation_internal(method::RandomForest.LearningMethod{RandomForest.Classifier}, results, modelsizes)
+function run_cross_validation_internal(method::RandomForest.LearningMethod{RandomForest.Classifier}, results, modelsizes, nofolds, time)
+    folds = collect(1:nofolds)
     allnoirregularleafs = [result[5] for result in results]
     noirregularleafs = allnoirregularleafs[1]
     for r = 2:length(allnoirregularleafs)
@@ -2963,7 +2969,7 @@ end
 ##
 
 function load_data(source; separator = ',')
-    if typeof(source) == ASCIIString
+    if typeof(source) == String
         global globaldata = read_data(source, separator=separator) # Made global to allow access from workers
         initiate_workers()
         println("Data loaded")
