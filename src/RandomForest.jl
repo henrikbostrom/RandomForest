@@ -124,7 +124,7 @@ end
 
 function run_experiment(file, separator, protocol, normalizetarget, normalizeinput, methods)
     global globaldata = read_data(file, separator=separator) # Made global to allow access from workers
-    predictiontask = prediction_task(methods[1])
+    predictiontask = prediction_task(globaldata)
     if predictiontask == :NONE
         warn("File excluded: $file - no column is labeled CLASS or REGRESSION\n\tThis may be due to incorrectly specified separator, e.g., use: separator = \'\\t\'")
         result = (:NONE,:NONE,:NONE)
@@ -1312,8 +1312,15 @@ function prediction_task(method::LearningMethod{Classifier})
     return :CLASS
 end
 
-function prediction_task(method) # AMGAD: why there is none prediction task ?
-    return :NONE
+function prediction_task(data)
+    allnames = names(data)
+    if :CLASS in allnames
+        return :CLASS
+    elseif :REGRESSION in allnames
+        return :REGRESSION
+    else
+        return :NONE
+    end
 end
 
 ##
