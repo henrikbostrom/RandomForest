@@ -129,6 +129,12 @@ function run_experiment(file, separator, protocol, normalizetarget, normalizeinp
         warn("File excluded: $file - no column is labeled CLASS or REGRESSION\n\tThis may be due to incorrectly specified separator, e.g., use: separator = \'\\t\'")
         result = (:NONE,:NONE,:NONE)
     else
+        if predictiontask == :REGRESSION
+            methods = map(x->LearningMethod(Regressor(), (getfield(x,i) for i in fieldnames(x)[2:end])...), methods)
+        else
+            methods = map(x->LearningMethod(Classifier(), (getfield(x,i) for i in fieldnames(x)[2:end])...), methods)
+        end
+        
         if predictiontask == :REGRESSION && normalizetarget
             regressionvalues = globaldata[:REGRESSION]
             minval = minimum(regressionvalues)
