@@ -91,7 +91,7 @@ end
 ## Functions for running experiments
 ##
 
-function experiment(methods;files = ".", separator = ',', protocol = 10, normalizetarget = false, normalizeinput = false,  resultfile = :none)
+function experiment(;files = ".", separator = ',', protocol = 10, normalizetarget = false, normalizeinput = false, methods = [forest()], resultfile = :none)
     println("RandomForest v. $(majorversion).$(minorversion).$(patchversion)")
     if typeof(files) == String
         if isdir(files)
@@ -837,12 +837,12 @@ function run_cross_validation(protocol,predictiontask,methods)
         for r = 2:length(allmodelsizes)
             modelsizes += allmodelsizes[r]
         end
-        methodresults[m] = run_cross_validation_internal(methods[m], results, modelsizes, nofolds, time)
+        methodresults[m] = run_cross_validation_internal(methods[m], results, modelsizes, nofolds, conformal, time)
     end
     return methodresults
 end
 
-function run_cross_validation_internal(method::LearningMethod{Regressor}, results, modelsizes, nofolds, time)
+function run_cross_validation_internal(method::LearningMethod{Regressor}, results, modelsizes, nofolds, conformal, time)
     folds = collect(1:nofolds)
     allnoirregularleafs = [result[6] for result in results]
     noirregularleafs = allnoirregularleafs[1]
@@ -1129,7 +1129,7 @@ function run_cross_validation_internal(method::LearningMethod{Regressor}, result
                                             time+extratime)
 end
 
-function run_cross_validation_internal(method::LearningMethod{Classifier}, results, modelsizes, nofolds, time)
+function run_cross_validation_internal(method::LearningMethod{Classifier}, results, modelsizes, nofolds, conformal, time)
     folds = collect(1:nofolds)
     allnoirregularleafs = [result[5] for result in results]
     noirregularleafs = allnoirregularleafs[1]
@@ -2798,7 +2798,7 @@ function present_results(results,methods;ignoredatasetlabel = false)
         for datasetno = 1:length(results)
             for methodno = 1:length(methods)
                 for resultno = 1:length(resultlabels)
-                    methodresults[datasetno,methodno,resultno] = results[datasetno][3][methodno].(resultlabels[resultno])
+                    methodresults[datasetno,methodno,resultno] = getfield(results[datasetno][3][methodno], resultlabels[resultno])
                 end
             end
         end
@@ -2977,7 +2977,7 @@ function present_method(methodno,method;showmethodlabel = true)
         print("M$(methodno): ")
     end
     for n in fieldnames(method)
-        println("\t$(n) = $(method.(n))")
+        println("\t$(n) = $(getfield(method,n))")
     end
 end
 
