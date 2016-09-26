@@ -93,11 +93,10 @@ type ClassificationResult
     Time::Float64
 end
 
-type PredictionModel
-    predictiontask::Any
+type PredictionModel{T}
     classes::Any
     version::Any
-    method::LearningMethod
+    method::LearningMethod{T}
     oobperformance::Any
     variableimportance::Any
     trees::Any

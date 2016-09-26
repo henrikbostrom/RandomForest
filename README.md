@@ -272,7 +272,7 @@ The arguments should be on the following format:
 
 To get a description of a loaded dataset:
 
-    julia> describe_data()
+    julia> describe_data(data)
 
 - - - - -
 
@@ -357,7 +357,7 @@ To work with a single dataset:
 
         load_data(<dataframe>)
 
-        describe_data()
+        describe_data(<dataframe>)
 
         evaluate_method(method = forest(...), protocol = <protocol>)
 
