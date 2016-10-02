@@ -80,9 +80,9 @@ include("classificationWithTest.jl")
 include("regressionWithTest.jl")
 
 # MOH FIXME:should use Julia standardized versioning instead
-global majorversion = 0
-global minorversion = 0
-global patchversion = 9
+majorversion = 0
+minorversion = 0
+patchversion = 9
 
 """`runexp` is used to test the performance of the library on a number of test sets"""
 function runexp()
@@ -129,7 +129,7 @@ function experiment(;files = ".", separator = ',', protocol = 10, normalizetarge
 end
 
 function run_experiment(file, separator, protocol, normalizetarget, normalizeinput, methods)
-    global globaldata = read_data(file, separator=separator) # Made global to allow access from workers
+    globaldata = read_data(file, separator=separator) # Made to allow access from workers
     predictiontask = prediction_task(globaldata)
     if predictiontask == :NONE
         warn("File excluded: $file - no column is labeled CLASS or REGRESSION\n\tThis may be due to incorrectly specified separator, e.g., use: separator = \'\\t\'")
@@ -140,7 +140,7 @@ function run_experiment(file, separator, protocol, normalizetarget, normalizeinp
         else
             methods = map(x->LearningMethod(Classifier(), (getfield(x,i) for i in fieldnames(x)[2:end])...), methods)
         end
-        
+
         if predictiontask == :REGRESSION && normalizetarget
             regressionvalues = globaldata[:REGRESSION]
             minval = minimum(regressionvalues)
@@ -161,12 +161,12 @@ function run_experiment(file, separator, protocol, normalizetarget, normalizeinp
                 end
             end
         end
-        initiate_workers()
+        # initiate_workers()
         if typeof(protocol) == Float64 || protocol == :test
-            results = run_split(protocol,predictiontask,methods)
+            results = run_split(globaldata, protocol,predictiontask,methods)
             result = (predictiontask,file,results)
         elseif typeof(protocol) == Int64 || protocol == :cv
-            results = run_cross_validation(protocol,predictiontask,methods)
+            results = run_cross_validation(globaldata, protocol,predictiontask,methods)
             result = (predictiontask,file,results)
         else
             throw("Unknown experiment protocol")
@@ -184,18 +184,18 @@ function read_data(file; separator = ',')
     return df
 end
 
-function run_split(testoption,predictiontask,methods)
+function run_split(globaldata, testoption,predictiontask,methods)
     if typeof(testoption) == Float64
         noexamples = size(globaldata,1)
         notestexamples = convert(Int,floor(testoption*noexamples))
         notrainingexamples = noexamples-notestexamples
         tests = shuffle([trues(notestexamples);falses(notrainingexamples)])
         if ~(:TEST in names(globaldata))
-            global globaltests = DataFrame(TEST = tests)
-            global globaldata = hcat(globaltests,globaldata)
+            globaltests = DataFrame(TEST = tests)
+            globaldata = hcat(globaltests,globaldata)
         else
             globaldata[:TEST] = tests
-            global globaldata = globaldata
+            globaldata = globaldata
         end
     elseif testoption == :test
         if ~(:TEST in names(globaldata))
@@ -204,7 +204,9 @@ function run_split(testoption,predictiontask,methods)
             throw("TEST column contains non-Boolean values")
         end
     end
-    update_workers()
+    # update_workers()
+    globaldata = hcat(globaltests,globaldata)
+
     nocoworkers = nprocs()-1
     # MOH FIXME: At this point you should know that method result to expect
     methodresults = Array(Any,length(methods))
@@ -227,43 +229,45 @@ function run_split(testoption,predictiontask,methods)
         else
             randomoobs = Array(Int64,0)
         end
-        time = @elapsed results = pmap(generate_and_test_trees,[(methods[m],predictiontask,:test,n,rand(1:1000_000_000),randomoobs) for n in notrees])
+        time = @elapsed results = pmap(generate_and_test_trees,[(globaldata, methods[m],predictiontask,:test,n,rand(1:1000_000_000),randomoobs) for n in notrees])
         tic()
-        methodresults[m] = run_split_internal(methods[m], results)
+        methodresults[m] = run_split_internal(pmethods[m], results)
     end
     return methodresults
 end
 
-function initiate_workers()
-    pr = Array(Any,nprocs())
-    for i = 2:nprocs()
-        pr[i] = remotecall(i,load_global_dataset)
-    end
-    for i = 2:nprocs()
-        wait(pr[i])
-    end
-end
+# FAROUK: no need for these methods
+#
+# function initiate_workers()
+#     pr = Array(Any,nprocs())
+#     for i = 2:nprocs()
+#         pr[i] = remotecall(load_global_dataset, i)
+#     end
+#     for i = 2:nprocs()
+#         wait(pr[i])
+#     end
+# end
+#
+# function load_global_dataset()
+#     globaldata = @fetchfrom(1,globaldata)
+# end
+#
+# function update_workers()
+#     pr = Array(Any,nprocs())
+#     for i = 2:nprocs()
+#         pr[i] = remotecall(update_global_dataset, i)
+#     end
+#     for i = 2:nprocs()
+#         wait(pr[i])
+#     end
+# end
+#
+# function update_global_dataset()
+#     globaltests = @fetchfrom(1,globaltests)
+#     globaldata = hcat(globaltests,globaldata)
+# end
 
-function load_global_dataset()
-    global globaldata = @fetchfrom(1,globaldata)
-end
-
-function update_workers()
-    pr = Array(Any,nprocs())
-    for i = 2:nprocs()
-        pr[i] = remotecall(i,update_global_dataset)
-    end
-    for i = 2:nprocs()
-        wait(pr[i])
-    end
-end
-
-function update_global_dataset()
-    global globaltests = @fetchfrom(1,globaltests)
-    global globaldata = hcat(globaltests,globaldata)
-end
-
-function run_cross_validation(protocol,predictiontask,methods)
+function run_cross_validation(globaldata, protocol,predictiontask,methods)
     if typeof(protocol) == Int64
         nofolds = protocol
         folds = collect(1:nofolds)
@@ -288,11 +292,11 @@ function run_cross_validation(protocol,predictiontask,methods)
         end
         shuffle!(foldnos)
         if ~(:FOLD in names(globaldata))
-            global globaltests = DataFrame(FOLD = foldnos)
-            global globaldata = hcat(globaltests,globaldata)
+            globaltests = DataFrame(FOLD = foldnos)
+            globaldata = hcat(globaltests,globaldata)
         else
             globaldata[:FOLD] = foldnos
-            global globaldata = globaldata
+            globaldata = globaldata
         end
     else
         if ~(:FOLD in names(globaldata))
@@ -302,7 +306,9 @@ function run_cross_validation(protocol,predictiontask,methods)
             nofolds = length(folds)
         end
     end
-    update_workers()
+    # update_workers()
+    globaldata = hcat(globaltests,globaldata)
+
     nocoworkers = nprocs()-1
     methodresults = Array(Any,length(methods))
     origseed = rand(1:1000_000_000)
@@ -332,7 +338,7 @@ function run_cross_validation(protocol,predictiontask,methods)
         else
             randomoobs = Array(Int64,0)
         end
-        time = @elapsed results = pmap(generate_and_test_trees,[(methods[m],predictiontask,:cv,n,rand(1:1000_000_000),randomoobs) for n in notrees])
+        time = @elapsed results = pmap(generate_and_test_trees,[(globaldata,methods[m],predictiontask,:cv,n,rand(1:1000_000_000),randomoobs) for n in notrees])
         tic()
         allmodelsizes = try
             [result[1] for result in results]
@@ -350,7 +356,7 @@ function run_cross_validation(protocol,predictiontask,methods)
         for r = 2:length(allmodelsizes)
             modelsizes += allmodelsizes[r]
         end
-        methodresults[m] = run_cross_validation_internal(methods[m], results, modelsizes, nofolds, conformal, time)
+        methodresults[m] = run_cross_validation_internal(globaldata, methods[m], results, modelsizes, nofolds, conformal, time)
     end
     return methodresults
 end
@@ -379,17 +385,18 @@ end
 
 ##
 ## Functions for working with a single dataset. Amg: loading data should move outside as well
+## still uses global data, shall be omitted
 ##
 function load_data(source; separator = ',')
     if typeof(source) == String
-        global globaldata = read_data(source, separator=separator) # Made global to allow access from workers
+        globaldata = read_data(source, separator=separator) # Made to allow access from workers
         initiate_workers()
         println("Data loaded")
     elseif typeof(source) == DataFrame
         if ~(:WEIGHT in names(source))
-            global globaldata = hcat(source,DataFrame(WEIGHT = ones(size(source,1))))
+            globaldata = hcat(source,DataFrame(WEIGHT = ones(size(source,1))))
         else
-            global globaldata = source # Made global to allow access from workers
+            globaldata = source # Made to allow access from workers
         end
         initiate_workers()
         println("Data loaded")

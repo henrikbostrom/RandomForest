@@ -1,7 +1,7 @@
 #= AMG
 build model and test and get results
 =#
-function run_split_internal(method::LearningMethod{Classifier}, results)
+function run_split_internal(globaldata, method::LearningMethod{Classifier}, results)
     modelsize = sum([result[1] for result in results])
     noirregularleafs = sum([result[5] for result in results])
     predictions = results[1][2]
@@ -242,7 +242,7 @@ function calculate_auc(posclassprobabilities,negclassprobabilities)
 end
 
 
-function run_cross_validation_internal(method::LearningMethod{Classifier}, results, modelsizes, nofolds, conformal, time)
+function run_cross_validation_internal(globaldata, method::LearningMethod{Classifier}, results, modelsizes, nofolds, conformal, time)
     folds = collect(1:nofolds)
     allnoirregularleafs = [result[5] for result in results]
     noirregularleafs = allnoirregularleafs[1]
@@ -423,8 +423,8 @@ end
 ##
 ## Functions to be executed on each worker
 ##
-function generate_and_test_trees(Argumnets::Tuple{LearningMethod{Classifier},Symbol,Symbol,Int64,Int64,Array{Int64,1}})
-    method,predictiontask,experimentype,notrees,randseed,randomoobs = Argumnets
+function generate_and_test_trees(Argumnets::Tuple{DataFrames.DataFrame,LearningMethod{Classifier},Symbol,Symbol,Int64,Int64,Array{Int64,1}})
+    globaldata, method,predictiontask,experimentype,notrees,randseed,randomoobs = Argumnets
     s = size(globaldata,1)
     srand(randseed)
     if experimentype == :test
@@ -625,4 +625,3 @@ function generate_and_test_trees(Argumnets::Tuple{LearningMethod{Classifier},Sym
         return (modelsizes,predictions,(nocorrectclassifications,squaredproberrors),oobpredictions,noirregularleafs)
     end
 end
-

@@ -256,7 +256,7 @@ function run_split_internal(method::LearningMethod{Regressor}, results)
 end
 
 
-function run_cross_validation_internal(method::LearningMethod{Regressor}, results, modelsizes, nofolds, conformal, time)
+function run_cross_validation_internal(globaldata, method::LearningMethod{Regressor}, results, modelsizes, nofolds, conformal, time)
     folds = collect(1:nofolds)
     allnoirregularleafs = [result[6] for result in results]
     noirregularleafs = allnoirregularleafs[1]
@@ -547,8 +547,8 @@ end
 ##
 ## Functions to be executed on each worker
 ##
-function generate_and_test_trees(Argumnets::Tuple{LearningMethod{Regressor},Symbol,Symbol,Int64,Int64,Array{Int64,1}})
-    method,predictiontask,experimentype,notrees,randseed,randomoobs = Argumnets
+function generate_and_test_trees(Argumnets::Tuple{DataFrames.DataFrame,LearningMethod{Regressor},Symbol,Symbol,Int64,Int64,Array{Int64,1}})
+    globaldata,method,predictiontask,experimentype,notrees,randseed,randomoobs = Argumnets
     s = size(globaldata,1)
     srand(randseed)
     if experimentype == :test
@@ -694,4 +694,3 @@ function generate_and_test_trees(Argumnets::Tuple{LearningMethod{Regressor},Symb
         return (modelsizes,predictions,squarederrors,oobpredictions,squaredpredictions,noirregularleafs)
     end
 end
-
