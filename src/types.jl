@@ -11,6 +11,9 @@ end
 type Regressor <: LearningType
 end
 
+type Survival <: LearningType
+end
+
 type LearningMethod{T<:LearningType}
     learningType::T
     modeltype::Any
@@ -50,6 +53,11 @@ function treeRegressor(;minleaf = 5, maxdepth = 0, randsub = :all, randval = fal
     return LearningMethod(Regressor(), :tree,1,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
 end
 
+function treeSurvival(;minleaf = 5, maxdepth = 0, randsub = :all, randval = false,
+              splitsample = 0, bagging = false, bagsize = 1.0, modpred = false, laplace = true, confidence = 0.95, conformal = :default)
+    return LearningMethod(Survival(), :tree,1,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
+end
+
 function forestClassifier(;minleaf = 1, maxdepth = 0, randsub = :default, randval = true,
                 splitsample = 0, bagging = true, bagsize = 1.0, modpred = false, laplace = false, confidence = 0.95, conformal = :default, notrees = 100)
     return LearningMethod(Classifier(), :forest,notrees,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
@@ -58,6 +66,11 @@ end
 function forestRegressor(;minleaf = 1, maxdepth = 0, randsub = :default, randval = true,
                 splitsample = 0, bagging = true, bagsize = 1.0, modpred = false, laplace = false, confidence = 0.95, conformal = :default, notrees = 100)
     return LearningMethod(Regressor(), :forest,notrees,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
+end
+
+function forestSurvival(;minleaf = 1, maxdepth = 0, randsub = :default, randval = true,
+                splitsample = 0, bagging = true, bagsize = 1.0, modpred = false, laplace = false, confidence = 0.95, conformal = :default, notrees = 100)
+    return LearningMethod(Survival(), :forest,notrees,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
 end
 
 type RegressionResult

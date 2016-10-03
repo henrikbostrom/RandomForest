@@ -1,6 +1,6 @@
 
 ##
-## Function for building a single tree. Amg: should be in second flow
+## Function for building a single tree.
 ##
 function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalues,trainingdata,variables,types,predictiontask,varimp)
     tree = Any[]
