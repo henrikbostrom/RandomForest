@@ -18,12 +18,12 @@
 ## Get instructions for how to run the program by the following commands:
 ## julia> using RandomForest
 ## julia> doc()
-## 
+##
 ## --------------------------------------------------------------------------
 ##
 ## TODO for version 1.0:
 ##
-## *** MUST *** 
+## *** MUST ***
 ##
 ## - check definition of OneC
 ## - output should either be presented as text or as a dataframe (or possibly more than one)
@@ -32,7 +32,7 @@
 ## *** SHOULD ***
 ##
 ## - allow stored models to be used with different confidence levels (requires storing all alphas)
-## - allow for using modpred in stored models (requires storing info. from all oob predictions) 
+## - allow for using modpred in stored models (requires storing info. from all oob predictions)
 ## - leave-one-out cross validation
 ## - handling of sparse data
 ## - make everything work for single trees, including nonconformity measures, etc.
@@ -74,354 +74,15 @@ export apply_model
 export runexp
 
 global majorversion = 0
-global minorversion = 0 
-global patchversion = 9 
+global minorversion = 0
+global patchversion = 9
 
+"""`runexp` is used to test the performance of the library on a number of test sets"""
 function runexp()
     experiment(files = ["uci/glass.txt"]) # Warmup
     experiment(files="uci",methods=[forest(),forest(notrees=500)],resultfile="uci-results.txt")
     experiment(files = ["regression/cooling.txt"]) # Warmup
     experiment(files="regression",methods=[forest(),forest(notrees=500)],resultfile="regression-results.txt")
-end
-
-function doc()
-    println("
-
-RandomForest v. $(majorversion).$(minorversion).$(patchversion)
-===============================================================
-
-Copyright Henrik Boström 2016 
-
-A Julia package that implements random forests for classification and regression with conformal prediction.
-
-There are two basic ways of working with the package:
-
-- running an experiment with multiple datasets, possibly comparing multiple methods,
-  i.e., random forests with different parameter settings, or
-
-- working with a single dataset, to evaluate, generate, store, load or
-  apply a random forest
-
-All named arguments below are optional, while the others are mandatory.
-
-
-To run an experiment
---------------------
-
-An experiment is run by calling experiment(...) in the following way:
-
-    julia> experiment(files = <files>, separator = <separator>, protocol = <protocol>,
-                      normalizetarget = <normalizetarget>, normalizeinput = <normalizeinput>,
-                      methods = [<method>, ...])
-
-The arguments should be on the following format:
-
-    files : list of file names or path to directory (default = \".\")
-        - in a specified directory, files with extensions other than .txt and .csv are ignored 
-        - each file should contain a dataset (see format requirements below)
-        - example: files = [\"uci/house-votes.txt\", \"uci/glass.txt\"],
-        - example: files = \"uci\"
-
-    separator : single character (default = ',')
-        - the character to use as field separator
-        - example: separator = '\t' (the tab character)
-
-    protocol : integer, float, :cv, :test (default = 10)
-        - the experiment protocol:
-            an integer means using cross-validation with this no. of folds. 
-            a float between 0 and 1 means using this fraction of the dataset for testing
-            :cv means using cross-validation with folds specified by a column labeled FOLD
-            :test means dividing the data into training and test according to boolean values
-             in a column labeled TEST (true means that the example is used for testing)
-        - example: protocol = 0.25 (25% of the data is for testing)
-        
-    normalizetarget : boolean (default = false)
-        - true means that each regression value v will be replaced by
-          (v-v_min)/(v_max-v_min), where v_min and V-max are the minimum and maximum values
-        - false means that the original regression values are kept
-        
-    normalizeinput : boolean (default = false)
-        - true means that each numeric input value v will be replaced by
-          (v-v_min)/(v_max-v_min), where v_min and V-max are the minimum and maximum values
-        - false means that the original values are kept
-        
-    method : a call on the form forest(...) (default = forest())
-        - The call may have the following (optional) arguments:
-
-            notrees : integer (default = 100)
-                - no. of trees to generate in the forest
-
-            minleaf : integer (default = 1)
-                - minimum no. of required examples to form a leaf
-
-            maxdepth : integer (default = 0)
-                - maximum depth of generated trees (0 means that there is no depth limit) 
-        
-            randsub : integer, float, :default, :all, :log2, or :sqrt (default = :default) 
-                - no. of randomly selected features to evaluate at each split:
-                   :default means :log2 for classification and 1/3 for regression
-                   :all means that all features are used (no feature subsampling takes place)
-                   :log2 means that log2 of the no. of features are sampled
-                   :sqrt means that sqrt of the no. of features are sampled
-                   an integer (larger than 0) means that this number of features are sampled
-                   a float (between 0.0 and 1.0) means that this fraction of features are sampled
-        
-            randval : boolean (default = true)
-                - true means that a single randomly selected value is used to form conditions for each
-                  feature in each split
-                - false mean that all values are used to form conditions when evaluating features for
-                  each split
-
-            splitsample : integer (default = 0)
-                - no. of randomly selected examples to use for evaluating each split
-                - 0 means that no subsampling of the examples will take place
-        
-            bagging : boolean (default = true)
-                - true means that a bootstrap replicate of the training examples is used for each tree
-                - false means that the original training examples are used when building each tree
-        
-            bagsize : float or integer (default = 1.0)
-                - no. of randomly selected examples to include in the bootstrap replicate
-                - an integer means that this number of examples are sampled with replacement
-                - a float means that the corresponding fraction of examples are sampled with replacement
-
-            modpred : boolean (default = false)
-                - true means that for each test instance, the trees for which a randomly selected training
-                  instance is out-of-bag is used for prediction and the training instance is not used for
-                  calculating a calibration score
-                - false means that all trees in the forest are used for prediction and all out-of-bag scores
-                  are used for calibration
-
-            laplace : boolean (default = false)
-                - true means that class probabilities at each leaf node is Laplace corrected
-                - false means that class probabilities at each leaf node equal the relative class
-                  frequencies
-
-            confidence : a float between 0 and 1 (default = 0.95) 
-                - probability of including the correct label in the prediction region
-
-            conformal : :default, :std, :normalized or :classcond (default = :default) 
-                - method used to calculate prediction regions
-                - For classification, the following options are allowed:
-                   :default is the same as :std
-                   :std means that validity is guaranteed in general, but not for each class
-                   :classcond means that validity is guaranteed for each class
-                - For regression, the following options are allowed:
-                   :default is the same as :normalized
-                   :std results in the same region size for all predictions
-                   :normalized means that each region size is dependent on the spread
-                    of predictions among the individual trees
-
-- - - - -
-
-    Examples:
-
-    The call experiment(files = \"uci\") is hence the same as
-
-    experiment(files = \"uci\", separator = ´,´, protocol = 10, methods = [forest()])
-
-    The following compares the default random forest to one with 1000 trees and a maxdepth of 10:
-
-    julia> experiment(files = \"uci\", methods = [forest(), forest(notrees = 1000, maxdepth = 10)])
-
-- - - - -
-
-A dataset should have the following format:
-
-    <names-row>
-    <data-row>
-    ...
-    <data-row>
-    
-where
-
-    <names-row> = <name><separator><name><separator>...<name>
-and
-
-    <data-row>  = <value><separator><value><separator>...<value>
-
-<name> can be any of the following:
-
-        CLASS            - declares that the column contains class labels
-        REGRESSION       - declares that the column contains regression values
-        ID               - declares that the column contains identifier labels
-        IGNORE           - declares that the column should be ignored
-        FOLD             - declares that the column contains labels for cross-validation folds
-        WEIGHT           - declares that the column contains instance weights
-        any other value  - is used to create a variable name
-
-<separator> is a single character (as specified above)
-
-<value> can be any of the following:
-
-        integer          - is handled as a number if all values in the same column are of type integer, 
-                           float or NA, and as a string otherwise
-        float            - is handled as a number if all values in the same column are of type integer, 
-                           float or NA, and as a string otherwise
-        NA               - is handled as a missing value
-        any other value  - is handled as a string
-
-Example:
-
-    ID,RI,Na,Mg,Al,Si,K,Ca,Ba,Fe,CLASS
-    1,1.52101,NA,4.49,1.10,71.78,0.06,8.75,0.00,0.00,1
-    2,1.51761,13.89,NA,1.36,72.73,0.48,7.83,0.00,0.00,1
-    3,1.51618,13.53,3.55,1.54,72.99,0.39,7.78,0.00,0.00,1
-    ...
-
-- - - - -
-
-For classification tasks the following measures are reported:
-
-        Acc        - accuracy, i.e., fraction of examples correctly predicted
-        AUC        - area under ROC curve
-        Brier      - Brier score
-        AvAcc      - average accuracy for single trees in the forest
-        DEOAcc     - difference of the estimated and observed accuracy
-        AEEAcc     - absolute error of the estimated accuracy
-        AvBrier    - average Brier score for single trees in the forest
-        VBrier     - average squared deviation of single tree predictions from forest predictions 
-        Margin     - diff. between prob. for correct class and prob. for most prob. other class
-        Prob       - probability for predicted class
-        Valid      - fraction of true labels included in prediction region 
-        Region     - size, i.e., number of labels, in prediction region
-        OneC       - fraction of prediction regions containing exactly one true label
-        Size       - the number of nodes in the forest
-        Time       - the total time taken for both training and testing
-
-For regression tasks the following measures are reported:
-
-        MSE        - mean squared error
-        Corr       - the Pearson correlation between predicted and actual values
-        AvMSE      - average mean squared error for single trees in the forest
-        VarMSE     - average squared deviation of single tree predictions from forest predictions 
-        DEOMSE     - difference of the estimated and observed MSE
-        AEEMSE     - absolute error of the estimated MSE
-        Valid      - fraction of true labels included in prediction region
-        Region     - average size of prediction region
-        Size       - the number of nodes in the forest
-        Time       - the total time taken for both training and testing
-
-
-To work with a single dataset
------------------------------
-
-To load a dataset from a file or dataframe:
-
-    julia> load_data(<filename>, separator = <separator>)
-    julia> load_data(<dataframe>)
-
-The arguments should be on the following format:
-
-    filename : name of a file containing a dataset (see format requirements above)
-    separator : single character (default = ',')
-    dataframe : a dataframe where the column labels should be according to the format requirements above
-
-- - - - -
-
-To get a description of a loaded dataset:
-
-    julia> describe_data()
-
-- - - - -
-
-To evaluate a method or several methods for generating a random forest:
-
-    julia> evaluate_method(method = forest(...), protocol = <protocol>)
-    julia> evaluate_methods(methods = [forest(...), ...], protocol = <protocol>)
-
-The arguments should be on the following format:
-
-    method : a call to forest(...) as explained above (default = forest())
-    methods : a list of calls to forest(...) as explained above (default = [forest()])
-    protocol : integer, float, :cv or :test as explained above (default = 10)
-
-- - - - -
-
-To generate a model from the loaded dataset:
-
-    julia> m = generate_model(method = forest(...))                         
-
-The argument should be on the following format:
-
-    method : a call to forest(...) as explained above (default = forest())
-
-- - - - -
-
-To get a description of a model:
-
-    julia> describe_model(<model>)                                   
-
-The argument should be on the following format:
-
-    model : a generated or loaded model (see generate_model and load_model)
-
-- - - - -
-
-To store a model in a file:
-
-    julia> store_model(<model>, <file>)                              
-
-The arguments should be on the following format:
-
-    model : a generated or loaded model (see generate_model and load_model)
-    file : name of file to store model in
-
-- - - - -
-
-To load a model from file::
-
-    julia> rf = load_model(<file>)                                  
-
-The argument should be on the following format:
-
-    file : name of file in which a model has been stored
-
-- - - - -
-
-To apply a model to loaded data:
-
-    julia> apply_model(<model>, confidence = <confidence>)
-
-The argument should be on the following format:
-
-    model : a generated or loaded model (see generate_model and load_model)
-    confidence : a float between 0 and 1 or :std (default = :std) 
-                 - probability of including the correct label in the prediction region
-                 - :std means employing the same confidence level as used during training
-
-Summary of all functions
-------------------------
-
-All named arguments are optional, while the others are mandatory.
-
-To run an experiment:
-
-        experiment(files = <files>, separator = <separator>, protocol = <protocol>, 
-                   methods = [<method>, ...])
-
-To work with a single dataset:
-
-        load_data(<filename>, separator = <separator>)
-
-        load_data(<dataframe>)
-
-        describe_data()
-
-        evaluate_method(method = forest(...), protocol = <protocol>)
-
-        evaluate_methods(methods = [forest(...), ...], protocol = <protocol>)
-
-        m = generate_model(method = forest(...))                
-
-        describe_model(<model>)                                   
-
-        store_model(<model>, <file>)                              
-
-        m = load_model(<file>)                                  
-
-        apply_model(<model>, confidence = <confidence>)
-")
 end
 
 ## Type declarations
@@ -495,7 +156,7 @@ function experiment(;files = ".", separator = ',', protocol = 10, normalizetarge
     if typeof(files) == ASCIIString
         if isdir(files)
             dirfiles = readdir(files)
-            datafiles = dirfiles[map(Bool,[splitext(file)[2] in [".txt",".csv"] for file in dirfiles])]
+            datafiles = dirfiles[[splitext(file)[2] in [".txt",".csv"] for file in dirfiles]]
             filenames = [string(files,"/",filename) for filename in datafiles]
         else
             throw("Not a directory: $files")
@@ -504,8 +165,8 @@ function experiment(;files = ".", separator = ',', protocol = 10, normalizetarge
         filenames = files
     end
     totaltime = @elapsed results = [run_experiment(file,separator,protocol,normalizetarget,normalizeinput,methods) for file in filenames]
-    classificationresults = map(Bool,[pt == :CLASS for (pt,f,r) in results])
-    regressionresults = map(Bool,[pt == :REGRESSION for (pt,f,r) in results])
+    classificationresults = [pt == :CLASS for (pt,f,r) in results]
+    regressionresults = [pt == :REGRESSION for (pt,f,r) in results]
     present_results(sort(results[classificationresults]),methods)
     present_results(sort(results[regressionresults]),methods)
     println("Total time: $(round(totaltime,2)) s.")
@@ -531,7 +192,7 @@ function forest(;minleaf = 1, maxdepth = 0, randsub = :default, randval = true,
     return LearningMethod(:forest,notrees,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
 end
 
-function run_experiment(file, separator, protocol, normalizetarget, normalizeinput, methods)   
+function run_experiment(file, separator, protocol, normalizetarget, normalizeinput, methods)
     global globaldata = read_data(file, separator=separator) # Made global to allow access from workers
     predictiontask = prediction_task(globaldata)
     if predictiontask == :NONE
@@ -622,7 +283,7 @@ function run_split(testoption,predictiontask,methods)
             end
         else
             randomoobs = Array(Int64,0)
-        end        
+        end
         time = @elapsed results = pmap(generate_and_test_trees,[(methods[m],predictiontask,:test,n,rand(1:1000_000_000),randomoobs) for n in notrees])
         tic()
         modelsize = sum([result[1] for result in results])
@@ -640,7 +301,7 @@ function run_split(testoption,predictiontask,methods)
             predictions = [predictions[i][2]/predictions[i][1] for i = 1:nopredictions]
             if methods[m].conformal == :default
                 conformal = :normalized
-            else  
+            else
                 conformal = methods[m].conformal
             end
             if conformal == :normalized ## || conformal == :isotonic
@@ -679,28 +340,28 @@ function run_split(testoption,predictiontask,methods)
                         else
                             alpha = 2*ooberror/(delta+0.01)
                         end
-                        push!(alphas,alpha)                    
-                        push!(deltas,delta)                    
+                        push!(alphas,alpha)
+                        push!(deltas,delta)
                     end
-                    ## if conformal == :rfok                    
+                    ## if conformal == :rfok
                     ##     push!(rows,hcat(ooberror,convert(Array{Float64},trainingdata[i,labels])))
                     ## end
                     oobse += ooberror^2
                     nooob += 1
                 end
             end
-            ## if conformal == :rfok                    
+            ## if conformal == :rfok
             ##     maxk = minimum([45,nooob-1])
             ##     deltasalphas = Array(Float64,nooob,maxk,2)
             ##     distancematrix = Array(Float64,nooob,nooob)
             ##     for r = 1:nooob-1
             ##         distancematrix[r,r] = 0.001
             ##         for k = r+1:nooob
-            ##             distance = sqL2dist(rows[r][2:end],rows[k][2:end])+0.001 # Small term added to prevent infinite weights 
+            ##             distance = sqL2dist(rows[r][2:end],rows[k][2:end])+0.001 # Small term added to prevent infinite weights
             ##             distancematrix[r,k] = distance
             ##             distancematrix[k,r] = distance
             ##         end
-            ##     end     
+            ##     end
             ##     distancematrix[nooob,nooob] = 0.001
             ##     for r = 1:nooob
             ##         distanceerrors = Array(Float64,nooob,2)
@@ -747,13 +408,13 @@ function run_split(testoption,predictiontask,methods)
             oobmse = oobse/nooob
             thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
             if conformal == :std
-                if thresholdindex >= 1                    
+                if thresholdindex >= 1
                     errorrange = minimum([largestrange,2*sort(ooberrors, rev=true)[thresholdindex]])
                 else
                     errorrange = largestrange
                 end
             elseif conformal == :normalized
-                if thresholdindex >= 1                
+                if thresholdindex >= 1
                     alpha = sort(alphas, rev=true)[thresholdindex]
                 else
                     alpha = Inf
@@ -763,7 +424,7 @@ function run_split(testoption,predictiontask,methods)
             ## elseif conformal == :isotonic
             ##     eds = Array(Any,nooob,2)
             ##     eds[:,1] = ooberrors
-            ##     eds[:,2] = deltas            
+            ##     eds[:,2] = deltas
             ##     eds = sortrows(eds,by=x->x[2])
             ##     mincalibrationsize = maximum([10,Int(floor(1/(round((1-methods[m].confidence)*1000000)/1000000))-1)])
             ##     isotonicthresholds = Any[]
@@ -797,7 +458,7 @@ function run_split(testoption,predictiontask,methods)
             ##                 counter += 1
             ##             end
             ##         end
-            ##     end                
+            ##     end
             end
             testdata = globaldata[globaldata[:TEST] .== true,:]
             correctvalues = testdata[:REGRESSION]
@@ -812,7 +473,7 @@ function run_split(testoption,predictiontask,methods)
                     oobpredcount = oobpredictions[randomoob][1]
                     if oobpredcount > 0.0
                         thresholdindex = Int(floor(nooob*(1-methods[m].confidence)))
-                        if thresholdindex >= 1                
+                        if thresholdindex >= 1
                             alpha = sort(alphas[[1:randomoob-1;randomoob+1:end]], rev=true)[thresholdindex]
                         else
                             alpha = Inf
@@ -821,13 +482,13 @@ function run_split(testoption,predictiontask,methods)
                         println("oobpredcount = $oobpredcount !!! This is almost surely impossible!")
                     end
                     delta = squaredpredictions[i]-predictions[i]^2
-                    errorrange = alpha*(delta+0.01)                    
+                    errorrange = alpha*(delta+0.01)
                     if isnan(errorrange) || errorrange > largestrange
                         errorrange = largestrange
                     end
                 elseif conformal == :normalized
                     delta = squaredpredictions[i]-predictions[i]^2
-                    errorrange = alpha*(delta+0.01)                    
+                    errorrange = alpha*(delta+0.01)
                     if isnan(errorrange) || errorrange > largestrange
                         errorrange = largestrange
                     end
@@ -835,7 +496,7 @@ function run_split(testoption,predictiontask,methods)
                 ##     testrow = convert(Array{Float64},testdata[i,labels])
                 ##     distanceerrors = Array(Float64,nooob,2)
                 ##     for n = 1:nooob
-                ##         distanceerrors[n,1] = sqL2dist(testrow,rows[n][2:end])+0.001 # Small term added to prevent infinite weights 
+                ##         distanceerrors[n,1] = sqL2dist(testrow,rows[n][2:end])+0.001 # Small term added to prevent infinite weights
                 ##         distanceerrors[n,2] = rows[n][1]
                 ##     end
                 ##     distanceerrors = sortrows(distanceerrors,by=x->x[1])
@@ -846,7 +507,7 @@ function run_split(testoption,predictiontask,methods)
                 ##         distancesum += 1/distanceerrors[j,1]
                 ##     end
                 ##     knndelta /= distancesum
-                ##     errorrange = alpha*(knndelta+0.01)                    
+                ##     errorrange = alpha*(knndelta+0.01)
                 ##     if isnan(errorrange) || errorrange > largestrange
                 ##         errorrange = largestrange
                 ##     end
@@ -880,7 +541,7 @@ function run_split(testoption,predictiontask,methods)
             varmse = avmse-mse
             extratime = toq()
             methodresults[m] = RegressionResult(mse,corrcoeff,avmse,varmse,esterr,absesterr,validity,region,modelsize,noirregularleafs,time+extratime)
-        else # predictiontask = :CLASS 
+        else # predictiontask = :CLASS
             predictions = [predictions[i][2:end]/predictions[i][1] for i = 1:nopredictions]
             classes = unique(globaldata[:CLASS])
             noclasses = length(classes)
@@ -915,7 +576,7 @@ function run_split(testoption,predictiontask,methods)
                     end
                 end
                 thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
-                if thresholdindex >= 1                
+                if thresholdindex >= 1
                     alpha = sort(alphas)[thresholdindex]
                 else
                     alpha = -Inf
@@ -947,12 +608,12 @@ function run_split(testoption,predictiontask,methods)
                     end
                     classalphas[c] = alphas
                     thresholdindex = Int(floor((noclassoob+1)*(1-methods[m].confidence)))
-                    if thresholdindex >= 1                
+                    if thresholdindex >= 1
                         classalpha[c] = sort(alphas)[thresholdindex]
                     else
                         classalpha[c] = -Inf
                     end
-                    nooob += noclassoob                    
+                    nooob += noclassoob
                 end
             end
             oobacc = noobcorrect/nooob
@@ -983,7 +644,7 @@ function run_split(testoption,predictiontask,methods)
                             if conformal == :std
                                 randomoob = randomoobs[i]
                                 thresholdindex = Int(floor(nooob*(1-methods[m].confidence)))
-                                if thresholdindex >= 1                
+                                if thresholdindex >= 1
                                     alpha = sort(alphas[[1:randomoob-1;randomoob+1:end]])[thresholdindex] # NOTE: assumes oobpredcount > 0 always is true!
                                 else
                                     alpha = -Inf
@@ -992,7 +653,7 @@ function run_split(testoption,predictiontask,methods)
                                 randomoobclass, randomoobref = randomclassoobs[i]
                                 thresholdindex = Int(floor(size(classalphas[randomoobclass],1)*(1-methods[m].confidence)))
                                 origclassalpha = classalpha[randomoobclass]
-                                if thresholdindex >= 1                
+                                if thresholdindex >= 1
                                     classalpha[randomoobclass] = sort(classalphas[randomoobclass][[1:randomoobref-1;randomoobref+1:end]])[thresholdindex] # NOTE: assumes oobpredcount > 0 always is true!
                                 else
                                     classalpha[randomoobclass] = -Inf
@@ -1039,7 +700,7 @@ function run_split(testoption,predictiontask,methods)
                         nolabelssum += nolabels
                         if nolabels == 1
                             noonec += correct
-                        end                                
+                        end
                     end
                 end
                 testexamplecounter += size(testdata[c],1)
@@ -1143,7 +804,7 @@ function update_global_dataset()
 end
 
 function run_cross_validation(protocol,predictiontask,methods)
-    if typeof(protocol) == Int64 
+    if typeof(protocol) == Int64
         nofolds = protocol
         folds = collect(1:nofolds)
         foldsizes = Array(Int64,nofolds)
@@ -1160,7 +821,7 @@ function run_cross_validation(protocol,predictiontask,methods)
             if remainder > 0
                 foldsize += 1
                 remainder -= 1
-            end            
+            end
             foldsizes[foldno] = foldsize
             foldnos[counter+1:counter+foldsize] = foldno
             counter += foldsize
@@ -1180,7 +841,7 @@ function run_cross_validation(protocol,predictiontask,methods)
             folds = sort(unique(globaldata[:FOLD]))
             nofolds = length(folds)
         end
-    end        
+    end
     update_workers()
     nocoworkers = nprocs()-1
     methodresults = Array(Any,length(methods))
@@ -1213,12 +874,12 @@ function run_cross_validation(protocol,predictiontask,methods)
         end
         time = @elapsed results = pmap(generate_and_test_trees,[(methods[m],predictiontask,:cv,n,rand(1:1000_000_000),randomoobs) for n in notrees])
         tic()
-        allmodelsizes = try 
+        allmodelsizes = try
             [result[1] for result in results]
         catch
             origstdout = STDOUT
             dumpfilestream = open("dump.txt","w+")
-            redirect_stdout(dumpfilestream)            
+            redirect_stdout(dumpfilestream)
             println("***** ERROR *****")
             println("results:\n $results")
             redirect_stdout(origstdout)
@@ -1227,7 +888,7 @@ function run_cross_validation(protocol,predictiontask,methods)
         end
         modelsizes = allmodelsizes[1]
         for r = 2:length(allmodelsizes)
-            modelsizes += allmodelsizes[r] 
+            modelsizes += allmodelsizes[r]
         end
         if predictiontask == :REGRESSION
             allnoirregularleafs = [result[6] for result in results]
@@ -1236,11 +897,11 @@ function run_cross_validation(protocol,predictiontask,methods)
         end
         noirregularleafs = allnoirregularleafs[1]
         for r = 2:length(allnoirregularleafs)
-            noirregularleafs += allnoirregularleafs[r] 
+            noirregularleafs += allnoirregularleafs[r]
         end
         predictions = results[1][2]
         for r = 2:length(results)
-            predictions += results[r][2] 
+            predictions += results[r][2]
         end
         nopredictions = size(globaldata,1)
         testexamplecounter = 0
@@ -1301,25 +962,25 @@ function run_cross_validation(protocol,predictiontask,methods)
                             push!(alphas,alpha)
                             push!(deltas,delta)
                         end
-                        ## if conformal == :rfok                    
+                        ## if conformal == :rfok
                         ##     push!(rows,hcat(ooberror,convert(Array{Float64},trainingdata[i,labels])))
                         ## end
                         oobse += ooberror^2
                         nooob += 1
                     end
                 end
-                ## if conformal == :rfok                    
+                ## if conformal == :rfok
                 ##     maxk = minimum([45,nooob-1])
                 ##     deltasalphas = Array(Float64,nooob,maxk,2)
                 ##     distancematrix = Array(Float64,nooob,nooob)
                 ##     for r = 1:nooob-1
                 ##         distancematrix[r,r] = 0.001
                 ##         for k = r+1:nooob
-                ##             distance = sqL2dist(rows[r][2:end],rows[k][2:end])+0.001 # Small term added to prevent infinite weights 
+                ##             distance = sqL2dist(rows[r][2:end],rows[k][2:end])+0.001 # Small term added to prevent infinite weights
                 ##             distancematrix[r,k] = distance
                 ##             distancematrix[k,r] = distance
                 ##         end
-                ##     end     
+                ##     end
                 ##     distancematrix[nooob,nooob] = 0.001
                 ##     for r = 1:nooob
                 ##         distanceerrors = Array(Float64,nooob,2)
@@ -1381,7 +1042,7 @@ function run_cross_validation(protocol,predictiontask,methods)
                 ## elseif conformal == :isotonic
                 ##     eds = Array(Float64,nooob,2)
                 ##     eds[:,1] = ooberrors
-                ##     eds[:,2] = deltas            
+                ##     eds[:,2] = deltas
                 ##     eds = sortrows(eds,by=x->x[2])
                 ##     isotonicthresholds = Any[]
                 ##     mincalibrationsize = maximum([10;Int(floor(1/(round((1-methods[m].confidence)*1000000)/1000000))-1)])
@@ -1431,7 +1092,7 @@ function run_cross_validation(protocol,predictiontask,methods)
                         oobpredcount = oobpredictions[randomoob][1]
                         if oobpredcount > 0.0
                             thresholdindex = Int(floor(nooob*(1-methods[m].confidence)))
-                            if thresholdindex >= 1                
+                            if thresholdindex >= 1
                                 alpha = sort(alphas[[1:randomoob-1;randomoob+1:end]], rev=true)[thresholdindex]
                             else
                                 alpha = Inf
@@ -1456,7 +1117,7 @@ function run_cross_validation(protocol,predictiontask,methods)
                     ##     testrow = convert(Array{Float64},testdata[i,labels])
                     ##     distanceerrors = Array(Float64,nooob,2)
                     ##     for n = 1:size(rows,1)
-                    ##         distanceerrors[n,1] = sqL2dist(testrow,rows[n][2:end])+0.001 # Small term added to prevent infinite weights 
+                    ##         distanceerrors[n,1] = sqL2dist(testrow,rows[n][2:end])+0.001 # Small term added to prevent infinite weights
                     ##         distanceerrors[n,2] = rows[n][1]
                     ##     end
                     ##     distanceerrors = sortrows(distanceerrors,by=x->x[1])
@@ -1468,7 +1129,7 @@ function run_cross_validation(protocol,predictiontask,methods)
                     ##     end
                     ##     knndelta /= distancesum
                     ##     testdeltas[i] = knndelta
-                    ##     errorrange = alpha*(knndelta+0.01)                    
+                    ##     errorrange = alpha*(knndelta+0.01)
                     ##     if isnan(errorrange) || errorrange > largestrange
                     ##         errorrange = largestrange
                     ##     end
@@ -1536,7 +1197,7 @@ function run_cross_validation(protocol,predictiontask,methods)
             onec = Array(Float64,nofolds)
             classes = unique(globaldata[:CLASS])
             noclasses = length(classes)
-            foldauc = Array(Float64,noclasses)                
+            foldauc = Array(Float64,noclasses)
             classdata = Array(Any,noclasses)
             for c = 1:noclasses
                 classdata[c] = globaldata[globaldata[:CLASS] .== classes[c],:]
@@ -1567,7 +1228,7 @@ function run_cross_validation(protocol,predictiontask,methods)
                     end
                     end
                     thresholdindex = Int(floor((nooob+1)*(1-methods[m].confidence)))
-                    if thresholdindex >= 1                
+                    if thresholdindex >= 1
                         alpha = sort(alphas)[thresholdindex]
                     else
                         alpha = -Inf
@@ -1588,12 +1249,12 @@ function run_cross_validation(protocol,predictiontask,methods)
                             end
                         end
                         thresholdindex = Int(floor((noclassoob+1)*(1-methods[m].confidence)))
-                        if thresholdindex >= 1                
+                        if thresholdindex >= 1
                             classalphas[c] = sort(alphas)[thresholdindex]
                         else
                         classalphas[c] = -Inf
                         end
-                        nooob += noclassoob                    
+                        nooob += noclassoob
                     end
                 end
                 oobacc[foldno] = noobcorrect/nooob
@@ -1637,11 +1298,11 @@ function run_cross_validation(protocol,predictiontask,methods)
                             nolabelssum += nolabels
                             if nolabels == 1
                                 noonec += correct
-                            end                                
+                            end
                         end
-                        testexamplecounter += size(testdata[c],1)                        
+                        testexamplecounter += size(testdata[c],1)
                     end
-                end                
+                end
                 foldpredictions = predictions[origtestexamplecounter+1:testexamplecounter]
                 tempexamplecounter = 0
                 for c = 1:noclasses
@@ -1672,7 +1333,7 @@ function run_cross_validation(protocol,predictiontask,methods)
                 totalsquarederror = sum([results[r][3][2][foldno][2] for r = 1:length(results)])
                 avbrier[foldno] = totalsquarederror/totalnotrees
                 varbrier[foldno] = avbrier[foldno] - brierscore[foldno]
-            end                
+            end
         end
         extratime = toq()
         if predictiontask == :CLASS
@@ -1769,7 +1430,7 @@ function generate_and_test_trees(Argument)
             noirregularleafs += treenoirregularleafs
         end
         if predictiontask == :REGRESSION
-            nopredictions = size(testdata,1) 
+            nopredictions = size(testdata,1)
             predictions = Array(Any,nopredictions)
             squaredpredictions = Array(Any,nopredictions)
             squarederror = 0.0
@@ -1783,7 +1444,7 @@ function generate_and_test_trees(Argument)
                 for t = 1:length(model)
                     if method.modpred
                         if oob[t][randomoob]
-                            leafstats = make_prediction(model[t],newtestdata,i,0) 
+                            leafstats = make_prediction(model[t],newtestdata,i,0)
                             treeprediction = leafstats[2]/leafstats[1]
                             prediction += treeprediction
                             squaredprediction += treeprediction^2
@@ -1791,7 +1452,7 @@ function generate_and_test_trees(Argument)
                             nosampledtrees += 1
                         end
                     else
-                        leafstats = make_prediction(model[t],newtestdata,i,0) 
+                        leafstats = make_prediction(model[t],newtestdata,i,0)
                         treeprediction = leafstats[2]/leafstats[1]
                         prediction += treeprediction
                         squaredprediction += treeprediction^2
@@ -1831,7 +1492,7 @@ function generate_and_test_trees(Argument)
                                 classprobabilities += prediction
                                 correctclassificationcounter += 1-abs(sign(indmax(prediction)-c))
                                 squaredproberror += sqL2dist(correctclassvector,prediction)
-                                nosampledtrees += 1                                
+                                nosampledtrees += 1
                             end
                         else
                             prediction = make_prediction(model[t],newtestdata[c],i,zeros(noclasses))
@@ -1867,7 +1528,7 @@ function generate_and_test_trees(Argument)
             nocorrectclassifications = Array(Any,nofolds)
             squaredproberrors = Array(Any,nofolds)
             predictions = Array(Any,size(globaldata,1))
-            variables, types = get_variables_and_types(globaldata)            
+            variables, types = get_variables_and_types(globaldata)
         end
         oobpredictions = Array(Any,nofolds)
         modelsizes = Array(Int64,nofolds)
@@ -1902,7 +1563,7 @@ function generate_and_test_trees(Argument)
                     for i = 1:size(trainingdata[c],1)
                         oobpredictions[foldno][c][i] = [0;emptyprediction]
                     end
-                end                
+                end
                 if size(randomoobs,1) > 0
                     randomclassoobs = Array(Any,size(randomoobs[foldno],1))
                     for i = 1:size(randomclassoobs,1)
@@ -1947,7 +1608,7 @@ function generate_and_test_trees(Argument)
                     for t = 1:length(model)
                         if method.modpred
                             if oob[t][randomoob]
-                                leafstats = make_prediction(model[t],newtestdata,i,0) 
+                                leafstats = make_prediction(model[t],newtestdata,i,0)
                                 treeprediction = leafstats[2]/leafstats[1]
                                 prediction += treeprediction
                                 squaredprediction += treeprediction^2
@@ -1955,7 +1616,7 @@ function generate_and_test_trees(Argument)
                                 nosampledtrees += 1
                             end
                         else
-                            leafstats = make_prediction(model[t],newtestdata,i,0) 
+                            leafstats = make_prediction(model[t],newtestdata,i,0)
                             treeprediction = leafstats[2]/leafstats[1]
                             prediction += treeprediction
                             squaredprediction += treeprediction^2
@@ -1972,7 +1633,7 @@ function generate_and_test_trees(Argument)
                 end
                 squarederrors[foldno] = [totalnotrees;squarederror]
             else  # predictiontask == :CLASS
-                correctclassificationcounter = 0                
+                correctclassificationcounter = 0
                 squaredproberror = 0.0
                 totalnotrees = 0
                 foldtestexamplecounter = 0
@@ -2047,7 +1708,7 @@ function generate_trees(Argument)
         trainingdata = globaldata
         trainingrefs = collect(1:size(trainingdata,1))
         trainingweights = trainingdata[:WEIGHT]
-        regressionvalues = trainingdata[:REGRESSION]        
+        regressionvalues = trainingdata[:REGRESSION]
         oobpredictions = Array(Any,size(trainingdata,1))
         for i = 1:size(trainingdata,1)
             oobpredictions[i] = [0,0,0]
@@ -2076,7 +1737,7 @@ function find_missing_values(predictiontask,variables,trainingdata)
         for c = 1:noclasses
             missingvalues[c] = Array(Any,length(variables))
             nonmissingvalues[c] = Array(Any,length(variables))
-            for v = 1:length(variables) 
+            for v = 1:length(variables)
                 missingvalues[c][v] = Int[]
                 nonmissingvalues[c][v] = Any[]
                 variable = variables[v]
@@ -2090,13 +1751,13 @@ function find_missing_values(predictiontask,variables,trainingdata)
                             push!(nonmissingvalues[c][v],value)
                         end
                     end
-                end    
+                end
             end
-        end       
+        end
     else
         missingvalues = Array(Any,length(variables))
         nonmissingvalues = Array(Any,length(variables))
-        for v = 1:length(variables) 
+        for v = 1:length(variables)
             missingvalues[v] = Int[]
             nonmissingvalues[v] = Any[]
             variable = variables[v]
@@ -2110,7 +1771,7 @@ function find_missing_values(predictiontask,variables,trainingdata)
                         push!(nonmissingvalues[v],value)
                     end
                 end
-            end    
+            end
         end
     end
     return (missingvalues,nonmissingvalues)
@@ -2128,7 +1789,7 @@ function transform_nonmissing_columns_to_arrays(predictiontask,variables,trainin
                 else
                     newdata[c][v] = trainingdata[c][variables[v]]
                 end
-            end            
+            end
         end
     else
         newdata = Array(Any,length(variables))
@@ -2138,7 +1799,7 @@ function transform_nonmissing_columns_to_arrays(predictiontask,variables,trainin
             else
                 newdata[v] = trainingdata[variables[v]]
             end
-        end            
+        end
     end
     return newdata
 end
@@ -2169,7 +1830,7 @@ function sample_replacements_for_missing_values!(newtrainingdata,trainingdata,pr
                     end
                     newtrainingdata[c][v] = convert(Array,values)
                 end
-            end            
+            end
         end
     else
         for v = 1:length(variables)
@@ -2192,7 +1853,7 @@ function sample_replacements_for_missing_values!(newtrainingdata,trainingdata,pr
                 end
                 newtrainingdata[v] = convert(Array,values)
             end
-        end            
+        end
     end
     return nothing
 end
@@ -2210,7 +1871,7 @@ function replacements_for_missing_values!(newtestdata,testdata,predictiontask,va
                     newtestdata[c][v] = values
                 end
             end
-        end            
+        end
     else
         for v = 1:length(variables)
             if missingvalues[v] != []
@@ -2221,7 +1882,7 @@ function replacements_for_missing_values!(newtestdata,testdata,predictiontask,va
                 newtestdata[v] = values
             end
         end
-    end            
+    end
     return nothing
 end
 
@@ -2236,7 +1897,7 @@ function generate_tree(method,trainingrefs,trainingweights,regressionvalues,trai
             end
             selectedsample = rand(1:length(trainingrefs),samplesize)
             newtrainingweights[selectedsample] += 1.0
-            nonzeroweights = map(Bool,[newtrainingweights[i] > 0 for i=1:length(trainingweights)])
+            nonzeroweights = [newtrainingweights[i] > 0 for i=1:length(trainingweights)]
             newtrainingrefs = trainingrefs[nonzeroweights]
             newtrainingweights = newtrainingweights[nonzeroweights]
             newregressionvalues = regressionvalues[nonzeroweights]
@@ -2267,7 +1928,7 @@ function generate_tree(method,trainingrefs,trainingweights,regressionvalues,trai
             end
             zeroweights = Array(Any,noclasses)
             for c = 1:noclasses
-                nonzeroweights = map(Bool,[newtrainingweights[c][i] > 0 for i=1:length(newtrainingweights[c])])
+                nonzeroweights = [newtrainingweights[c][i] > 0 for i=1:length(newtrainingweights[c])]
                 zeroweights[c] = ~nonzeroweights
                 newtrainingrefs[c] = trainingrefs[c][nonzeroweights]
                 newtrainingweights[c] = newtrainingweights[c][nonzeroweights]
@@ -2332,7 +1993,7 @@ function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalue
                 noirregularleafnodes += 1
             else
                 leftrefs,leftweights,leftregressionvalues,rightrefs,rightweights,rightregressionvalues,leftweight =
-                    make_split(trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)                
+                    make_split(trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
                 varno, variable, splittype, splitpoint = bestsplit
                 if varimp
                     if predictiontask == :REGRESSION
@@ -2454,7 +2115,7 @@ function leaf_node(trainingweights,regressionvalues,predictiontask,depth,method)
         end
     end
 end
-    
+
 function make_leaf(trainingweights,regressionvalues,predictiontask,defaultprediction,method)
     if predictiontask == :CLASS
         noclasses = size(trainingweights,1)
@@ -2463,7 +2124,7 @@ function make_leaf(trainingweights,regressionvalues,predictiontask,defaultpredic
             classcounts[i] = sum(trainingweights[i])
         end
         noinstances = sum(classcounts)
-        if noinstances > 0 
+        if noinstances > 0
             if method.laplace
                 prediction = [(classcounts[i]+1)/(noinstances+noclasses) for i=1:noclasses]
             else
@@ -2475,7 +2136,7 @@ function make_leaf(trainingweights,regressionvalues,predictiontask,defaultpredic
     else
         sumweights = sum(trainingweights)
         sumregressionvalues = sum(regressionvalues)
-        return [sumweights,sumregressionvalues]        
+        return [sumweights,sumregressionvalues]
         ## if sumweights > 0
         ##     prediction = sum(trainingweights .* regressionvalues)/sumweights
         ## else
@@ -2506,7 +2167,7 @@ function find_best_split(trainingrefs,trainingweights,regressionvalues,trainingd
                 sampleselection = sample(1:length(variables),method.randsub,replace=false)
             end
         else
-            sampleselection = sample(1:length(variables),convert(Int,floor(method.randsub*length(variables))+1),replace=false) 
+            sampleselection = sample(1:length(variables),convert(Int,floor(method.randsub*length(variables))+1),replace=false)
         end
     end
     if method.splitsample > 0
@@ -2673,7 +2334,7 @@ function evaluate_classification_numeric_variable_randval(bestsplit,varno,variab
                     leftclasscounts[c] += trainingweights[c][i]
                 end
             end
-            rightclasscounts[c] = origclasscounts[c]-leftclasscounts[c]            
+            rightclasscounts[c] = origclasscounts[c]-leftclasscounts[c]
         end
         if sum(leftclasscounts) >= method.minleaf && sum(rightclasscounts) >= method.minleaf
             splitvalue = -information_content(leftclasscounts,rightclasscounts)
@@ -2718,7 +2379,7 @@ function information_content(left,right)
     noleft = sum(left)
     noright = sum(right)
     total = noleft+noright
-    if total > 0 
+    if total > 0
         return noleft/total*entropy(left,noleft)+noright/total*entropy(right,noright)
     else
         return Inf
@@ -2885,7 +2546,7 @@ function make_split(trainingrefs,trainingweights,regressionvalues,trainingdata,p
             rightweights[c] = Float64[]
             values[c] = trainingdata[c][varno][trainingrefs[c]]
             if splittype == :NUMERIC
-                for r = 1:length(trainingrefs[c]) 
+                for r = 1:length(trainingrefs[c])
                     ref = trainingrefs[c][r]
                     if values[c][r] <= splitpoint
                         push!(leftrefs[c],ref)
@@ -2896,7 +2557,7 @@ function make_split(trainingrefs,trainingweights,regressionvalues,trainingdata,p
                     end
                 end
             else
-                for r = 1:length(trainingrefs[c]) 
+                for r = 1:length(trainingrefs[c])
                     ref = trainingrefs[c][r]
                     if values[c][r] == splitpoint
                         push!(leftrefs[c],ref)
@@ -2910,7 +2571,7 @@ function make_split(trainingrefs,trainingweights,regressionvalues,trainingdata,p
         end
         noleftexamples = sum([sum(leftweights[i]) for i=1:noclasses])
         norightexamples = sum([sum(rightweights[i]) for i=1:noclasses])
-        leftweight = noleftexamples/(noleftexamples+norightexamples)        
+        leftweight = noleftexamples/(noleftexamples+norightexamples)
         return leftrefs,leftweights,[],rightrefs,rightweights,[],leftweight
     else
         leftrefs = Int[]
@@ -2923,7 +2584,7 @@ function make_split(trainingrefs,trainingweights,regressionvalues,trainingdata,p
         sumleftweights = 0.0
         sumrightweights = 0.0
         if splittype == :NUMERIC
-            for r = 1:length(trainingrefs) 
+            for r = 1:length(trainingrefs)
                 ref = trainingrefs[r]
                 if values[r] <= splitpoint
                     push!(leftrefs,ref)
@@ -2938,7 +2599,7 @@ function make_split(trainingrefs,trainingweights,regressionvalues,trainingdata,p
                 end
             end
         else
-            for r = 1:length(trainingrefs) 
+            for r = 1:length(trainingrefs)
                 ref = trainingrefs[r]
                 if values[r] == splitpoint
                     push!(leftrefs,ref)
@@ -2954,7 +2615,7 @@ function make_split(trainingrefs,trainingweights,regressionvalues,trainingdata,p
             end
         end
     end
-    leftweight = sumleftweights/(sumleftweights+sumrightweights)        
+    leftweight = sumleftweights/(sumleftweights+sumrightweights)
     return leftrefs,leftweights,leftregressionvalues,rightrefs,rightweights,rightregressionvalues,leftweight
 end
 
@@ -2974,11 +2635,11 @@ end
 
 function information_gain(trainingweights,leftweights,rightweights)
     origclasscounts = [sum(trainingweights[c]) for c=1:size(trainingweights,1)]
-    orignoexamples = sum(origclasscounts) 
+    orignoexamples = sum(origclasscounts)
     leftclasscounts = [sum(leftweights[c]) for c=1:size(leftweights,1)]
-    leftnoexamples = sum(leftclasscounts) 
+    leftnoexamples = sum(leftclasscounts)
     rightclasscounts = [sum(rightweights[c]) for c=1:size(rightweights,1)]
-    rightnoexamples = sum(rightclasscounts) 
+    rightnoexamples = sum(rightclasscounts)
     return -orignoexamples*entropy(origclasscounts,orignoexamples)+leftnoexamples*entropy(leftclasscounts,leftnoexamples)+rightnoexamples*entropy(rightclasscounts,rightnoexamples)
 end
 
@@ -3052,7 +2713,7 @@ function make_loo_prediction(tree,testdata,exampleno,prediction)
                         emptyleaf = true
                     else
                         nodeno = node[2]
-                    end                    
+                    end
                 else
                     rightchild = tree[node[3]]
                     if rightchild[1] == :LEAF && rightchild[2][1] < 2.0
@@ -3070,7 +2731,7 @@ function make_loo_prediction(tree,testdata,exampleno,prediction)
                         emptyleaf = true
                     else
                         nodeno = node[2]
-                    end                    
+                    end
                 else
                     rightchild = tree[node[3]]
                     if rightchild[1] == :LEAF && rightchild[2][1] < 2.0
@@ -3128,7 +2789,7 @@ function present_results(results,methods;ignoredatasetlabel = false)
         end
         methodlabels = [string("M",i) for i=1:length(methods)]
         maxdatasetnamesize = maximum([length(dataset) for (task,dataset,results) in results])
-        if results[1][1] == :CLASS 
+        if results[1][1] == :CLASS
             println("\nClassification results")
         else
             println("\nRegression results")
@@ -3243,7 +2904,7 @@ function present_results(results,methods;ignoredatasetlabel = false)
             println("")
         end
     end
-end    
+end
 
 function print_aligned_r(Str,Size)
     noblanks = Size-length(Str)
@@ -3288,7 +2949,7 @@ end
 ## Functions for working with a single dataset
 ##
 
-function load_data(source; separator = ',') 
+function load_data(source; separator = ',')
     if typeof(source) == ASCIIString
         global globaldata = read_data(source, separator=separator) # Made global to allow access from workers
         initiate_workers()
@@ -3317,27 +2978,27 @@ end
 function evaluate_method(;method = forest(),protocol = 10)
     println("Running experiment")
     totaltime = @elapsed results = [run_single_experiment(protocol,[method])]
-    classificationresults = map(Bool,[pt == :CLASS for (pt,f,r) in results])
-    regressionresults = map(Bool,[pt == :REGRESSION for (pt,f,r) in results])
+    classificationresults = [pt == :CLASS for (pt,f,r) in results]
+    regressionresults = [pt == :REGRESSION for (pt,f,r) in results]
     present_results(sort(results[classificationresults]),[method],ignoredatasetlabel = true)
     present_results(sort(results[regressionresults]),[method],ignoredatasetlabel = true)
-    println("Total time: $(round(totaltime,2)) s.")    
+    println("Total time: $(round(totaltime,2)) s.")
 end
 
 function evaluate_methods(;methods = [forest()],protocol = 10)
     println("Running experiment")
     totaltime = @elapsed results = [run_single_experiment(protocol,methods)]
-    classificationresults = map(Bool,[pt == :CLASS for (pt,f,r) in results])
-    regressionresults = map(Bool,[pt == :REGRESSION for (pt,f,r) in results])
+    classificationresults = [pt == :CLASS for (pt,f,r) in results]
+    regressionresults = [pt == :REGRESSION for (pt,f,r) in results]
     present_results(sort(results[classificationresults]),methods,ignoredatasetlabel = true)
     present_results(sort(results[regressionresults]),methods,ignoredatasetlabel = true)
-    println("Total time: $(round(totaltime,2)) s.")    
+    println("Total time: $(round(totaltime,2)) s.")
 end
 
-function run_single_experiment(protocol, methods)   
+function run_single_experiment(protocol, methods)
     predictiontask = prediction_task(globaldata)
     if predictiontask == :NONE
-        println("The loaded dataset is not on the correct format") 
+        println("The loaded dataset is not on the correct format")
         println("This may be due to an incorrectly specified separator, e.g., use: separator = \'\\t\'")
         result = (:NONE,:NONE,:NONE)
     else
@@ -3358,7 +3019,7 @@ end
 function generate_model(;method = forest())
     predictiontask = prediction_task(globaldata)
     if predictiontask == :NONE
-        println("The loaded dataset is not on the correct format: CLASS/REGRESSION column missing") 
+        println("The loaded dataset is not on the correct format: CLASS/REGRESSION column missing")
         println("This may be due to an incorrectly specified separator, e.g., use: separator = \'\\t\'")
         result = :NONE
     else
@@ -3415,7 +3076,7 @@ function generate_model(;method = forest())
                     end
                 end
                 thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
-                if thresholdindex >= 1                
+                if thresholdindex >= 1
                     sortedalphas = sort(alphas)
                     alpha = sortedalphas[thresholdindex]
                 else
@@ -3438,13 +3099,13 @@ function generate_model(;method = forest())
                         end
                     end
                     thresholdindex = Int(floor((noclassoob+1)*(1-method.confidence)))
-                    if thresholdindex >= 1                
+                    if thresholdindex >= 1
                         classalphas[c] = sort(classalphas[c])
                         classalpha[c] = classalphas[c][thresholdindex]
                     else
                         classalpha[c] = -Inf
                     end
-                    nooob += noclassoob                    
+                    nooob += noclassoob
                 end
                 conformalfunction = (:classcond,classalpha,classalphas)
             end
@@ -3467,12 +3128,12 @@ function generate_model(;method = forest())
                     push!(ooberrors,ooberror)
                     delta = (oobpredictions[i][3]/oobpredcount-(oobpredictions[i][2]/oobpredcount)^2)
                     alpha = 2*ooberror/(delta+0.01)
-                    push!(alphas,alpha)                    
-#                    push!(deltas,delta)                    
+                    push!(alphas,alpha)
+#                    push!(deltas,delta)
                     oobse += ooberror^2
                     nooob += 1
                 end
-            end            
+            end
             oobperformance = oobse/nooob
             thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
             largestrange = maximum(correcttrainingvalues)-minimum(correcttrainingvalues)
@@ -3500,7 +3161,7 @@ function generate_model(;method = forest())
             ## elseif conformal == :isotonic
             ##     eds = Array(Float64,nooob,2)
             ##     eds[:,1] = ooberrors
-            ##     eds[:,2] = deltas            
+            ##     eds[:,2] = deltas
             ##     eds = sortrows(eds,by=x->x[2])
             ##     isotonicthresholds = Any[]
             ##     mincalibrationsize = maximum([10;Int(floor(1/(round((1-method.confidence)*1000000)/1000000))-1)])
@@ -3568,7 +3229,7 @@ function describe_model(model::PredictionModel)
         println("Prediction task: regression")
     end
     println("Learning method:")
-    present_method(0,model.method,showmethodlabel = false)    
+    present_method(0,model.method,showmethodlabel = false)
     if model.predictiontask == :CLASS
         println("OOB accuracy: $(model.oobperformance)")
     else
@@ -3583,8 +3244,8 @@ end
 
 function apply_model(model; confidence = :std)
     predictiontask = prediction_task(globaldata)
-    if predictiontask != model.predictiontask 
-        println("The model is not consistent with the loaded dataset") 
+    if predictiontask != model.predictiontask
+        println("The model is not consistent with the loaded dataset")
         predictions = :NONE
     else
         nocoworkers = nprocs()-1
@@ -3615,12 +3276,12 @@ function apply_model(model; confidence = :std)
             end
         else
             if predictiontask == :REGRESSION
-                predictions, squaredpredictions = apply_trees((predictiontask,model.classes,model.trees))               
+                predictions, squaredpredictions = apply_trees((predictiontask,model.classes,model.trees))
             else
                 predictions = apply_trees((predictiontask,model.classes,model.trees))
             end
         end
-        predictions = predictions/model.method.notrees                
+        predictions = predictions/model.method.notrees
         if predictiontask == :REGRESSION
             squaredpredictions = squaredpredictions/model.method.notrees
             if model.conformal[1] == :std
@@ -3706,7 +3367,7 @@ function apply_model(model; confidence = :std)
                     for c = 1:noclasses
                         noclassoob = size(model.conformal[3][c],1)
                         thresholdindex = Int(floor((noclassoob+1)*(1-confidence)))
-                        if thresholdindex >= 1                
+                        if thresholdindex >= 1
                             classalpha[c] = model.conformal[3][c][thresholdindex]
                         else
                             classalpha[c] = -Inf
@@ -3734,8 +3395,8 @@ function apply_trees(Args)
     variables, types = get_variables_and_types(globaldata)
     testmissingvalues, testnonmissingvalues = find_missing_values(:UNKNOWN,variables,globaldata)
     newtestdata = transform_nonmissing_columns_to_arrays(:UNKNOWN,variables,globaldata,testmissingvalues)
-    replacements_for_missing_values!(newtestdata,globaldata,:UNKNOWN,variables,types,testmissingvalues,testnonmissingvalues)    
-    nopredictions = size(globaldata,1) 
+    replacements_for_missing_values!(newtestdata,globaldata,:UNKNOWN,variables,types,testmissingvalues,testnonmissingvalues)
+    nopredictions = size(globaldata,1)
     if predictiontask == :CLASS
         noclasses = length(classes)
         predictions = Array(Any,nopredictions)
