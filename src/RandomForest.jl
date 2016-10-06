@@ -237,7 +237,7 @@ end
 function initiate_workers()
     pr = Array(Any,nprocs())
     for i = 2:nprocs()
-        pr[i] = remotecall(i,load_global_dataset)
+        pr[i] = remotecall(load_global_dataset,i)
     end
     for i = 2:nprocs()
         wait(pr[i])
@@ -251,7 +251,7 @@ end
 function update_workers()
     pr = Array(Any,nprocs())
     for i = 2:nprocs()
-        pr[i] = remotecall(i,update_global_dataset)
+        pr[i] = remotecall(update_global_dataset,i)
     end
     for i = 2:nprocs()
         wait(pr[i])
