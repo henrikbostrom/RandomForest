@@ -62,13 +62,17 @@ export
     describe_model,
     apply_model,
     runexp,
-    LearningMethod,
-    Classifier,
-    Regressor,
+    fit!,
+    predict,
+    # LearningMethod,
+    # Classifier,
+    # Regressor,
     forestClassifier,
     treeClassifier,
     forestRegressor,
-    treeRegressor
+    treeRegressor,
+    forestSurvival,
+    treeSurvival
 
 
 include("types.jl")
@@ -78,6 +82,7 @@ include("classification.jl")
 include("regression.jl")
 include("classificationWithTest.jl")
 include("regressionWithTest.jl")
+include("scikitlearnAPI.jl")
 
 # MOH FIXME:should use Julia standardized versioning instead
 global majorversion = 0
@@ -397,6 +402,5 @@ function load_data(source; separator = ',')
         println("Data can only be loaded from text files or DataFrames")
     end
 end
-
 
 end

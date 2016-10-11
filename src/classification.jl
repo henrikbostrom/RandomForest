@@ -497,7 +497,7 @@ function make_split(method::LearningMethod{Classifier},trainingrefs,trainingweig
     return leftrefs,leftweights,[],rightrefs,rightweights,[],leftweight
 end
 
-function generate_model_internal(method::LearningMethod{Classifier})
+function generate_model_internal(method::LearningMethod{Classifier}, oobs)
     if method.conformal == :default
         conformal = :std
     else
@@ -577,13 +577,13 @@ function apply_model(model::PredictionModel{Classifier}; confidence = :std)
             alltrees[i] = model.trees[index+1:index+notrees[i]]
             index += notrees[i]
         end
-        results = pmap(apply_trees,[(mode.method,model.classes,subtrees) for subtrees in alltrees])
+        results = pmap(apply_trees,[(model.method,model.classes,subtrees) for subtrees in alltrees])
         predictions = results[1]
         for r = 2:length(results)
             predictions += results[r]
         end
     else
-        predictions = apply_trees((mode.method,model.classes,model.trees))
+        predictions = apply_trees((model.method,model.classes,model.trees))
     end
     predictions = predictions/model.method.notrees
     results = Array(Any,size(predictions,1))
@@ -643,9 +643,9 @@ function apply_trees(Arguments::Tuple{LearningMethod{Classifier},Any,Any})
     # AMG: method is redundent here
     method, classes, trees = Arguments
     variables, types = get_variables_and_types(globaldata)
-    testmissingvalues, testnonmissingvalues = find_missing_values(:UNKNOWN,variables,globaldata)
-    newtestdata = transform_nonmissing_columns_to_arrays(:UNKNOWN,variables,globaldata,testmissingvalues)
-    replacements_for_missing_values!(:UNKNOWN,newtestdata,globaldata,variables,types,testmissingvalues,testnonmissingvalues)
+    testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,globaldata)
+    newtestdata = transform_nonmissing_columns_to_arrays(method,variables,globaldata,testmissingvalues)
+    replacements_for_missing_values!(method,newtestdata,globaldata,variables,types,testmissingvalues,testnonmissingvalues)
     nopredictions = size(globaldata,1)
     noclasses = length(classes)
     predictions = Array(Any,nopredictions)

@@ -231,7 +231,7 @@ function generate_model(method)
         variables, types = get_variables_and_types(globaldata)
         variableimportance = hcat(variables,variableimportance)
         oobperformance, conformalfunction = generate_model_internal(method, oobs)
-        result = PredictionModel(predictiontask,classes,(majorversion,minorversion,patchversion),method,oobperformance,variableimportance,vcat(trees...),conformalfunction)
+        result = PredictionModel{typeof(method.learningType)}(method,classes,(majorversion,minorversion,patchversion),oobperformance,variableimportance,vcat(trees...),conformalfunction)
         println("Model generated")
     end
     return result

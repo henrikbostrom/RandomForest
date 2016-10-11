@@ -31,46 +31,14 @@ type LearningMethod{T<:LearningType}
     conformal::Any
 end
 
-
-
-function tree(;minleaf = 5, maxdepth = 0, randsub = :all, randval = false,
+function tree(;learningType = Undefined(), minleaf = 5, maxdepth = 0, randsub = :all, randval = false,
               splitsample = 0, bagging = false, bagsize = 1.0, modpred = false, laplace = true, confidence = 0.95, conformal = :default)
-    return LearningMethod(Undefined(),:tree,1,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
+    return LearningMethod(learningType,:tree,1,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
 end
 
-function forest(;minleaf = 1, maxdepth = 0, randsub = :default, randval = true,
+function forest(;learningType = Undefined(), minleaf = 1, maxdepth = 0, randsub = :default, randval = true,
                 splitsample = 0, bagging = true, bagsize = 1.0, modpred = false, laplace = false, confidence = 0.95, conformal = :default, notrees = 100)
-    return LearningMethod(Undefined(),:forest,notrees,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
-end
-
-function treeClassifier(;minleaf = 5, maxdepth = 0, randsub = :all, randval = false,
-              splitsample = 0, bagging = false, bagsize = 1.0, modpred = false, laplace = true, confidence = 0.95, conformal = :default)
-    return LearningMethod(Classifier(), :tree,1,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
-end
-
-function treeRegressor(;minleaf = 5, maxdepth = 0, randsub = :all, randval = false,
-              splitsample = 0, bagging = false, bagsize = 1.0, modpred = false, laplace = true, confidence = 0.95, conformal = :default)
-    return LearningMethod(Regressor(), :tree,1,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
-end
-
-function treeSurvival(;minleaf = 5, maxdepth = 0, randsub = :all, randval = false,
-              splitsample = 0, bagging = false, bagsize = 1.0, modpred = false, laplace = true, confidence = 0.95, conformal = :default)
-    return LearningMethod(Survival(), :tree,1,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
-end
-
-function forestClassifier(;minleaf = 1, maxdepth = 0, randsub = :default, randval = true,
-                splitsample = 0, bagging = true, bagsize = 1.0, modpred = false, laplace = false, confidence = 0.95, conformal = :default, notrees = 100)
-    return LearningMethod(Classifier(), :forest,notrees,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
-end
-
-function forestRegressor(;minleaf = 1, maxdepth = 0, randsub = :default, randval = true,
-                splitsample = 0, bagging = true, bagsize = 1.0, modpred = false, laplace = false, confidence = 0.95, conformal = :default, notrees = 100)
-    return LearningMethod(Regressor(), :forest,notrees,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
-end
-
-function forestSurvival(;minleaf = 1, maxdepth = 0, randsub = :default, randval = true,
-                splitsample = 0, bagging = true, bagsize = 1.0, modpred = false, laplace = false, confidence = 0.95, conformal = :default, notrees = 100)
-    return LearningMethod(Survival(), :forest,notrees,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
+    return LearningMethod(learningType,:forest,notrees,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
 end
 
 type RegressionResult
@@ -107,11 +75,49 @@ type ClassificationResult
 end
 
 type PredictionModel{T}
+    method::LearningMethod{T}
     classes::Any
     version::Any
-    method::LearningMethod{T}
     oobperformance::Any
     variableimportance::Any
     trees::Any
     conformal::Any
+    PredictionModel(m) = new(m)
+    PredictionModel(method,class,ver,oob,varImp,trees,conformal) = new(method,class,ver,oob,varImp,trees,conformal)
+end
+
+function treeClassifier(;minleaf = 5, maxdepth = 0, randsub = :all, randval = false,
+              splitsample = 0, bagging = false, bagsize = 1.0, modpred = false, laplace = true, confidence = 0.95, conformal = :default)
+    method = LearningMethod(Classifier(), :tree,1,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
+    return PredictionModel{Classifier}(method)
+end
+
+function treeRegressor(;minleaf = 5, maxdepth = 0, randsub = :all, randval = false,
+              splitsample = 0, bagging = false, bagsize = 1.0, modpred = false, laplace = true, confidence = 0.95, conformal = :default)
+    method = LearningMethod(Regressor(), :tree,1,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
+    return PredictionModel{Regressor}(method)
+end
+
+function treeSurvival(;minleaf = 5, maxdepth = 0, randsub = :all, randval = false,
+              splitsample = 0, bagging = false, bagsize = 1.0, modpred = false, laplace = true, confidence = 0.95, conformal = :default)
+    method = LearningMethod(Survival(), :tree,1,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
+    return PredictionModel{Survival}(method)
+end
+
+function forestClassifier(;minleaf = 1, maxdepth = 0, randsub = :default, randval = true,
+                splitsample = 0, bagging = true, bagsize = 1.0, modpred = false, laplace = false, confidence = 0.95, conformal = :default, notrees = 100)
+    method = LearningMethod(Classifier(), :forest,notrees,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
+    return PredictionModel{Classifier}(method)
+end
+
+function forestRegressor(;minleaf = 1, maxdepth = 0, randsub = :default, randval = true,
+                splitsample = 0, bagging = true, bagsize = 1.0, modpred = false, laplace = false, confidence = 0.95, conformal = :default, notrees = 100)
+    method = LearningMethod(Regressor(), :forest,notrees,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
+    return PredictionModel{Regressor}(method)
+end
+
+function forestSurvival(;minleaf = 1, maxdepth = 0, randsub = :default, randval = true,
+                splitsample = 0, bagging = true, bagsize = 1.0, modpred = false, laplace = false, confidence = 0.95, conformal = :default, notrees = 100)
+    return LearningMethod(Survival(), :forest,notrees,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
+    return PredictionModel{Survival}(method)
 end
