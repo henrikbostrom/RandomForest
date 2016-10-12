@@ -24,6 +24,12 @@ The regression datasets included in regression.zip have been downloaded and adap
 
 Rasmussen,  C.E.,  Neal,  R.M.,  Hinton,  G.,  van  Camp,  D.,  Revow,  M.,  Ghahramani, Z., Kustra, R., and Tibshirani, R. (1996) Delve data for evaluating learning in valid experiments [http://www.cs.toronto.edu/~delve/data/datasets.html]
 
+The survival datasets included in survival.zip have been downloaded and adapted from:
+
+Statistical Software Information, University of Massachusetts Amherst, Index of Survival Analysis Datasets, 
+[https://www.umass.edu/statdata/statdata/stat-survival.html]
+
+
 To install the package
 ----------------------
 
@@ -37,7 +43,7 @@ Install a requested package:
 
     julia> Pkg.add("DataFrames")
 
-Try to load the RandomForest package:
+Try to load the RandomForest package (assuming that the current directory is in your load path, e.g., add "push!(LOAD_PATH, pwd())" to the file ".juliarc.jl" in your home directory):
 
     julia> using RandomForests
 
