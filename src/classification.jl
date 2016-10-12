@@ -1,7 +1,3 @@
-#= AMG
-build model, test, and get results separately
-=#
-
 function generate_trees(Arguments::Tuple{LearningMethod{Classifier},Any,Any,Any,Any})
     method,predictiontask,classes,notrees,randseed = Arguments
     s = size(globaldata,1)
@@ -22,8 +18,9 @@ function generate_trees(Arguments::Tuple{LearningMethod{Classifier},Any,Any,Any,
         end
     end
     regressionvalues = []
-
-    # AMGAD: starting from here till the end of the function is duplicated between here and the Regressor dispatcher
+    timevalues = []
+    eventvalues = []
+    # starting from here till the end of the function is duplicated between here and the Regressor and Survival dispatchers
     # need to be cleaned
     variables, types = get_variables_and_types(globaldata)
     modelsize = 0
@@ -33,7 +30,7 @@ function generate_trees(Arguments::Tuple{LearningMethod{Classifier},Any,Any,Any,
     variableimportance = zeros(size(variables,1))
     for treeno = 1:notrees
         sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
-        model[treeno], treevariableimportance, noleafs, noirregularleafs = generate_tree(method,trainingrefs,trainingweights,regressionvalues,newtrainingdata,variables,types,predictiontask,oobpredictions,varimp = true)
+        model[treeno], treevariableimportance, noleafs, noirregularleafs = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,predictiontask,oobpredictions,varimp = true)
         modelsize += noleafs
         variableimportance += treevariableimportance
     end
@@ -128,7 +125,7 @@ function replacements_for_missing_values!(method::LearningMethod{Classifier},new
 end
 
 
-function generate_tree(method::LearningMethod{Classifier},trainingrefs,trainingweights,regressionvalues,trainingdata,variables,types,predictiontask,oobpredictions; varimp = false)
+function generate_tree(method::LearningMethod{Classifier},trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,predictiontask,oobpredictions; varimp = false)
     if method.bagging
         noclasses = length(trainingweights)
         classweights = map(Float64,[length(t) for t in trainingrefs])
@@ -153,7 +150,7 @@ function generate_tree(method::LearningMethod{Classifier},trainingrefs,trainingw
             newtrainingrefs[c] = trainingrefs[c][nonzeroweights]
             newtrainingweights[c] = newtrainingweights[c][nonzeroweights]
         end
-        model, variableimportance, noleafs, noirregularleafs = build_tree(method,newtrainingrefs,newtrainingweights,regressionvalues,trainingdata,variables,types,predictiontask,varimp)
+        model, variableimportance, noleafs, noirregularleafs = build_tree(method,newtrainingrefs,newtrainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,predictiontask,varimp)
         for c = 1:noclasses
             oobrefs = trainingrefs[c][zeroweights[c]]
             for oobref in oobrefs
@@ -161,7 +158,7 @@ function generate_tree(method::LearningMethod{Classifier},trainingrefs,trainingw
             end
         end
     else
-        model, variableimportance, noleafs, noirregularleafs = build_tree(method,trainingrefs,trainingweights,regressionvalues,trainingdata,variables,types,predictiontask,varimp)
+        model, variableimportance, noleafs, noirregularleafs = build_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,predictiontask,varimp)
     end
     if varimp
         return model, variableimportance, noleafs, noirregularleafs, zeroweights
@@ -170,7 +167,7 @@ function generate_tree(method::LearningMethod{Classifier},trainingrefs,trainingw
     end
 end
 
-function default_prediction(trainingweights,regressionvalues,predictiontask,method::LearningMethod{Classifier})
+function default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,predictiontask,method::LearningMethod{Classifier})
     noclasses = size(trainingweights,1)
     classcounts = [sum(trainingweights[i]) for i=1:noclasses]
     noinstances = sum(classcounts)
@@ -185,7 +182,7 @@ function default_prediction(trainingweights,regressionvalues,predictiontask,meth
     end
 end
 
-function leaf_node(trainingweights,regressionvalues,predictiontask,depth,method::LearningMethod{Classifier})
+function leaf_node(trainingweights,regressionvalues,eventvalues,predictiontask,depth,method::LearningMethod{Classifier})
     if method.maxdepth > 0 && method.maxdepth == depth
         return true
     else
@@ -212,7 +209,7 @@ function leaf_node(trainingweights,regressionvalues,predictiontask,depth,method:
     end
 end
 
-function make_leaf(trainingweights,regressionvalues,predictiontask,defaultprediction,method::LearningMethod{Classifier})
+function make_leaf(trainingweights,regressionvalues,timevalues,eventvalues,predictiontask,defaultprediction,method::LearningMethod{Classifier})
     noclasses = size(trainingweights,1)
     classcounts = zeros(noclasses)
     for i=1:noclasses
@@ -231,7 +228,7 @@ function make_leaf(trainingweights,regressionvalues,predictiontask,defaultpredic
     return prediction
 end
 
-function find_best_split(trainingrefs,trainingweights,regressionvalues,trainingdata,variables,types,predictiontask,method::LearningMethod{Classifier})
+function find_best_split(trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,predictiontask,method::LearningMethod{Classifier})
     if method.randsub == :all
         sampleselection = collect(1:length(variables))
     elseif method.randsub == :default
@@ -453,7 +450,7 @@ function entropy(counts,total)
     return entropyval
 end
 
-function make_split(method::LearningMethod{Classifier},trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
+function make_split(method::LearningMethod{Classifier},trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,predictiontask,bestsplit)
     (varno, variable, splittype, splitpoint) = bestsplit
     noclasses = size(trainingrefs,1)
     leftrefs = Array(Any,noclasses)
@@ -494,7 +491,7 @@ function make_split(method::LearningMethod{Classifier},trainingrefs,trainingweig
     noleftexamples = sum([sum(leftweights[i]) for i=1:noclasses])
     norightexamples = sum([sum(rightweights[i]) for i=1:noclasses])
     leftweight = noleftexamples/(noleftexamples+norightexamples)
-    return leftrefs,leftweights,[],rightrefs,rightweights,[],leftweight
+    return leftrefs,leftweights,[],[],[],rightrefs,rightweights,[],[],[],leftweight
 end
 
 function generate_model_internal(method::LearningMethod{Classifier})

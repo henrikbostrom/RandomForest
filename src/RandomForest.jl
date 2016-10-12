@@ -1,9 +1,10 @@
 ## jl
-## v. 0.0.9
+## v. 0.10.0
 ##
-## Random forests for classification and regression with conformal prediction
+## Random forests for classification, regression and survival analysis with conformal prediction
+## NOTE: survival analysis under development!
 ##
-## Developed for Julia 0.4 (http://julialang.org/)
+## Developed for Julia 0.5 (http://julialang.org/)
 ##
 ## Copyright Henrik Boström 2016
 ## Email: henrik.bostrom@dsv.su.se
@@ -68,21 +69,24 @@ export
     forestClassifier,
     treeClassifier,
     forestRegressor,
-    treeRegressor
-
+    treeRegressor,
+    forestSurvival,
+    treeSurvival
 
 include("types.jl")
 include("common.jl")
 include("print.jl")
 include("classification.jl")
 include("regression.jl")
+include("survival.jl")
 include("classificationWithTest.jl")
 include("regressionWithTest.jl")
+include("survivalWithTest.jl")
 
 # MOH FIXME:should use Julia standardized versioning instead
 global majorversion = 0
 global minorversion = 0
-global patchversion = 9
+global patchversion = 10
 
 """`runexp` is used to test the performance of the library on a number of test sets"""
 function runexp()
@@ -90,6 +94,8 @@ function runexp()
     experiment(files="uci",methods=[forest(),forest(notrees=500)],resultfile="uci-results.txt")
     experiment(files = ["regression/cooling.txt"]) # Warmup
     experiment(files="regression",methods=[forest(),forest(notrees=500)],resultfile="regression-results.txt")
+    experiment(files = ["survival/pharynx.csv"]) # Warmup
+    experiment(files="survival",methods=[forest(notrees=500,minleaf=10),forest(notrees=1000,minleaf=10)],resultfile="survival-results.txt")
 end
 
 
@@ -113,8 +119,10 @@ function experiment(;files = ".", separator = ',', protocol = 10, normalizetarge
     totaltime = @elapsed results = [run_experiment(file,separator,protocol,normalizetarget,normalizeinput,methods) for file in filenames]
     classificationresults = [pt == :CLASS for (pt,f,r) in results]
     regressionresults = [pt == :REGRESSION for (pt,f,r) in results]
+    survivalresults = [pt == :SURVIVAL for (pt,f,r) in results]
     present_results(sort(results[classificationresults]),methods)
     present_results(sort(results[regressionresults]),methods)
+    present_results(sort(results[survivalresults]),methods)
     println("Total time: $(round(totaltime,2)) s.")
     if resultfile != :none
         origstdout = STDOUT
@@ -122,6 +130,7 @@ function experiment(;files = ".", separator = ',', protocol = 10, normalizetarge
         redirect_stdout(resultfilestream)
         present_results(sort(results[classificationresults]),methods)
         present_results(sort(results[regressionresults]),methods)
+        present_results(sort(results[survivalresults]),methods)
         println("Total time: $(round(totaltime,2)) s.")
         redirect_stdout(origstdout)
         close(resultfilestream)
@@ -137,10 +146,11 @@ function run_experiment(file, separator, protocol, normalizetarget, normalizeinp
     else
         if predictiontask == :REGRESSION
             methods = map(x->LearningMethod(Regressor(), (getfield(x,i) for i in fieldnames(x)[2:end])...), methods)
-        else
+        elseif predictiontask == :CLASS
             methods = map(x->LearningMethod(Classifier(), (getfield(x,i) for i in fieldnames(x)[2:end])...), methods)
-        end
-        
+        else # predictiontask == :SURVIVAL
+            methods = map(x->LearningMethod(Survival(), (getfield(x,i) for i in fieldnames(x)[2:end])...), methods)
+        end        
         if predictiontask == :REGRESSION && normalizetarget
             regressionvalues = globaldata[:REGRESSION]
             minval = minimum(regressionvalues)
@@ -150,7 +160,7 @@ function run_experiment(file, separator, protocol, normalizetarget, normalizeinp
         end
         if normalizeinput # NOTE: currently assumes that all input is numeric and that there are no missing values
             for label in names(globaldata)
-                if ~(label in [:REGRESSION,:CLASS,:ID,:WEIGHT,:TEST,:FOLD])
+                if ~(label in [:REGRESSION,:CLASS,:ID,:WEIGHT,:TEST,:FOLD,:TIME,:EVENT])
                     min = minimum(globaldata[label])
                     max = maximum(globaldata[label])
                     if min < max
@@ -229,7 +239,7 @@ function run_split(testoption,predictiontask,methods)
         end
         time = @elapsed results = pmap(generate_and_test_trees,[(methods[m],predictiontask,:test,n,rand(1:1000_000_000),randomoobs) for n in notrees])
         tic()
-        methodresults[m] = run_split_internal(methods[m], results)
+        methodresults[m] = run_split_internal(methods[m], results, time)
     end
     return methodresults
 end
@@ -366,12 +376,18 @@ function prediction_task(method::LearningMethod{Classifier})
     return :CLASS
 end
 
+function prediction_task(method::LearningMethod{Survival})
+    return :SURVIVAL
+end
+
 function prediction_task(data)
     allnames = names(data)
     if :CLASS in allnames
         return :CLASS
     elseif :REGRESSION in allnames
         return :REGRESSION
+    elseif :TIME in allnames && :EVENT in allnames
+        return :SURVIVAL
     else
         return :NONE
     end

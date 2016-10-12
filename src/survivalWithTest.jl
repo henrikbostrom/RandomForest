@@ -1,7 +1,4 @@
-#= AMG
-build model and test and get results
-=#
-function run_split_internal(method::LearningMethod{Regressor}, results, time)
+function run_split_internal(method::LearningMethod{Survival}, results, time)
     modelsize = sum([result[1] for result in results])
     noirregularleafs = sum([result[6] for result in results])
     predictions = results[1][2]
@@ -9,7 +6,6 @@ function run_split_internal(method::LearningMethod{Regressor}, results, time)
         predictions += results[r][2]
     end
     nopredictions = size(predictions,1)
-
     predictions = [predictions[i][2]/predictions[i][1] for i = 1:nopredictions]
     if method.conformal == :default
         conformal = :normalized
@@ -28,7 +24,7 @@ function run_split_internal(method::LearningMethod{Regressor}, results, time)
         oobpredictions += results[r][4]
     end
     trainingdata = globaldata[globaldata[:TEST] .== false,:]
-    correcttrainingvalues = trainingdata[:REGRESSION]
+    correcttrainingvalues = trainingdata[:EVENT]
     oobse = 0.0
     nooob = 0
     ooberrors = Float64[]
@@ -39,7 +35,7 @@ function run_split_internal(method::LearningMethod{Regressor}, results, time)
     ##     rows = Array{Float64}[]
     ##     knnalphas = Float64[]
     ## end
-    largestrange = maximum(correcttrainingvalues)-minimum(correcttrainingvalues)
+    largestrange = 2*(maximum(correcttrainingvalues)-minimum(correcttrainingvalues))
     for i = 1:length(correcttrainingvalues)
         oobpredcount = oobpredictions[i][1]
         if oobpredcount > 0.0
@@ -119,6 +115,8 @@ function run_split_internal(method::LearningMethod{Regressor}, results, time)
     ## end
     oobmse = oobse/nooob
     thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
+#    println("thresholdindex: $thresholdindex")
+#    println("ooberrors: $(sort(ooberrors, rev=true))")
     if conformal == :std
         if thresholdindex >= 1
             errorrange = minimum([largestrange,2*sort(ooberrors, rev=true)[thresholdindex]])
@@ -173,7 +171,7 @@ function run_split_internal(method::LearningMethod{Regressor}, results, time)
     ##     end
     end
     testdata = globaldata[globaldata[:TEST] .== true,:]
-    correctvalues = testdata[:REGRESSION]
+    correctvalues = testdata[:EVENT]
     mse = 0.0
     validity = 0.0
     rangesum = 0.0
@@ -236,6 +234,7 @@ function run_split_internal(method::LearningMethod{Regressor}, results, time)
         ##         end
         ## end
         end
+#        println("correct: $(correctvalues[i]) predicted: $(predictions[i]) error: $(error) errorrange/2: $(errorrange/2)")
         rangesum += errorrange
         if error <= errorrange/2
             validity += 1
@@ -252,11 +251,11 @@ function run_split_internal(method::LearningMethod{Regressor}, results, time)
     avmse = totalsquarederror/totalnotrees
     varmse = avmse-mse
     extratime = toq()
-    return RegressionResult(mse,corrcoeff,avmse,varmse,esterr,absesterr,validity,region,modelsize,noirregularleafs,time+extratime)
+    return SurvivalResult(mse,corrcoeff,avmse,varmse,esterr,absesterr,validity,region,modelsize,noirregularleafs,time+extratime)
 end
 
 
-function run_cross_validation_internal(method::LearningMethod{Regressor}, results, modelsizes, nofolds, conformal, time)
+function run_cross_validation_internal(method::LearningMethod{Survival}, results, modelsizes, nofolds, conformal, time)
     folds = collect(1:nofolds)
     allnoirregularleafs = [result[6] for result in results]
     noirregularleafs = allnoirregularleafs[1]
@@ -269,7 +268,6 @@ function run_cross_validation_internal(method::LearningMethod{Regressor}, result
     end
     nopredictions = size(globaldata,1)
     testexamplecounter = 0
-
     predictions = [predictions[i][2]/predictions[i][1] for i = 1:nopredictions]
     mse = Array(Float64,nofolds)
     corrcoeff = Array(Float64,nofolds)
@@ -293,8 +291,8 @@ function run_cross_validation_internal(method::LearningMethod{Regressor}, result
     for fold in folds
         foldno += 1
         testdata = globaldata[globaldata[:FOLD] .== fold,:]
-        correctvalues = testdata[:REGRESSION]
-        correcttrainingvalues = globaldata[globaldata[:FOLD] .!= fold,:REGRESSION]
+        correctvalues = testdata[:EVENT]
+        correcttrainingvalues = globaldata[globaldata[:FOLD] .!= fold,:EVENT]
         oobpredictions = results[1][4][foldno]
         for r = 2:length(results)
             oobpredictions += results[r][4][foldno]
@@ -310,7 +308,9 @@ function run_cross_validation_internal(method::LearningMethod{Regressor}, result
         ##     rows = Array{Float64}[]
         ##     knnalphas = Float64[]
         ## end
-        largestrange = maximum(correcttrainingvalues)-minimum(correcttrainingvalues)
+        maxcorrect = maximum(correcttrainingvalues)
+        mincorrect = minimum(correcttrainingvalues)
+        largestrange = 2*(maxcorrect-mincorrect)
         for i = 1:length(correcttrainingvalues)
             oobpredcount = oobpredictions[i][1]
             if oobpredcount > 0
@@ -510,6 +510,7 @@ function run_cross_validation_internal(method::LearningMethod{Regressor}, result
             ##         end
             ##     end
             end
+            
             rangesum += errorrange
             if error <= errorrange/2
                 noinregion += 1
@@ -539,15 +540,14 @@ function run_cross_validation_internal(method::LearningMethod{Regressor}, result
         region[foldno] = rangesum/length(correctvalues)
     end
     extratime = toq()
-    return RegressionResult(mean(mse),mean(corrcoeff),mean(avmse),mean(varmse),mean(esterr),mean(absesterr),mean(validity),mean(region),mean(modelsizes),mean(noirregularleafs),
-                                            time+extratime)
+    return SurvivalResult(mean(mse),mean(corrcoeff),mean(avmse),mean(varmse),mean(esterr),mean(absesterr),mean(validity),mean(region),mean(modelsizes),mean(noirregularleafs),
+                          time+extratime)
 end
-
 
 ##
 ## Functions to be executed on each worker
 ##
-function generate_and_test_trees(Arguments::Tuple{LearningMethod{Regressor},Symbol,Symbol,Int64,Int64,Array{Int64,1}})
+function generate_and_test_trees(Arguments::Tuple{LearningMethod{Survival},Symbol,Symbol,Int64,Int64,Array{Int64,1}})
     method,predictiontask,experimentype,notrees,randseed,randomoobs = Arguments
     s = size(globaldata,1)
     srand(randseed)
@@ -559,9 +559,9 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Regressor},Symb
         trainingdata = globaldata[globaldata[:TEST] .== false,:]
         trainingrefs = collect(1:size(trainingdata,1))
         trainingweights = trainingdata[:WEIGHT]
-        regressionvalues = trainingdata[:REGRESSION]
-        timevalues = []
-        eventvalues = []
+        timevalues = convert(Array,trainingdata[:TIME])
+        eventvalues = convert(Array,trainingdata[:EVENT])
+        regressionvalues = []
         oobpredictions = Array(Any,size(trainingdata,1))
         for i = 1:size(trainingdata,1)
             oobpredictions[i] = [0,0,0]
@@ -584,23 +584,22 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Regressor},Symb
         squarederror = 0.0
         totalnotrees = 0
         for i = 1:nopredictions
-            correctvalue = testdata[i,:REGRESSION]
+            correctvalue = testdata[i,:EVENT]
+            timevalue = testdata[i,:TIME]
             prediction = 0.0
             squaredprediction = 0.0
             nosampledtrees = 0
             for t = 1:length(model)
                 if method.modpred
                     if oob[t][randomoobs[i]]
-                        leafstats = make_prediction(model[t],newtestdata,i,0)
-                        treeprediction = leafstats[2]/leafstats[1]
+                        treeprediction = make_survival_prediction(model[t],newtestdata,i,timevalue,0) 
                         prediction += treeprediction
                         squaredprediction += treeprediction^2
                         squarederror += (treeprediction-correctvalue)^2
                         nosampledtrees += 1
                     end
                 else
-                    leafstats = make_prediction(model[t],newtestdata,i,0)
-                    treeprediction = leafstats[2]/leafstats[1]
+                    treeprediction = make_survival_prediction(model[t],newtestdata,i,timevalue,0)
                     prediction += treeprediction
                     squaredprediction += treeprediction^2
                     squarederror += (treeprediction-correctvalue)^2
@@ -633,9 +632,9 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Regressor},Symb
             testdata = globaldata[globaldata[:FOLD] .== fold,:]
             trainingrefs = collect(1:size(trainingdata,1))
             trainingweights = trainingdata[:WEIGHT]
-            regressionvalues = trainingdata[:REGRESSION]
-            timevalues = []
-            eventvalues = []
+            regressionvalues = []
+            timevalues = convert(Array,trainingdata[:TIME])
+            eventvalues = convert(Array,trainingdata[:EVENT])
             oobpredictions[foldno] = Array(Any,size(trainingdata,1))
             for i = 1:size(trainingdata,1)
                 oobpredictions[foldno][i] = [0,0,0]
@@ -659,7 +658,8 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Regressor},Symb
                 squarederror = 0.0
             totalnotrees = 0
             for i = 1:size(testdata,1)
-                correctvalue = testdata[i,:REGRESSION]
+                correctvalue = testdata[i,:EVENT]
+                timevalue = testdata[i,:TIME]
                 prediction = 0.0
                 nosampledtrees = 0
                 squaredprediction = 0.0
@@ -669,7 +669,7 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Regressor},Symb
                 for t = 1:length(model)
                     if method.modpred
                         if oob[t][randomoob]
-                            leafstats = make_prediction(model[t],newtestdata,i,0)
+                            leafstats = make_survival_prediction(model[t],newtestdata,i,timevalue,0)
                             treeprediction = leafstats[2]/leafstats[1]
                             prediction += treeprediction
                             squaredprediction += treeprediction^2
@@ -677,8 +677,7 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Regressor},Symb
                             nosampledtrees += 1
                         end
                     else
-                        leafstats = make_prediction(model[t],newtestdata,i,0)
-                        treeprediction = leafstats[2]/leafstats[1]
+                        treeprediction = make_survival_prediction(model[t],newtestdata,i,timevalue,0)
                         prediction += treeprediction
                         squaredprediction += treeprediction^2
                         squarederror += (treeprediction-correctvalue)^2

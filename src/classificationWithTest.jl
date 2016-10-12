@@ -1,7 +1,4 @@
-#= AMG
-build model and test and get results
-=#
-function run_split_internal(method::LearningMethod{Classifier}, results)
+function run_split_internal(method::LearningMethod{Classifier}, results, time)
     modelsize = sum([result[1] for result in results])
     noirregularleafs = sum([result[5] for result in results])
     predictions = results[1][2]
@@ -423,8 +420,8 @@ end
 ##
 ## Functions to be executed on each worker
 ##
-function generate_and_test_trees(Argumnets::Tuple{LearningMethod{Classifier},Symbol,Symbol,Int64,Int64,Array{Int64,1}})
-    method,predictiontask,experimentype,notrees,randseed,randomoobs = Argumnets
+function generate_and_test_trees(Arguments::Tuple{LearningMethod{Classifier},Symbol,Symbol,Int64,Int64,Array{Int64,1}})
+    method,predictiontask,experimentype,notrees,randseed,randomoobs = Arguments
     s = size(globaldata,1)
     srand(randseed)
     if experimentype == :test
@@ -464,6 +461,8 @@ function generate_and_test_trees(Argumnets::Tuple{LearningMethod{Classifier},Sym
             randomclassoobs[i] = (c,oobref)
         end
         regressionvalues = []
+        timevalues = []
+        eventvalues = []
         missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
         newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
         testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
@@ -472,7 +471,7 @@ function generate_and_test_trees(Argumnets::Tuple{LearningMethod{Classifier},Sym
         oob = Array(Any,notrees)
         for treeno = 1:notrees
             sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
-            model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,newtrainingdata,variables,types,predictiontask,oobpredictions)
+            model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,predictiontask,oobpredictions)
             modelsize += noleafs
             noirregularleafs += treenoirregularleafs
         end
@@ -565,6 +564,8 @@ function generate_and_test_trees(Argumnets::Tuple{LearningMethod{Classifier},Sym
                 end
             end
             regressionvalues = []
+            timevalues = []
+            eventvalues = []
             missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
             newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
             testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
@@ -575,7 +576,7 @@ function generate_and_test_trees(Argumnets::Tuple{LearningMethod{Classifier},Sym
             oob = Array(Any,notrees)
             for treeno = 1:notrees
                 sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
-                model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,newtrainingdata,variables,types,predictiontask,oobpredictions[foldno])
+                model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,predictiontask,oobpredictions[foldno])
                 modelsize += noleafs
                 totalnoirregularleafs += treenoirregularleafs
             end
