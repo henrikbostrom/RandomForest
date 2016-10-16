@@ -1,3 +1,7 @@
+# MOH FIXME:should use Julia standardized versioning instead
+global majorversion = 0
+global minorversion = 0
+global patchversion = 9
 
 ##
 ## Function for building a single tree.
@@ -249,4 +253,55 @@ function load_model(file)
     close(s)
     println("Model loaded")
     return model
+end
+
+"""
+Infers the prediction task from the data
+"""
+function prediction_task(method::LearningMethod{Regressor})
+    return :REGRESSION
+end
+
+function prediction_task(method::LearningMethod{Classifier})
+    return :CLASS
+end
+
+function prediction_task(data)
+    allnames = names(data)
+    if :CLASS in allnames
+        return :CLASS
+    elseif :REGRESSION in allnames
+        return :REGRESSION
+    else
+        return :NONE
+    end
+end
+
+function initiate_workers()
+    pr = Array(Any,nprocs())
+    for i = 2:nprocs()
+        pr[i] = remotecall(load_global_dataset,i)
+    end
+    for i = 2:nprocs()
+        wait(pr[i])
+    end
+end
+
+function load_global_dataset()
+    global globaldata = @fetchfrom(1,globaldata)
+end
+
+function update_workers()
+    pr = Array(Any,nprocs())
+    for i = 2:nprocs()
+        pr[i] = remotecall(update_global_dataset,i)
+    end
+    for i = 2:nprocs()
+        wait(pr[i])
+    end
+end
+
+function update_global_dataset()
+    global globaltests = @fetchfrom(1,globaltests)
+    global globaldata = hcat(globaltests,globaldata)
 end
