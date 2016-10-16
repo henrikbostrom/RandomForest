@@ -64,6 +64,7 @@ export
     runexp,
     fit!,
     predict,
+    predict_proba,
     # LearningMethod,
     # Classifier,
     # Regressor,

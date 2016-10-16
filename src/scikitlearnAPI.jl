@@ -64,3 +64,24 @@ function prepareDF(model::PredictionModel, X::Matrix, y::Vector)
     end
     return df
 end
+
+# classification only methods
+function predict_proba(model::PredictionModel{Classifier}, data::DataFrame, features)
+    if ~(:WEIGHT in names(data))
+        global globaldata = hcat(data,DataFrame(WEIGHT = ones(size(source,1))))
+    else
+        global globaldata = data 
+    end
+    res = apply_model(model)
+    return map( i -> i[3], res)
+end
+
+function predict_proba(model::PredictionModel{Classifier}, X::Matrix)
+    df = DataFrame(X)
+    if ~(:WEIGHT in names(df))
+        df = hcat(df,DataFrame(WEIGHT = ones(size(df,1))))
+    end
+    global globaldata = df
+    res = apply_model(model)
+    return map( i -> i[3], res)
+end

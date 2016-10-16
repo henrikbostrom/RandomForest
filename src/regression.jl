@@ -587,7 +587,7 @@ function apply_model(model::PredictionModel{Regressor}; confidence = :std)
             squaredpredictions += results[r][2]
         end
     else
-        predictions, squaredpredictions = apply_trees((model.method,model.classes,model.trees))
+        predictions, squaredpredictions = apply_trees((model.method,[],model.trees))
     end
     predictions = predictions/model.method.notrees
     squaredpredictions = squaredpredictions/model.method.notrees
