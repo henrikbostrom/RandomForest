@@ -129,8 +129,9 @@ end
 
 
 function generate_tree(method::LearningMethod{Classifier},trainingrefs,trainingweights,regressionvalues,trainingdata,variables,types,predictiontask,oobpredictions; varimp = false)
+    noclasses = length(trainingweights)
+    zeroweights = Array(Any,noclasses)
     if method.bagging
-        noclasses = length(trainingweights)
         classweights = map(Float64,[length(t) for t in trainingrefs])
         if typeof(method.bagsize) == Int
             samplesize = method.bagsize
@@ -146,7 +147,6 @@ function generate_tree(method::LearningMethod{Classifier},trainingrefs,trainingw
             class = wsample(1:noclasses,classweights)
             newtrainingweights[class][rand(1:end)] += 1.0
         end
-        zeroweights = Array(Any,noclasses)
         for c = 1:noclasses
             nonzeroweights = [newtrainingweights[c][i] > 0 for i=1:length(newtrainingweights[c])]
             zeroweights[c] = ~nonzeroweights
@@ -497,7 +497,7 @@ function make_split(method::LearningMethod{Classifier},trainingrefs,trainingweig
     return leftrefs,leftweights,[],rightrefs,rightweights,[],leftweight
 end
 
-function generate_model_internal(method::LearningMethod{Classifier}, oobs)
+function generate_model_internal(method::LearningMethod{Classifier}, oobs, classes)
     if method.conformal == :default
         conformal = :std
     else
@@ -526,6 +526,7 @@ function generate_model_internal(method::LearningMethod{Classifier}, oobs)
             end
         end
         thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
+        sortedalphas = Float64[]
         if thresholdindex >= 1
             sortedalphas = sort(alphas)
             alpha = sortedalphas[thresholdindex]
@@ -643,16 +644,16 @@ function apply_trees(Arguments::Tuple{LearningMethod{Classifier},Any,Any})
     # AMG: method is redundent here
     method, classes, trees = Arguments
     variables, types = get_variables_and_types(globaldata)
-    testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,globaldata)
-    newtestdata = transform_nonmissing_columns_to_arrays(method,variables,globaldata,testmissingvalues)
-    replacements_for_missing_values!(method,newtestdata,globaldata,variables,types,testmissingvalues,testnonmissingvalues)
+    testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,[globaldata])    
+    newtestdata = transform_nonmissing_columns_to_arrays(method,variables,[globaldata],testmissingvalues)
+    replacements_for_missing_values!(method,newtestdata,[globaldata],variables,types,testmissingvalues,testnonmissingvalues)
     nopredictions = size(globaldata,1)
     noclasses = length(classes)
     predictions = Array(Any,nopredictions)
     for i = 1:nopredictions
         predictions[i] = zeros(noclasses)
         for t = 1:length(trees)
-            treeprediction = make_prediction(trees[t],newtestdata,i,zeros(noclasses))
+            treeprediction = make_prediction(trees[t],newtestdata[1],i,zeros(noclasses))
             predictions[i] += treeprediction
         end
     end

@@ -475,7 +475,7 @@ function make_split(method::LearningMethod{Regressor},trainingrefs,trainingweigh
   return leftrefs,leftweights,leftregressionvalues,rightrefs,rightweights,rightregressionvalues,leftweight
 end
 
-function generate_model_internal(method::LearningMethod{Regressor}, oobs)
+function generate_model_internal(method::LearningMethod{Regressor}, oobs, classes)
     oobpredictions = oobs[1]
     for r = 2:length(oobs)
         oobpredictions += oobs[r]
