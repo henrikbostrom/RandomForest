@@ -1,51 +1,53 @@
 # MOH FIXME:should use Julia standardized versioning instead
 global majorversion = 0
 global minorversion = 0
-global patchversion = 9
+global patchversion = 10
 
 ##
 ## Function for building a single tree.
 ##
-function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalues,trainingdata,variables,types,predictiontask,varimp)
+function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,trainingdata,variables,types,predictiontask,varimp)
     tree = Any[]
     depth = 0
     nodeno = 1
     noleafnodes = 0
     noirregularleafnodes = 0
-    stack = [(depth,nodeno,alltrainingrefs,alltrainingweights,allregressionvalues,default_prediction(alltrainingweights,allregressionvalues,predictiontask,method))]
+    stack = [(depth,nodeno,alltrainingrefs,alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,default_prediction(alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,predictiontask,method))]
     nextavailablenodeno = 2
     if varimp
         variableimportance = zeros(length(variables))
     end
     while stack != []
-        depth, nodenumber, trainingrefs, trainingweights, regressionvalues, defaultprediction = pop!(stack)
-        if leaf_node(trainingweights,regressionvalues,predictiontask,depth,method)
-            leaf = (:LEAF,make_leaf(trainingweights,regressionvalues,predictiontask,defaultprediction,method))
+        depth, nodenumber, trainingrefs, trainingweights, regressionvalues, timevalues, eventvalues, defaultprediction = pop!(stack)
+        if leaf_node(trainingweights,regressionvalues,eventvalues,predictiontask,depth,method)
+            leaf = (:LEAF,make_leaf(trainingweights,regressionvalues,timevalues,eventvalues,predictiontask,defaultprediction,method))
             push!(tree,(nodenumber,leaf))
             noleafnodes += 1
         else
-            bestsplit = find_best_split(trainingrefs,trainingweights,regressionvalues,trainingdata,variables,types,predictiontask,method)
+            bestsplit = find_best_split(trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,predictiontask,method)
             if bestsplit == :NA
-                leaf = (:LEAF,make_leaf(trainingweights,regressionvalues,predictiontask,defaultprediction,method))
+                leaf = (:LEAF,make_leaf(trainingweights,regressionvalues,timevalues,eventvalues,predictiontask,defaultprediction,method))
                 push!(tree,(nodenumber,leaf))
                 noleafnodes += 1
                 noirregularleafnodes += 1
             else
-                leftrefs,leftweights,leftregressionvalues,rightrefs,rightweights,rightregressionvalues,leftweight =
-                    make_split(method,trainingrefs,trainingweights,regressionvalues,trainingdata,predictiontask,bestsplit)
+                leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,leftweight =
+                    make_split(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,predictiontask,bestsplit)
                 varno, variable, splittype, splitpoint = bestsplit
                 if varimp
                     if typeof(method.learningType) == Regressor #predictiontask == :REGRESSION
                         variableimp = variance_reduction(trainingweights,regressionvalues,leftweights,leftregressionvalues,rightweights,rightregressionvalues)
-                    else
+                    elseif typeof(method.learningType) == Classifier #predictiontask == :CLASS
                         variableimp = information_gain(trainingweights,leftweights,rightweights)
+                    else #predictiontask == :SURVIVAL
+                        variableimp = hazard_score_gain(trainingweights,timevalues,eventvalues,leftweights,lefttimevalues,lefteventvalues,rightweights,righttimevalues,righteventvalues)
                     end
                     variableimportance[varno] += variableimp
                 end
                 push!(tree,(nodenumber,((varno,splittype,splitpoint,leftweight),nextavailablenodeno,nextavailablenodeno+1)))
-                defaultprediction = default_prediction(trainingweights,regressionvalues,predictiontask,method)
-                push!(stack,(depth+1,nextavailablenodeno,leftrefs,leftweights,leftregressionvalues,defaultprediction))
-                push!(stack,(depth+1,nextavailablenodeno+1,rightrefs,rightweights,rightregressionvalues,defaultprediction))
+                defaultprediction = default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,predictiontask,method)
+                push!(stack,(depth+1,nextavailablenodeno,leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,defaultprediction))
+                push!(stack,(depth+1,nextavailablenodeno+1,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,defaultprediction))
                 nextavailablenodeno += 2
             end
         end
@@ -76,7 +78,7 @@ function get_variables_and_types(trainingdata)
 end
 
 function check_variable(v)
-    if v in [:CLASS,:REGRESSION,:ID,:FOLD,:TEST,:WEIGHT]
+    if v in [:CLASS,:REGRESSION,:ID,:FOLD,:TEST,:WEIGHT,:TIME,:EVENT]
         return false
     elseif startswith(string(v),"IGNORE")
         return false
@@ -107,6 +109,16 @@ function information_gain(trainingweights,leftweights,rightweights)
     rightclasscounts = [sum(rightweights[c]) for c=1:size(rightweights,1)]
     rightnoexamples = sum(rightclasscounts)
     return -orignoexamples*entropy(origclasscounts,orignoexamples)+leftnoexamples*entropy(leftclasscounts,leftnoexamples)+rightnoexamples*entropy(rightclasscounts,rightnoexamples)
+end
+
+function hazard_score_gain(trainingweights,timevalues,eventvalues,leftweights,lefttimevalues,lefteventvalues,rightweights,righttimevalues,righteventvalues)
+    origcumhazardfunction = generate_cumulative_hazard_function(trainingweights,lefttimevalues,lefteventvalues)
+    orighazardscore = hazard_score(trainingweights,timevalues,eventvalues,origcumhazardfunction)
+    leftcumhazardfunction = generate_cumulative_hazard_function(leftweights,lefttimevalues,lefteventvalues)
+    lefthazardscore = hazard_score(leftweights,lefttimevalues,lefteventvalues,leftcumhazardfunction)
+    rightcumhazardfunction = generate_cumulative_hazard_function(rightweights,righttimevalues,righteventvalues)
+    righthazardscore = hazard_score(rightweights,righttimevalues,righteventvalues,rightcumhazardfunction)
+    return origcumhazardscore-lefthazardscore-righthazardscore
 end
 
 function restructure_tree(tree)
@@ -266,12 +278,18 @@ function prediction_task(method::LearningMethod{Classifier})
     return :CLASS
 end
 
+function prediction_task(method::LearningMethod{Survival})
+    return :SURVIVAL
+end
+
 function prediction_task(data)
     allnames = names(data)
     if :CLASS in allnames
         return :CLASS
     elseif :REGRESSION in allnames
         return :REGRESSION
+    elseif :TIME in allnames && :EVENT in allnames
+        return :SURVIVAL
     else
         return :NONE
     end

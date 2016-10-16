@@ -74,6 +74,20 @@ type ClassificationResult
     Time::Float64
 end
 
+type SurvivalResult
+    MSE::Float64
+    Corr::Float64
+    AvMSE::Float64
+    VarMSE::Float64
+    DEOMSE::Float64
+    AEEMSE::Float64
+    Valid::Float64
+    Region::Float64
+    Size::Float64
+    NoIrr::Float64
+    Time::Float64
+end
+
 type PredictionModel{T}
     method::LearningMethod{T}
     classes::Any

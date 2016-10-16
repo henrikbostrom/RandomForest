@@ -2,12 +2,15 @@
 ##
 ## Functions for outputting result summaries
 ##
+
 function present_results(results,methods;ignoredatasetlabel = false)
     if results != []
         if results[1][1] == :CLASS # NOTE: Assuming all tasks of the same type
             resultlabels = fieldnames(ClassificationResult) #FIXME: MOH Can be extracted from the model information
-        else
+        elseif results[1][1] == :REGRESSION 
             resultlabels = fieldnames(RegressionResult)
+        else # results[1][1] == :SURVIVAL
+            resultlabels = fieldnames(SurvivalResult)
         end
         methodresults = Array(Float64,length(results),length(methods),length(resultlabels))
         for datasetno = 1:length(results)
@@ -42,8 +45,10 @@ function present_results(results,methods;ignoredatasetlabel = false)
         maxdatasetnamesize = maximum([length(dataset) for (task,dataset,results) in results])
         if results[1][1] == :CLASS
             println("\nClassification results")
-        else
+        elseif results[1][1] == :REGRESSION
             println("\nRegression results")
+        else # results[1][1] == :SURVIVAL
+            println("\nSurvival results")
         end
         print_aligned_l("",maxdatasetnamesize)
         for resultno = 1:length(resultlabels)
@@ -209,8 +214,10 @@ function describe_model(model::PredictionModel)
     if typeof(method.learningType) == Classifier # model.predictiontask == :CLASS
         println("Prediction task: classification")
         println("Class labels: $(model.classes)")
-    else
+    elseif typeof(method.learningType) == Regressor # model.predictiontask == :REGRESSION
         println("Prediction task: regression")
+    else # typeof(method.learningType) == Survival # model.predictiontask == :SURVIVAL
+        println("Prediction task: survival")        
     end
     println("Learning method:")
     present_method(0,model.method,showmethodlabel = false)

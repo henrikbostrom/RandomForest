@@ -1,0 +1,61 @@
+
+Survival results
+                        	   MSE	      	   Corr	       	 AvMSE	      	VarMSE	      	 DEOMSE	       	AEEMSE	      	 Valid	      	Region	      	     Size	       	    NoIrr	         	  Time	      
+Dataset                 	    M1	    M2	     M1	     M2	    M1	    M2	    M1	    M2	     M1	     M2	    M1	    M2	    M1	    M2	    M1	    M2	       M1	     M2	       M1	       M2	    M1	    M2
+
+survival/actg320.csv    	0.1127	0.1131	 0.0936	 0.0897	0.1635	0.1638	0.0509	0.0506	-0.0003	 -0.001	  0.01	0.0103	0.9548	0.9522	1.1647	1.1424	  12979.9	25958.5	   4301.0	   8633.9	4.5787	8.4032
+survival/gbcs-1.csv     	0.2239	0.2242	 0.2514	 0.2478	0.2674	0.2684	0.0435	0.0442	-0.0014	-0.0017	0.0156	0.0149	 0.962	0.9548	1.5914	1.5658	   7137.4	14363.3	   3093.8	   6176.8	3.4891	5.9035
+survival/grace1000-1.csv	0.2429	0.2418	 0.0411	 0.0503	 0.281	0.2799	0.0381	0.0381	 0.0007	 0.0005	0.0288	0.0287	 0.955	 0.955	1.9707	1.9698	  11491.8	23161.0	   4454.8	   8943.1	5.0524	7.4074
+survival/pbc.csv        	 0.255	0.2564	 0.5117	 0.5036	0.3058	0.3072	0.0509	0.0508	  0.002	 0.0007	0.0184	0.0195	0.7175	 0.708	 1.286	1.2703	   7099.1	14165.2	   1519.1	   3059.4	 3.462	6.0868
+survival/pharynx.csv    	 0.249	0.2492	-0.3489	-0.3461	0.2577	 0.258	0.0087	0.0088	-0.0007	-0.0006	0.0722	0.0726	0.9747	0.9747	1.9856	 1.988	   3552.8	 7086.6	    648.5	   1309.5	 1.206	1.8252
+survival/whas500.csv    	0.3324	0.3321	 0.0412	 0.0418	0.3953	0.3948	0.0629	0.0627	-0.0003	 0.0007	0.0183	0.0184	 0.954	 0.952	1.9576	1.9505	   8837.3	17629.6	   1787.5	   3593.4	4.1074	7.4503
+
+Mean                    	 0.236	0.2361	 0.0983	 0.0979	0.2784	0.2787	0.0425	0.0425	    0.0	-0.0002	0.0272	0.0274	0.9197	0.9161	1.6593	1.6478	8516.3833	17060.7	2634.1167	5286.0167	3.6493	6.1794
+
+
+Ranks
+                        	   MSE	      	   Corr	       	 AvMSE	      	VarMSE	      	 DEOMSE	       	AEEMSE	      	 Valid	      	Region	      	     Size	       	    NoIrr	         	  Time	      
+Dataset                 	    M1	    M2	     M1	     M2	    M1	    M2	    M1	    M2	     M1	     M2	    M1	    M2	    M1	    M2	    M1	    M2	       M1	     M2	       M1	       M2	    M1	    M2
+
+survival/actg320.csv    	   1.0	   2.0	    1.0	    2.0	   1.0	   2.0	   1.0	   2.0	    1.0	    2.0	   1.0	   2.0	   1.0	   2.0	   2.0	   1.0	      1.0	    2.0	      1.0	      2.0	   1.0	   2.0
+survival/gbcs-1.csv     	   1.0	   2.0	    1.0	    2.0	   1.0	   2.0	   2.0	   1.0	    1.0	    2.0	   2.0	   1.0	   1.0	   2.0	   2.0	   1.0	      1.0	    2.0	      1.0	      2.0	   1.0	   2.0
+survival/grace1000-1.csv	   2.0	   1.0	    2.0	    1.0	   2.0	   1.0	   1.0	   2.0	    1.0	    2.0	   2.0	   1.0	   1.5	   1.5	   2.0	   1.0	      1.0	    2.0	      1.0	      2.0	   1.0	   2.0
+survival/pbc.csv        	   1.0	   2.0	    1.0	    2.0	   1.0	   2.0	   1.0	   2.0	    1.0	    2.0	   1.0	   2.0	   1.0	   2.0	   2.0	   1.0	      1.0	    2.0	      1.0	      2.0	   1.0	   2.0
+survival/pharynx.csv    	   1.0	   2.0	    2.0	    1.0	   1.0	   2.0	   2.0	   1.0	    2.0	    1.0	   1.0	   2.0	   1.5	   1.5	   1.0	   2.0	      1.0	    2.0	      1.0	      2.0	   1.0	   2.0
+survival/whas500.csv    	   2.0	   1.0	    2.0	    1.0	   2.0	   1.0	   1.0	   2.0	    2.0	    1.0	   1.0	   2.0	   1.0	   2.0	   2.0	   1.0	      1.0	    2.0	      1.0	      2.0	   1.0	   2.0
+
+Mean                    	1.3333	1.6667	    1.5	    1.5	1.3333	1.6667	1.3333	1.6667	 1.3333	 1.6667	1.3333	1.6667	1.1667	1.8333	1.8333	1.1667	      1.0	    2.0	      1.0	      2.0	   1.0	   2.0
+
+Methods
+
+M1: 	learningType = RandomForest.Undefined()
+	modeltype = forest
+	notrees = 500
+	minleaf = 10
+	maxdepth = 0
+	randsub = default
+	randval = true
+	splitsample = 0
+	bagging = true
+	bagsize = 1.0
+	modpred = false
+	laplace = false
+	confidence = 0.95
+	conformal = default
+
+M2: 	learningType = RandomForest.Undefined()
+	modeltype = forest
+	notrees = 1000
+	minleaf = 10
+	maxdepth = 0
+	randsub = default
+	randval = true
+	splitsample = 0
+	bagging = true
+	bagsize = 1.0
+	modpred = false
+	laplace = false
+	confidence = 0.95
+	conformal = default
+
+Total time: 59.53 s.
