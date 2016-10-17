@@ -267,9 +267,9 @@ function load_model(file)
     return model
 end
 
-"""
+#=
 Infers the prediction task from the data
-"""
+=#
 function prediction_task(method::LearningMethod{Regressor})
     return :REGRESSION
 end
