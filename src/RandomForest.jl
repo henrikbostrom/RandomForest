@@ -13,7 +13,6 @@
 ##
 ## *** MUST ***
 ##
-## - check definition of OneC
 ## - output should either be presented as text or as a dataframe (or possibly more than one)
 ## - basic information about each dataset should be displayed in result table, e.g. no classes
 ##

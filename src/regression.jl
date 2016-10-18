@@ -15,7 +15,7 @@ function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Any,Any,Any,A
     # starting from here till the end of the function is duplicated between here and the Classifier and Survival dispatchers
     variables, types = get_variables_and_types(globaldata)
     modelsize = 0
-    missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
+    missingvalues, nonmissingvalues = find_missing_values(predictiontask,variables,trainingdata)
     newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
     model = Array(Any,notrees)
     variableimportance = zeros(size(variables,1))
@@ -471,7 +471,7 @@ function make_split(method::LearningMethod{Regressor},trainingrefs,trainingweigh
   return leftrefs,leftweights,leftregressionvalues,[],[],rightrefs,rightweights,rightregressionvalues,[],[],leftweight
 end
 
-function generate_model_internal(method::LearningMethod{Regressor})
+function generate_model_internal(method::LearningMethod{Regressor},oobs,classes)
     oobpredictions = oobs[1]
     for r = 2:length(oobs)
         oobpredictions += oobs[r]
@@ -575,7 +575,7 @@ function apply_model(model::PredictionModel{Regressor}; confidence = :std)
             alltrees[i] = model.trees[index+1:index+notrees[i]]
             index += notrees[i]
         end
-        results = pmap(apply_trees,[(mode.method,model.classes,subtrees) for subtrees in alltrees])
+        results = pmap(apply_trees,[(model.method,model.classes,subtrees) for subtrees in alltrees])
         predictions = results[1][1]
         squaredpredictions = results[1][2]
         for r = 2:length(results)
@@ -583,7 +583,7 @@ function apply_model(model::PredictionModel{Regressor}; confidence = :std)
             squaredpredictions += results[r][2]
         end
     else
-        predictions, squaredpredictions = apply_trees((mode.method,model.classes,model.trees))
+        predictions, squaredpredictions = apply_trees((model.method,model.classes,model.trees))
     end
     predictions = predictions/model.method.notrees
     squaredpredictions = squaredpredictions/model.method.notrees
@@ -643,9 +643,9 @@ end
 function apply_trees(Arguments::Tuple{LearningMethod{Regressor},Any,Any})
     method, classes, trees = Arguments
     variables, types = get_variables_and_types(globaldata)
-    testmissingvalues, testnonmissingvalues = find_missing_values(:UNKNOWN,variables,globaldata)
-    newtestdata = transform_nonmissing_columns_to_arrays(:UNKNOWN,variables,globaldata,testmissingvalues)
-    replacements_for_missing_values!(:UNKNOWN,newtestdata,globaldata,variables,types,testmissingvalues,testnonmissingvalues)
+    testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,globaldata)
+    newtestdata = transform_nonmissing_columns_to_arrays(method,variables,globaldata,testmissingvalues)
+    replacements_for_missing_values!(method,newtestdata,globaldata,variables,types,testmissingvalues,testnonmissingvalues)
     nopredictions = size(globaldata,1)
     predictions = Array(Float64,nopredictions)
     squaredpredictions = Array(Float64,nopredictions)
