@@ -15,7 +15,7 @@ function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Any,Any,Any,A
     # starting from here till the end of the function is duplicated between here and the Classifier and Survival dispatchers
     variables, types = get_variables_and_types(globaldata)
     modelsize = 0
-    missingvalues, nonmissingvalues = find_missing_values(predictiontask,variables,trainingdata)
+    missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
     newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
     model = Array(Any,notrees)
     variableimportance = zeros(size(variables,1))
