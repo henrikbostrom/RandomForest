@@ -1,3 +1,4 @@
+using DataFrames
 # dataframes
 function fit!(model::PredictionModel, data::DataFrame, features, labels)
    if ~(:WEIGHT in names(data))
@@ -37,6 +38,7 @@ function predict(model::PredictionModel, data::DataFrame, features)
     else
         global globaldata = data 
     end
+    initiate_workers()
     res = apply_model(model)
     return map( i -> i[1], res)
 end
@@ -47,6 +49,7 @@ function predict(model::PredictionModel, X::Matrix)
         df = hcat(df,DataFrame(WEIGHT = ones(size(df,1))))
     end
     global globaldata = df
+    initiate_workers()
     res = apply_model(model)
     return map( i -> i[1], res)
 end

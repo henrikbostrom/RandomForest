@@ -3,6 +3,16 @@ global majorversion = 0
 global minorversion = 0
 global patchversion = 10
 
+type Node
+    depth::Int
+    nodenumber::Int
+    trainingrefs::Array{Any,1}
+    trainingweights::Array{Any,1}
+    regressionvalues::Array{Float64,1} # regression
+    timevalues::Array{Float64,1} # survival analysis
+    eventvalues::Array{Float64,1} # survivial analysis
+    defaultprediction::Array{Float64,1}
+end
 ##
 ## Function for building a single tree.
 ##
@@ -12,42 +22,42 @@ function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalue
     nodeno = 1
     noleafnodes = 0
     noirregularleafnodes = 0
-    stack = [(depth,nodeno,alltrainingrefs,alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,default_prediction(alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,predictiontask,method))]
+    stack = Node[Node(depth,nodeno,alltrainingrefs,alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,default_prediction(alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,predictiontask,method))]
     nextavailablenodeno = 2
     if varimp
         variableimportance = zeros(length(variables))
     end
     while stack != []
-        depth, nodenumber, trainingrefs, trainingweights, regressionvalues, timevalues, eventvalues, defaultprediction = pop!(stack)
-        if leaf_node(trainingweights,regressionvalues,eventvalues,predictiontask,depth,method)
-            leaf = (:LEAF,make_leaf(trainingweights,regressionvalues,timevalues,eventvalues,predictiontask,defaultprediction,method))
-            push!(tree,(nodenumber,leaf))
+        node = pop!(stack)
+        if leaf_node(node.trainingweights,node.regressionvalues,node.eventvalues,predictiontask,node.depth,method)
+            leaf = (:LEAF,make_leaf(node.trainingweights,node.regressionvalues,node.timevalues,node.eventvalues,predictiontask,node.defaultprediction,method))
+            push!(tree,(node.nodenumber,leaf))
             noleafnodes += 1
         else
-            bestsplit = find_best_split(trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,predictiontask,method)
+            bestsplit = find_best_split(node.trainingrefs,node.trainingweights,node.regressionvalues,node.timevalues,node.eventvalues,trainingdata,variables,types,predictiontask,method)
             if bestsplit == :NA
-                leaf = (:LEAF,make_leaf(trainingweights,regressionvalues,timevalues,eventvalues,predictiontask,defaultprediction,method))
-                push!(tree,(nodenumber,leaf))
+                leaf = (:LEAF,make_leaf(node.trainingweights,node.regressionvalues,node.timevalues,node.eventvalues,predictiontask,node.defaultprediction,method))
+                push!(tree,(node.nodenumber,leaf))
                 noleafnodes += 1
                 noirregularleafnodes += 1
             else
                 leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,leftweight =
-                    make_split(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,predictiontask,bestsplit)
+                    make_split(method,node.trainingrefs,node.trainingweights,node.regressionvalues,node.timevalues,node.eventvalues,trainingdata,predictiontask,bestsplit)
                 varno, variable, splittype, splitpoint = bestsplit
                 if varimp
                     if typeof(method.learningType) == Regressor #predictiontask == :REGRESSION
-                        variableimp = variance_reduction(trainingweights,regressionvalues,leftweights,leftregressionvalues,rightweights,rightregressionvalues)
+                        variableimp = variance_reduction(node.trainingweights,node.regressionvalues,leftweights,leftregressionvalues,rightweights,rightregressionvalues)
                     elseif typeof(method.learningType) == Classifier #predictiontask == :CLASS
-                        variableimp = information_gain(trainingweights,leftweights,rightweights)
+                        variableimp = information_gain(node.trainingweights,leftweights,rightweights)
                     else #predictiontask == :SURVIVAL
-                        variableimp = hazard_score_gain(trainingweights,timevalues,eventvalues,leftweights,lefttimevalues,lefteventvalues,rightweights,righttimevalues,righteventvalues)
+                        variableimp = hazard_score_gain(node.trainingweights,node.timevalues,node.eventvalues,leftweights,lefttimevalues,lefteventvalues,rightweights,righttimevalues,righteventvalues)
                     end
                     variableimportance[varno] += variableimp
                 end
-                push!(tree,(nodenumber,((varno,splittype,splitpoint,leftweight),nextavailablenodeno,nextavailablenodeno+1)))
-                defaultprediction = default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,predictiontask,method)
-                push!(stack,(depth+1,nextavailablenodeno,leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,defaultprediction))
-                push!(stack,(depth+1,nextavailablenodeno+1,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,defaultprediction))
+                push!(tree,(node.nodenumber,((varno,splittype,splitpoint,leftweight),nextavailablenodeno,nextavailablenodeno+1)))
+                defaultprediction = default_prediction(node.trainingweights,node.regressionvalues,node.timevalues,node.eventvalues,predictiontask,method)
+                push!(stack,Node(node.depth+1,nextavailablenodeno,leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,defaultprediction))
+                push!(stack,Node(node.depth+1,nextavailablenodeno+1,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,defaultprediction))
                 nextavailablenodeno += 2
             end
         end
@@ -131,37 +141,41 @@ function restructure_tree(tree)
     return newtree
 end
 
+type StackNode
+    nodeno::Int
+    weight::Float64
+end
+
 ##
 ## Function for making a prediction with a single tree
 ##
 function make_prediction(tree,testdata,exampleno,prediction)
-    stack = Any[]
     nodeno = 1
     weight = 1.0
-    push!(stack,(nodeno,weight))
+    stack = StackNode[StackNode(nodeno,weight)]
     while stack != []
-        nodeno, weight = pop!(stack)
-        node = tree[nodeno]
+        stacknode = pop!(stack)
+        node = tree[stacknode.nodeno]
         if node[1] == :LEAF
-            prediction += weight*node[2]
+            prediction += stacknode.weight*node[2]
         else
-            varno, splittype, splitpoint, splitweight = node[1]
-            examplevalue = testdata[varno][exampleno]
+            # varno, splittype, splitpoint, splitweight = node[1]
+            examplevalue = testdata[node[1][1]][exampleno]
             if isna(examplevalue)
-                push!(stack,(node[2],weight*splitweight))
-                push!(stack,(node[3],weight*(1-splitweight)))
+                push!(stack,(node[2],stacknode.weight*node[1][4]))
+                push!(stack,(node[3],stacknode.weight*(1-node[1][4])))
             else
-                if splittype == :NUMERIC
-                    if examplevalue <= splitpoint
-                        push!(stack,(node[2],weight))
+                if node[1][2] == :NUMERIC
+                    if examplevalue <= node[1][3]
+                        push!(stack,StackNode(node[2],stacknode.weight))
                     else
-                        push!(stack,(node[3],weight))
+                        push!(stack,StackNode(node[3],stacknode.weight))
                     end
                 else
-                    if examplevalue == splitpoint
-                        push!(stack,(node[2],weight))
+                    if examplevalue == node[1][3]
+                        push!(stack,StackNode(node[2],stacknode.weight))
                     else
-                        push!(stack,(node[3],weight))
+                        push!(stack,StackNode(node[3],stacknode.weight))
                     end
                 end
             end
@@ -236,9 +250,11 @@ function generate_model(method)
         else
             notrees = [method.notrees]
         end
-        treesandoobs = pmap(generate_trees,[(method,predictiontask,classes,n,rand(1:1000_000_000)) for n in notrees])
-        trees = [treesandoobs[i][1] for i=1:length(treesandoobs)]
-        oobs = [treesandoobs[i][2] for i=1:length(treesandoobs)]
+        params = [(method,predictiontask,classes,n,rand(1:1000_000_000)) for n in notrees]
+        # treesandoobs = generate_trees.(params) # no pmap version (for using threads)
+        treesandoobs = pmap(generate_trees, params)
+        trees = map(i->i[1], treesandoobs)
+        oobs = map(i->i[2], treesandoobs)
         variableimportance = treesandoobs[1][3]
         for i = 2:length(treesandoobs)
             variableimportance += treesandoobs[i][3]
