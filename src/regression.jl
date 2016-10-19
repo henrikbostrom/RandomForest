@@ -15,7 +15,7 @@ function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Any,Any,Any,A
     # starting from here till the end of the function is duplicated between here and the Classifier and Survival dispatchers
     variables, types = get_variables_and_types(globaldata)
     modelsize = 0
-    missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
+    missingvalues, nonmissingvalues = find_missing_values(predictiontask,variables,trainingdata)
     newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
     model = Array(Any,notrees)
     variableimportance = zeros(size(variables,1))
@@ -99,7 +99,6 @@ function replacements_for_missing_values!(method::LearningMethod{Regressor},newt
 end
 
 function generate_tree(method::LearningMethod{Regressor},trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,predictiontask,oobpredictions; varimp = false)
-    zeroweights = zeros(length(trainingweights))
     if method.bagging
         newtrainingweights = zeros(length(trainingweights))
         if typeof(method.bagsize) == Int
@@ -472,7 +471,7 @@ function make_split(method::LearningMethod{Regressor},trainingrefs,trainingweigh
   return leftrefs,leftweights,leftregressionvalues,[],[],rightrefs,rightweights,rightregressionvalues,[],[],leftweight
 end
 
-function generate_model_internal(method::LearningMethod{Regressor}, oobs, classes)
+function generate_model_internal(method::LearningMethod{Regressor},oobs,classes)
     oobpredictions = oobs[1]
     for r = 2:length(oobs)
         oobpredictions += oobs[r]
@@ -584,7 +583,7 @@ function apply_model(model::PredictionModel{Regressor}; confidence = :std)
             squaredpredictions += results[r][2]
         end
     else
-        predictions, squaredpredictions = apply_trees((model.method,[],model.trees))
+        predictions, squaredpredictions = apply_trees((model.method,model.classes,model.trees))
     end
     predictions = predictions/model.method.notrees
     squaredpredictions = squaredpredictions/model.method.notrees

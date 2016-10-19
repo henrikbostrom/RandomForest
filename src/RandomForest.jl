@@ -62,12 +62,9 @@ export
     describe_model,
     apply_model,
     runexp,
-    fit!,
-    predict,
-    predict_proba,
-    # LearningMethod,
-    # Classifier,
-    # Regressor,
+    LearningMethod,
+    Classifier,
+    Regressor,
     forestClassifier,
     treeClassifier,
     forestRegressor,
@@ -83,8 +80,12 @@ include("regression.jl")
 include("survival.jl")
 include("classificationWithTest.jl")
 include("regressionWithTest.jl")
-include("scikitlearnAPI.jl")
 include("survivalWithTest.jl")
+
+# MOH FIXME:should use Julia standardized versioning instead
+global majorversion = 0
+global minorversion = 0
+global patchversion = 10
 
 """`runexp` is used to test the performance of the library on a number of test sets"""
 function runexp()
@@ -242,6 +243,35 @@ function run_split(testoption,predictiontask,methods)
     return methodresults
 end
 
+function initiate_workers()
+    pr = Array(Any,nprocs())
+    for i = 2:nprocs()
+        pr[i] = remotecall(load_global_dataset,i)
+    end
+    for i = 2:nprocs()
+        wait(pr[i])
+    end
+end
+
+function load_global_dataset()
+    global globaldata = @fetchfrom(1,globaldata)
+end
+
+function update_workers()
+    pr = Array(Any,nprocs())
+    for i = 2:nprocs()
+        pr[i] = remotecall(update_global_dataset,i)
+    end
+    for i = 2:nprocs()
+        wait(pr[i])
+    end
+end
+
+function update_global_dataset()
+    global globaltests = @fetchfrom(1,globaltests)
+    global globaldata = hcat(globaltests,globaldata)
+end
+
 function run_cross_validation(protocol,predictiontask,methods)
     if typeof(protocol) == Int64
         nofolds = protocol
@@ -334,6 +364,34 @@ function run_cross_validation(protocol,predictiontask,methods)
     return methodresults
 end
 
+"""
+Infers the prediction task from the data
+"""
+function prediction_task(method::LearningMethod{Regressor})
+    return :REGRESSION
+end
+
+function prediction_task(method::LearningMethod{Classifier})
+    return :CLASS
+end
+
+function prediction_task(method::LearningMethod{Survival})
+    return :SURVIVAL
+end
+
+function prediction_task(data)
+    allnames = names(data)
+    if :CLASS in allnames
+        return :CLASS
+    elseif :REGRESSION in allnames
+        return :REGRESSION
+    elseif :TIME in allnames && :EVENT in allnames
+        return :SURVIVAL
+    else
+        return :NONE
+    end
+end
+
 ##
 ## Functions for working with a single dataset. Amg: loading data should move outside as well
 ##
@@ -354,5 +412,6 @@ function load_data(source; separator = ',')
         println("Data can only be loaded from text files or DataFrames")
     end
 end
+
 
 end
