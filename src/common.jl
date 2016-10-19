@@ -230,7 +230,7 @@ function run_single_experiment(protocol, methods)
     return result
 end
 
-function generate_model(method = forest())
+function generate_model(;method = forest())
     # Amg: assumes there is a data preloaded. need to be modified
     predictiontask = prediction_task(globaldata)
     if predictiontask == :NONE # FIXME: MOH We should not be doing this...probably DEAD code
