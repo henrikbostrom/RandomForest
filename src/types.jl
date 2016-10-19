@@ -68,7 +68,7 @@ type ClassificationResult
     Prob::Float64
     Valid::Float64
     Region::Float64
-    OneC::Float64
+    OneAcc::Float64
     Size::Float64
     NoIrr::Float64
     Time::Float64

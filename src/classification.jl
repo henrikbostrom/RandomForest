@@ -629,7 +629,6 @@ function apply_model(model::PredictionModel{Classifier}; confidence = :std)
 end
 
 function apply_trees(Arguments::Tuple{LearningMethod{Classifier},Any,Any})
-    # AMG: method is redundent here
     method, classes, trees = Arguments
     variables, types = get_variables_and_types(globaldata)
     globalarray = [globaldata]

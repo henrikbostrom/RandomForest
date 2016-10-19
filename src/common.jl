@@ -16,6 +16,7 @@ end
 ##
 ## Function for building a single tree.
 ##
+
 function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,trainingdata,variables,types,predictiontask,varimp)
     tree = Any[]
     depth = 0
@@ -128,7 +129,7 @@ function hazard_score_gain(trainingweights,timevalues,eventvalues,leftweights,le
     lefthazardscore = hazard_score(leftweights,lefttimevalues,lefteventvalues,leftcumhazardfunction)
     rightcumhazardfunction = generate_cumulative_hazard_function(rightweights,righttimevalues,righteventvalues)
     righthazardscore = hazard_score(rightweights,righttimevalues,righteventvalues,rightcumhazardfunction)
-    return origcumhazardscore-lefthazardscore-righthazardscore
+    return orighazardscore-lefthazardscore-righthazardscore
 end
 
 function restructure_tree(tree)
@@ -149,6 +150,7 @@ end
 ##
 ## Function for making a prediction with a single tree
 ##
+
 function make_prediction(tree,testdata,exampleno,prediction)
     nodeno = 1
     weight = 1.0
@@ -186,6 +188,7 @@ end
 
 # AMG: this is for running a single file. Note: we should allow data to be passed as argument in the next
 # three functions !!!
+
 function evaluate_method(;method = forest(),protocol = 10)
     println("Running experiment")
     totaltime = @elapsed results = [run_single_experiment(protocol,[method])]
@@ -227,8 +230,7 @@ function run_single_experiment(protocol, methods)
     return result
 end
 
-
-function generate_model(method)
+function generate_model(method = forest())
     # Amg: assumes there is a data preloaded. need to be modified
     predictiontask = prediction_task(globaldata)
     if predictiontask == :NONE # FIXME: MOH We should not be doing this...probably DEAD code
@@ -236,11 +238,16 @@ function generate_model(method)
         println("This may be due to an incorrectly specified separator, e.g., use: separator = \'\\t\'")
         result = :NONE
     else
-        if typeof(method.learningType) == Classifier
-            classes = unique(globaldata[:CLASS])
-        else
-            classes = []
+        if typeof(method.learningType) == Undefined # only redefine method if it does not have proper type
+            if predictiontask == :REGRESSION
+                method = LearningMethod(Regressor(), (getfield(method,i) for i in fieldnames(method)[2:end])...)
+            elseif predictiontask == :CLASS
+                method = LearningMethod(Classifier(), (getfield(method,i) for i in fieldnames(method)[2:end])...)
+            else # predictiontask == :SURVIVAL
+                method = LearningMethod(Survival(), (getfield(method,i) for i in fieldnames(method)[2:end])...)
+            end        
         end
+        classes = typeof(method.learningType) == Classifier ? unique(globaldata[:CLASS]) : []
         nocoworkers = nprocs()-1
         if nocoworkers > 0
             notrees = [div(method.notrees,nocoworkers) for i=1:nocoworkers]

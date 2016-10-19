@@ -564,12 +564,12 @@ function make_survival_prediction(tree,testdata,exampleno,time,prediction)
     return prediction
 end
 
-function generate_model_internal(method::LearningMethod{Survival})
+function generate_model_internal(method::LearningMethod{Survival},oobs,classes)
     oobpredictions = oobs[1]
     for r = 2:length(oobs)
         oobpredictions += oobs[r]
     end
-    correcttrainingvalues = globaldata[:REGRESSION]
+    correcttrainingvalues = globaldata[:EVENT]
     oobse = 0.0
     nooob = 0
     ooberrors = Float64[]
@@ -668,7 +668,7 @@ function apply_model(model::PredictionModel{Survival}; confidence = :std)
             alltrees[i] = model.trees[index+1:index+notrees[i]]
             index += notrees[i]
         end
-        results = pmap(apply_trees,[(mode.method,model.classes,subtrees) for subtrees in alltrees])
+        results = pmap(apply_trees,[(model.method,model.classes,subtrees) for subtrees in alltrees])
         predictions = results[1][1]
         squaredpredictions = results[1][2]
         for r = 2:length(results)
@@ -676,7 +676,7 @@ function apply_model(model::PredictionModel{Survival}; confidence = :std)
             squaredpredictions += results[r][2]
         end
     else
-        predictions, squaredpredictions = apply_trees((mode.method,model.classes,model.trees))
+        predictions, squaredpredictions = apply_trees((model.method,model.classes,model.trees))
     end
     predictions = predictions/model.method.notrees
     squaredpredictions = squaredpredictions/model.method.notrees
@@ -736,18 +736,18 @@ end
 function apply_trees(Arguments::Tuple{LearningMethod{Survival},Any,Any})
     method, classes, trees = Arguments
     variables, types = get_variables_and_types(globaldata)
-    testmissingvalues, testnonmissingvalues = find_missing_values(:UNKNOWN,variables,globaldata)
-    newtestdata = transform_nonmissing_columns_to_arrays(:UNKNOWN,variables,globaldata,testmissingvalues)
-    replacements_for_missing_values!(:UNKNOWN,newtestdata,globaldata,variables,types,testmissingvalues,testnonmissingvalues)
+    testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,globaldata)
+    newtestdata = transform_nonmissing_columns_to_arrays(method,variables,globaldata,testmissingvalues)
+    replacements_for_missing_values!(method,newtestdata,globaldata,variables,types,testmissingvalues,testnonmissingvalues)
     nopredictions = size(globaldata,1)
+    timevalues = convert(Array,globaldata[:TIME])    
     predictions = Array(Float64,nopredictions)
     squaredpredictions = Array(Float64,nopredictions)
     for i = 1:nopredictions
         predictions[i] = 0.0
         squaredpredictions[i] = 0.0
         for t = 1:length(trees)
-            leafstats = make_survival_prediction(trees[t],newtestdata,i,0) # NOTE: must be fixed (time missing)!
-            treeprediction = leafstats[2]/leafstats[1]
+            treeprediction = make_survival_prediction(trees[t],newtestdata,i,timevalues[i],0)
             predictions[i] += treeprediction
             squaredpredictions[i] += treeprediction^2
         end

@@ -201,12 +201,12 @@ function present_method(methodno,method;showmethodlabel = true)
     end
 end
 
-function describe_data(data)
+function describe_data()
     println("No. of examples: $(size(globaldata,1))")
     println("No. of columns: $(size(globaldata,2)-1)")
     println("")
     println("Columns:")
-    describe(data)
+    describe(globaldata)
 end
 
 function describe_model(model::PredictionModel)
