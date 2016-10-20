@@ -46,8 +46,8 @@ function find_missing_values(method::LearningMethod{Classifier},variables,traini
         for v = 1:length(variables)
             variable = variables[v]
             if check_variable(variable)
-                missingvalues[c][v] = filter(isna, trainingdata[c][variable])
-                nonmissingvalues[c][v] = filter(val->!isna(val), trainingdata[c][variable])
+                missingvalues[c][v] = filter(isna, convert(Array,trainingdata[c][variable]))
+                nonmissingvalues[c][v] = filter(val->!isna(val), convert(Array, trainingdata[c][variable]))
                     else
                 missingvalues[c][v] = Int[]
                 nonmissingvalues[c][v] = Any[]
