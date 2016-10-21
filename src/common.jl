@@ -11,7 +11,7 @@ type Node
     regressionvalues::Array{Float64,1} # regression
     timevalues::Array{Float64,1} # survival analysis
     eventvalues::Array{Float64,1} # survivial analysis
-    defaultprediction::Array{Float64,1}
+    defaultprediction::Array{Any,1}
 end
 ##
 ## Function for building a single tree.
@@ -164,8 +164,8 @@ function make_prediction(tree,testdata,exampleno,prediction)
             # varno, splittype, splitpoint, splitweight = node[1]
             examplevalue = testdata[node[1][1]][exampleno]
             if isna(examplevalue)
-                push!(stack,(node[2],stacknode.weight*node[1][4]))
-                push!(stack,(node[3],stacknode.weight*(1-node[1][4])))
+                push!(stack,StackNode(node[2],stacknode.weight*node[1][4]))
+                push!(stack,StackNode(node[3],stacknode.weight*(1-node[1][4])))
             else
                 if node[1][2] == :NUMERIC
                     if examplevalue <= node[1][3]
