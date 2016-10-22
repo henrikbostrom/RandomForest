@@ -191,6 +191,7 @@ end
 
 function evaluate_method(;method = forest(),protocol = 10)
     println("Running experiment")
+    method = fix_method_type(method)
     totaltime = @elapsed results = [run_single_experiment(protocol,[method])]
     classificationresults = [pt == :CLASS for (pt,f,r) in results]
     regressionresults = [pt == :REGRESSION for (pt,f,r) in results]
@@ -230,14 +231,8 @@ function run_single_experiment(protocol, methods)
     return result
 end
 
-function generate_model(;method = forest())
-    # Amg: assumes there is a data preloaded. need to be modified
+function fix_method_type(method)
     predictiontask = prediction_task(globaldata)
-    if predictiontask == :NONE # FIXME: MOH We should not be doing this...probably DEAD code
-        println("The loaded dataset is not on the correct format: CLASS/REGRESSION column missing")
-        println("This may be due to an incorrectly specified separator, e.g., use: separator = \'\\t\'")
-        result = :NONE
-    else
         if typeof(method.learningType) == Undefined # only redefine method if it does not have proper type
             if predictiontask == :REGRESSION
                 method = LearningMethod(Regressor(), (getfield(method,i) for i in fieldnames(method)[2:end])...)
@@ -247,6 +242,18 @@ function generate_model(;method = forest())
                 method = LearningMethod(Survival(), (getfield(method,i) for i in fieldnames(method)[2:end])...)
             end        
         end
+    return method
+end
+
+function generate_model(;method = forest())
+    # Amg: assumes there is a data preloaded. need to be modified
+    predictiontask = prediction_task(globaldata)
+    if predictiontask == :NONE # FIXME: MOH We should not be doing this...probably DEAD code
+        println("The loaded dataset is not on the correct format: CLASS/REGRESSION column missing")
+        println("This may be due to an incorrectly specified separator, e.g., use: separator = \'\\t\'")
+        result = :NONE
+    else
+        method = fix_method_type(method)
         classes = typeof(method.learningType) == Classifier ? unique(globaldata[:CLASS]) : []
         nocoworkers = nprocs()-1
         if nocoworkers > 0
