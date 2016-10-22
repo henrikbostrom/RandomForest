@@ -210,7 +210,7 @@ function evaluate_methods(;methods = [forest()],protocol = 10)
 end
 
 function run_single_experiment(protocol, methods)
-    predictiontask = prediction_task(methods[1])
+    predictiontask = prediction_task(globaldata)
     if predictiontask == :NONE
         println("The loaded dataset is not on the correct format")
         println("This may be due to an incorrectly specified separator, e.g., use: separator = \'\\t\'")
