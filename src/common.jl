@@ -151,34 +151,23 @@ end
 ## Function for making a prediction with a single tree
 ##
 
-function make_prediction(tree,testdata,exampleno,prediction)
-    nodeno = 1
-    weight = 1.0
-    stack = StackNode[StackNode(nodeno,weight)]
-    while stack != []
-        stacknode = pop!(stack)
-        node = tree[stacknode.nodeno]
+function make_prediction(tree,testdata,exampleno,prediction,nodeno=1,weight=1.0)
+    while true
+        node = tree[nodeno]
         if node[1] == :LEAF
-            prediction += stacknode.weight*node[2]
+            prediction += weight*node[2]
+            return prediction
         else
             # varno, splittype, splitpoint, splitweight = node[1]
             examplevalue = testdata[node[1][1]][exampleno]
             if isna(examplevalue)
-                push!(stack,StackNode(node[2],stacknode.weight*node[1][4]))
-                push!(stack,StackNode(node[3],stacknode.weight*(1-node[1][4])))
+                prediction+=make_prediction(tree,testdata,exampleno,prediction,node[2],weight*node[1][4])
+                prediction+=make_prediction(tree,testdata,exampleno,prediction,node[3],weight*(1-node[1][4]))
             else
                 if node[1][2] == :NUMERIC
-                    if examplevalue <= node[1][3]
-                        push!(stack,StackNode(node[2],stacknode.weight))
-                    else
-                        push!(stack,StackNode(node[3],stacknode.weight))
-                    end
-                else
-                    if examplevalue == node[1][3]
-                        push!(stack,StackNode(node[2],stacknode.weight))
-                    else
-                        push!(stack,StackNode(node[3],stacknode.weight))
-                    end
+                  nodeno=(examplevalue <= node[1][3])? node[2]: node[3]
+                else #Catagorical
+                  nodeno=(examplevalue == node[1][3])? node[2]: node[3]
                 end
             end
         end
@@ -240,7 +229,7 @@ function fix_method_type(method)
             method = LearningMethod(Classifier(), (getfield(method,i) for i in fieldnames(method)[2:end])...)
         else # predictiontask == :SURVIVAL
             method = LearningMethod(Survival(), (getfield(method,i) for i in fieldnames(method)[2:end])...)
-        end        
+        end
     end
     return method
 end
@@ -275,7 +264,7 @@ function generate_model(;method = forest())
             end
         else
             notrees = [method.notrees]
-            treesandoobs = generate_trees.([(method,predictiontask,classes,n,rand(1:1000_000_000)) for n in notrees]) 
+            treesandoobs = generate_trees.([(method,predictiontask,classes,n,rand(1:1000_000_000)) for n in notrees])
         end
         trees = map(i->i[1], treesandoobs)
         oobs = map(i->i[2], treesandoobs)
