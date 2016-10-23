@@ -7,7 +7,7 @@ function fit!(model::PredictionModel, data::DataFrame, features, labels)
         global globaldata = data # Made global to allow access from workers
     end
     initiate_workers()
-    generated_model = generate_model(model.method)
+    generated_model = generate_model(method=model.method)
     model.method = generated_model.method
     model.classes = generated_model.classes
     model.version = generated_model.version
@@ -21,7 +21,7 @@ end
 function fit!(model::PredictionModel, X::Matrix, y::Vector)
     global globaldata = prepareDF(model, X, y)
     initiate_workers()
-    generated_model = generate_model(model.method)
+    generated_model = generate_model(method=model.method)
     model.method = generated_model.method
     model.classes = generated_model.classes
     model.version = generated_model.version
