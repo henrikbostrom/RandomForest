@@ -233,15 +233,15 @@ end
 
 function fix_method_type(method)
     predictiontask = prediction_task(globaldata)
-        if typeof(method.learningType) == Undefined # only redefine method if it does not have proper type
-            if predictiontask == :REGRESSION
-                method = LearningMethod(Regressor(), (getfield(method,i) for i in fieldnames(method)[2:end])...)
-            elseif predictiontask == :CLASS
-                method = LearningMethod(Classifier(), (getfield(method,i) for i in fieldnames(method)[2:end])...)
-            else # predictiontask == :SURVIVAL
-                method = LearningMethod(Survival(), (getfield(method,i) for i in fieldnames(method)[2:end])...)
-            end        
-        end
+    if typeof(method.learningType) == Undefined # only redefine method if it does not have proper type
+        if predictiontask == :REGRESSION
+            method = LearningMethod(Regressor(), (getfield(method,i) for i in fieldnames(method)[2:end])...)
+        elseif predictiontask == :CLASS
+            method = LearningMethod(Classifier(), (getfield(method,i) for i in fieldnames(method)[2:end])...)
+        else # predictiontask == :SURVIVAL
+            method = LearningMethod(Survival(), (getfield(method,i) for i in fieldnames(method)[2:end])...)
+        end        
+    end
     return method
 end
 
@@ -256,17 +256,27 @@ function generate_model(;method = forest())
         method = fix_method_type(method)
         classes = typeof(method.learningType) == Classifier ? unique(globaldata[:CLASS]) : []
         nocoworkers = nprocs()-1
+        numThreads = Threads.nthreads()
+        treesandoobs = Array{Any,1}()
         if nocoworkers > 0
             notrees = [div(method.notrees,nocoworkers) for i=1:nocoworkers]
             for i = 1:mod(method.notrees,nocoworkers)
                 notrees[i] += 1
             end
+            treesandoobs = pmap(generate_trees, [(method,predictiontask,classes,n,rand(1:1000_000_000)) for n in notrees])
+        elseif numThreads > 1
+            notrees = [div(method.notrees,numThreads) for i=1:numThreads]
+            for i = 1:mod(method.notrees,numThreads)
+                notrees[i] += 1
+            end
+            treesandoobs = Array{Any,1}(length(notrees))
+            Threads.@threads for n in notrees
+                treesandoobs[Threads.threadid()] = generate_trees((method,predictiontask,classes,n,rand(1:1000_000_000)))
+            end
         else
             notrees = [method.notrees]
+            treesandoobs = generate_trees.([(method,predictiontask,classes,n,rand(1:1000_000_000)) for n in notrees]) 
         end
-        params = [(method,predictiontask,classes,n,rand(1:1000_000_000)) for n in notrees]
-        # treesandoobs = generate_trees.(params) # no pmap version (for using threads)
-        treesandoobs = pmap(generate_trees, params)
         trees = map(i->i[1], treesandoobs)
         oobs = map(i->i[2], treesandoobs)
         variableimportance = treesandoobs[1][3]
