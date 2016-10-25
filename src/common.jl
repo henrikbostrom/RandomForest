@@ -150,7 +150,6 @@ end
 ##
 ## Function for making a prediction with a single tree
 ##
-
 function make_prediction(tree,testdata,exampleno,prediction,nodeno=1,weight=1.0)
     while true
         node = tree[nodeno]
@@ -235,6 +234,28 @@ function fix_method_type(method)
     return method
 end
 
+function getnotrees(method, nocoworkers)
+    notrees = [div(method.notrees,nocoworkers) for i=1:nocoworkers]
+    for i = 1:mod(method.notrees,nocoworkers)
+        notrees[i] += 1
+    end
+    return notrees
+end
+
+function getworkertrees(model, nocoworkers)
+    notrees = [div(model.method.notrees,nocoworkers) for i=1:nocoworkers]
+    for i = 1:mod(model.method.notrees,nocoworkers)
+        notrees[i] += 1
+    end
+    alltrees = Array(Any,nocoworkers)
+    index = 0
+    for i = 1:nocoworkers
+        alltrees[i] = model.trees[index+1:index+notrees[i]]
+        index += notrees[i]
+    end
+    return alltrees
+end
+
 function generate_model(;method = forest())
     # Amg: assumes there is a data preloaded. need to be modified
     predictiontask = prediction_task(globaldata)
@@ -249,16 +270,10 @@ function generate_model(;method = forest())
         numThreads = Threads.nthreads()
         treesandoobs = Array{Any,1}()
         if nocoworkers > 0
-            notrees = [div(method.notrees,nocoworkers) for i=1:nocoworkers]
-            for i = 1:mod(method.notrees,nocoworkers)
-                notrees[i] += 1
-            end
+            notrees = getnotrees(method, nocoworkers)
             treesandoobs = pmap(generate_trees, [(method,predictiontask,classes,n,rand(1:1000_000_000)) for n in notrees])
         elseif numThreads > 1
-            notrees = [div(method.notrees,numThreads) for i=1:numThreads]
-            for i = 1:mod(method.notrees,numThreads)
-                notrees[i] += 1
-            end
+            notrees = getnotrees(method, numThreads)
             treesandoobs = Array{Any,1}(length(notrees))
             Threads.@threads for n in notrees
                 treesandoobs[Threads.threadid()] = generate_trees((method,predictiontask,classes,n,rand(1:1000_000_000)))

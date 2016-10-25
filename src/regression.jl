@@ -564,27 +564,28 @@ function generate_model_internal(method::LearningMethod{Regressor}, oobs, classe
 end
 
 function apply_model(model::PredictionModel{Regressor}; confidence = :std)
+    numThreads = Threads.nthreads()
     nocoworkers = nprocs()-1
+    predictions = zeros(size(globaldata,1))
+    squaredpredictions = zeros(size(globaldata,1))
     if nocoworkers > 0
-        notrees = [div(model.method.notrees,nocoworkers) for i=1:nocoworkers]
-        for i = 1:mod(model.method.notrees,nocoworkers)
-            notrees[i] += 1
-        end
-        alltrees = Array(Any,nocoworkers)
-        index = 0
-        for i = 1:nocoworkers
-            alltrees[i] = model.trees[index+1:index+notrees[i]]
-            index += notrees[i]
-        end
-        results = pmap(apply_trees,[(model.method,model.classes,subtrees) for subtrees in alltrees])
-        predictions = results[1][1]
-        squaredpredictions = results[1][2]
-        for r = 2:length(results)
+        alltrees = getworkertrees(model, nocoworkers)
+        results = pmap(apply_trees,[(model.method,[],subtrees) for subtrees in alltrees])
+        for r = 1:length(results)
             predictions += results[r][1]
             squaredpredictions += results[r][2]
         end
+    elseif numThreads > 1
+        alltrees = getworkertrees(model, numThreads)
+        Threads.@threads for subtrees in notrees
+            results = apply_trees((model.method,[],subtrees))
+            predictions += results[1]
+            squaredpredictions += results[2]
+        end
     else
-        predictions, squaredpredictions = apply_trees((model.method,[],model.trees))
+        results = apply_trees((model.method,[],model.trees))
+        predictions += results[1]
+        squaredpredictions += results[2]
     end
     predictions = predictions/model.method.notrees
     squaredpredictions = squaredpredictions/model.method.notrees

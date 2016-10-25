@@ -562,25 +562,22 @@ end
 
 function apply_model(model::PredictionModel{Classifier}; confidence = :std)
     # AMG: still requires global data
+    numThreads = Threads.nthreads()
     nocoworkers = nprocs()-1
+    predictions = zeros(size(globaldata,1))
     if nocoworkers > 0
-        notrees = [div(model.method.notrees,nocoworkers) for i=1:nocoworkers]
-        for i = 1:mod(model.method.notrees,nocoworkers)
-            notrees[i] += 1
-        end
-        alltrees = Array(Any,nocoworkers)
-        index = 0
-        for i = 1:nocoworkers
-            alltrees[i] = model.trees[index+1:index+notrees[i]]
-            index += notrees[i]
-        end
+        alltrees = getworkertrees(model, nocoworkers)
         results = pmap(apply_trees,[(model.method,model.classes,subtrees) for subtrees in alltrees])
-        predictions = results[1]
-        for r = 2:length(results)
+        for r = 1:length(results)
             predictions += results[r]
         end
+    elseif numThreads > 1
+        alltrees = getworkertrees(model, numThreads)
+        Threads.@threads for subtrees in alltrees
+            predictions += apply_trees((model.method,model.classes,subtrees))
+        end
     else
-        predictions = apply_trees((model.method,model.classes,model.trees))
+        predictions += apply_trees((model.method,model.classes,model.trees))
     end
     predictions = predictions/model.method.notrees
     results = Array(Any,size(predictions,1))
