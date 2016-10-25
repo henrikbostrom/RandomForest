@@ -163,6 +163,7 @@ function make_prediction(tree,testdata,exampleno,prediction,nodeno=1,weight=1.0)
             if isna(examplevalue)
                 prediction+=make_prediction(tree,testdata,exampleno,prediction,node[2],weight*node[1][4])
                 prediction+=make_prediction(tree,testdata,exampleno,prediction,node[3],weight*(1-node[1][4]))
+                return prediction
             else
                 if node[1][2] == :NUMERIC
                   nodeno=(examplevalue <= node[1][3])? node[2]: node[3]
