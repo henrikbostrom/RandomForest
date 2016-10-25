@@ -315,16 +315,16 @@ function run_cross_validation(protocol,predictiontask,methods)
         end
         if nocoworkers > 0
             notrees = getnotrees(methods[m], nocoworkers)
-            time = @elapsed results = pmap(generate_and_test_trees,[(methods[m],predictiontask,:test,n,rand(1:1000_000_000),randomoobs) for n in notrees])
+            time = @elapsed results = pmap(generate_and_test_trees,[(methods[m],predictiontask,:cv,n,rand(1:1000_000_000),randomoobs) for n in notrees])
         elseif numThreads > 1
             notrees = getnotrees(methods[m], numThreads)
             results = Array{Any,1}(length(notrees))
             time = @elapsed Threads.@threads for n in notrees
-                results[Threads.threadid()] = generate_and_test_trees((methods[m],predictiontask,:test,n,rand(1:1000_000_000),randomoobs))
+                results[Threads.threadid()] = generate_and_test_trees((methods[m],predictiontask,:cv,n,rand(1:1000_000_000),randomoobs))
             end
         else
             notrees = [methods[m].notrees]
-            time = @elapsed results = generate_and_test_trees.([(methods[m],predictiontask,:test,n,rand(1:1000_000_000),randomoobs) for n in notrees])
+            time = @elapsed results = generate_and_test_trees.([(methods[m],predictiontask,:cv,n,rand(1:1000_000_000),randomoobs) for n in notrees])
         end
         tic()
         allmodelsizes = try
