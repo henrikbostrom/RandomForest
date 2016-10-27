@@ -182,12 +182,12 @@ function default_prediction(trainingweights,regressionvalues,timevalues,eventval
     end
 end
 
-function leaf_node(trainingweights,regressionvalues,eventvalues,predictiontask,depth,method::LearningMethod{Classifier})
-    if method.maxdepth > 0 && method.maxdepth == depth
+function leaf_node(node,method::LearningMethod{Classifier})
+    if method.maxdepth > 0 && method.maxdepth == node.depth
         return true
     else
-        noclasses = size(trainingweights,1)
-        classweights = map(sum, trainingweights)
+        noclasses = size(node.trainingweights,1)
+        classweights = map(sum, node.trainingweights)
         noinstances = sum(classweights)
         if noinstances >= 2*method.minleaf
             i = 1
@@ -209,14 +209,14 @@ function leaf_node(trainingweights,regressionvalues,eventvalues,predictiontask,d
     end
 end
 
-function make_leaf(trainingweights,regressionvalues,timevalues,eventvalues,predictiontask,defaultprediction,method::LearningMethod{Classifier})
-    noclasses = size(trainingweights,1)
+function make_leaf(node,method::LearningMethod{Classifier})
+    noclasses = size(node.trainingweights,1)
     classcounts = zeros(noclasses)
     for i=1:noclasses
-        classcounts[i] = sum(trainingweights[i])
+        classcounts[i] = sum(node.trainingweights[i])
     end
     noinstances = sum(classcounts)
-    prediction = defaultprediction
+    prediction = node.defaultprediction
     if noinstances > 0
         if method.laplace
             prediction = [(classcounts[i]+1)/(noinstances+noclasses) for i=1:noclasses]

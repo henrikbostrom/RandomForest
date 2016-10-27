@@ -206,18 +206,18 @@ function default_prediction(trainingweights,regressionvalues,timevalues,eventval
     ## end
 end
 
-function leaf_node(trainingweights,regressionvalues,eventvalues,predictiontask,depth,method::LearningMethod{Regressor})
-    if method.maxdepth > 0 && method.maxdepth == depth
+function leaf_node(node,method::LearningMethod{Regressor})
+    if method.maxdepth > 0 && method.maxdepth == node.depth
         return true
     else
-        noinstances = sum(trainingweights)
+        noinstances = sum(node.trainingweights)
         if noinstances >= 2*method.minleaf
-            firstvalue = regressionvalues[1]
+            firstvalue = node.regressionvalues[1]
             i = 2
             multiplevalues = false
-            novalues = length(regressionvalues)
+            novalues = length(node.regressionvalues)
             while i <= novalues &&  ~multiplevalues
-                multiplevalues = firstvalue != regressionvalues[i]
+                multiplevalues = firstvalue != node.regressionvalues[i]
                 i += 1
             end
             return ~multiplevalues
@@ -227,9 +227,9 @@ function leaf_node(trainingweights,regressionvalues,eventvalues,predictiontask,d
     end
 end
 
-function make_leaf(trainingweights,regressionvalues,timevalues,eventvalues,predictiontask,defaultprediction,method::LearningMethod{Regressor})
-    sumweights = sum(trainingweights)
-    sumregressionvalues = sum(regressionvalues)
+function make_leaf(node,method::LearningMethod{Regressor})
+    sumweights = sum(node.trainingweights)
+    sumregressionvalues = sum(node.regressionvalues)
     return [sumweights,sumregressionvalues]
     ## if sumweights > 0
     ##     prediction = sum(trainingweights .* regressionvalues)/sumweights

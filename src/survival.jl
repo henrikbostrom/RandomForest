@@ -230,12 +230,12 @@ function generate_cumulative_hazard_function(trainingweights,timevalues,eventval
     return chf
 end
 
-function leaf_node(trainingweights,regressionvalues,eventvalues,predictiontask,depth,method::LearningMethod{Survival})
-    if method.maxdepth > 0 && method.maxdepth == depth
+function leaf_node(node,method::LearningMethod{Survival})
+    if method.maxdepth > 0 && method.maxdepth == node.depth
         return true
     else
-        noinstances = sum(trainingweights)
-        if sum(trainingweights) >= 2*method.minleaf && sum(eventvalues) > 0
+        noinstances = sum(node.trainingweights)
+        if noinstances >= 2*method.minleaf && sum(node.eventvalues) > 0
             return false
         else
             return true
@@ -243,8 +243,8 @@ function leaf_node(trainingweights,regressionvalues,eventvalues,predictiontask,d
     end
 end
 
-function make_leaf(trainingweights,regressionvalues,timevalues,eventvalues,predictiontask,defaultprediction,method::LearningMethod{Survival})
-    return generate_cumulative_hazard_function(trainingweights,timevalues,eventvalues)
+function make_leaf(node,method::LearningMethod{Survival})
+    return generate_cumulative_hazard_function(node.trainingweights,node.timevalues,node.eventvalues)
 end
 
 function find_best_split(trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,predictiontask,method::LearningMethod{Survival})

@@ -13,10 +13,14 @@ type Node
     eventvalues::Array{Float64,1} # survivial analysis
     defaultprediction::Array{Any,1}
 end
+
+type TreeNode
+    nodeType::Symbol
+end
+# @iprofile begin
 ##
 ## Function for building a single tree.
 ##
-
 function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,trainingdata,variables,types,predictiontask,varimp)
     tree = Any[]
     depth = 0
@@ -30,14 +34,14 @@ function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalue
     end
     while stack != []
         node = pop!(stack)
-        if leaf_node(node.trainingweights,node.regressionvalues,node.eventvalues,predictiontask,node.depth,method)
-            leaf = (:LEAF,make_leaf(node.trainingweights,node.regressionvalues,node.timevalues,node.eventvalues,predictiontask,node.defaultprediction,method))
+        if leaf_node(node, method)
+            leaf = (:LEAF,make_leaf(node, method))
             push!(tree,(node.nodenumber,leaf))
             noleafnodes += 1
         else
             bestsplit = find_best_split(node.trainingrefs,node.trainingweights,node.regressionvalues,node.timevalues,node.eventvalues,trainingdata,variables,types,predictiontask,method)
             if bestsplit == :NA
-                leaf = (:LEAF,make_leaf(node.trainingweights,node.regressionvalues,node.timevalues,node.eventvalues,predictiontask,node.defaultprediction,method))
+                leaf = (:LEAF,make_leaf(node,method))
                 push!(tree,(node.nodenumber,leaf))
                 noleafnodes += 1
                 noirregularleafnodes += 1
@@ -177,7 +181,6 @@ end
 
 # AMG: this is for running a single file. Note: we should allow data to be passed as argument in the next
 # three functions !!!
-
 function evaluate_method(;method = forest(),protocol = 10)
     println("Running experiment")
     method = fix_method_type(method)
