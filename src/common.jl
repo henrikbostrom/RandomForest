@@ -3,21 +3,6 @@ global majorversion = 0
 global minorversion = 0
 global patchversion = 10
 
-type Node
-    depth::Int
-    nodenumber::Int
-    trainingrefs::Array{Any,1}
-    trainingweights::Array{Any,1}
-    regressionvalues::Array{Float64,1} # regression
-    timevalues::Array{Float64,1} # survival analysis
-    eventvalues::Array{Float64,1} # survivial analysis
-    defaultprediction::Array{Any,1}
-end
-
-type TreeNode
-    nodeType::Symbol
-end
-# @iprofile begin
 ##
 ## Function for building a single tree.
 ##
@@ -35,13 +20,13 @@ function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalue
     while stack != []
         node = pop!(stack)
         if leaf_node(node, method)
-            leaf = (:LEAF,make_leaf(node, method))
+            leaf = TreeNode(:LEAF,make_leaf(node, method))
             push!(tree,(node.nodenumber,leaf))
             noleafnodes += 1
         else
             bestsplit = find_best_split(node.trainingrefs,node.trainingweights,node.regressionvalues,node.timevalues,node.eventvalues,trainingdata,variables,types,predictiontask,method)
             if bestsplit == :NA
-                leaf = (:LEAF,make_leaf(node,method))
+                leaf = TreeNode(:LEAF,make_leaf(node,method))
                 push!(tree,(node.nodenumber,leaf))
                 noleafnodes += 1
                 noirregularleafnodes += 1
@@ -59,7 +44,7 @@ function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalue
                     end
                     variableimportance[varno] += variableimp
                 end
-                push!(tree,(node.nodenumber,((varno,splittype,splitpoint,leftweight),nextavailablenodeno,nextavailablenodeno+1)))
+                push!(tree,(node.nodenumber,TreeNode(:NODE, varno,splittype,splitpoint,leftweight,nextavailablenodeno,nextavailablenodeno+1)))
                 defaultprediction = default_prediction(node.trainingweights,node.regressionvalues,node.timevalues,node.eventvalues,predictiontask,method)
                 push!(stack,Node(node.depth+1,nextavailablenodeno,leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,defaultprediction))
                 push!(stack,Node(node.depth+1,nextavailablenodeno+1,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,defaultprediction))
@@ -138,7 +123,7 @@ end
 
 function restructure_tree(tree)
     nonodes = size(tree,1)
-    newtree = Array(Any,nonodes)
+    newtree = Array(TreeNode,nonodes)
     for i = 1:nonodes
         nodeno, node = tree[i]
         newtree[nodeno] = node
@@ -157,21 +142,21 @@ end
 function make_prediction(tree,testdata,exampleno,prediction,nodeno=1,weight=1.0)
     while true
         node = tree[nodeno]
-        if node[1] == :LEAF
-            prediction += weight*node[2]
+        if node.nodeType == :LEAF
+            prediction += weight*node.prediction
             return prediction
         else
             # varno, splittype, splitpoint, splitweight = node[1]
-            examplevalue = testdata[node[1][1]][exampleno]
+            examplevalue = testdata[node.varno][exampleno]
             if isna(examplevalue)
-                prediction+=make_prediction(tree,testdata,exampleno,prediction,node[2],weight*node[1][4])
-                prediction+=make_prediction(tree,testdata,exampleno,prediction,node[3],weight*(1-node[1][4]))
+                prediction+=make_prediction(tree,testdata,exampleno,prediction,node.leftnodeid,weight*node.leftweight)
+                prediction+=make_prediction(tree,testdata,exampleno,prediction,node.rightnodeid,weight*(1-node.leftweight))
                 return prediction
             else
-                if node[1][2] == :NUMERIC
-                  nodeno=(examplevalue <= node[1][3])? node[2]: node[3]
+                if node.splittype == :NUMERIC
+                  nodeno=(examplevalue <= node.splitpoint)? node.leftnodeid: node.rightnodeid
                 else #Catagorical
-                  nodeno=(examplevalue == node[1][3])? node[2]: node[3]
+                  nodeno=(examplevalue == node.splitpoint)? node.leftnodeid: node.rightnodeid
                 end
             end
         end

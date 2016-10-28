@@ -528,35 +528,24 @@ function make_split(method::LearningMethod{Survival},trainingrefs,trainingweight
   return leftrefs,leftweights,[],lefttimevalues,lefteventvalues,rightrefs,rightweights,[],righttimevalues,righteventvalues,leftweight
 end
 
-function make_survival_prediction(tree,testdata,exampleno,time,prediction)
-    stack = Any[]
-    nodeno = 1
-    weight = 1.0
-    push!(stack,(nodeno,weight))
-    while stack != []
-        nodeno, weight = pop!(stack)
+function make_survival_prediction(tree,testdata,exampleno,time,prediction,nodeno=1,weight=1.0)
+    while true
         node = tree[nodeno]
-        if node[1] == :LEAF
-            prediction += weight*get_cumulative_hazard(node[2],time)
+        if node.nodeType == :LEAF
+            prediction += weight* get_cumulative_hazard(node.prediction,time)
+            return prediction
         else
-            varno, splittype, splitpoint, splitweight = node[1]
-            examplevalue = testdata[varno][exampleno]
+            # varno, splittype, splitpoint, splitweight = node[1]
+            examplevalue = testdata[node.varno][exampleno]
             if isna(examplevalue)
-                push!(stack,(node[2],weight*splitweight))
-                push!(stack,(node[3],weight*(1-splitweight)))
+                prediction+=make_survival_prediction(tree,testdata,exampleno,time,prediction,node.leftnodeid,weight*node.leftweight)
+                prediction+=make_survival_prediction(tree,testdata,exampleno,time,prediction,node.rightnodeid,weight*(1-node.leftweight))
+                return prediction
             else
-                if splittype == :NUMERIC
-                    if examplevalue <= splitpoint
-                        push!(stack,(node[2],weight))
-                    else
-                        push!(stack,(node[3],weight))
-                    end
-                else
-                    if examplevalue == splitpoint
-                        push!(stack,(node[2],weight))
-                    else
-                        push!(stack,(node[3],weight))
-                    end
+                if node.splittype == :NUMERIC
+                  nodeno=(examplevalue <= node.splitpoint)? node.leftnodeid: node.rightnodeid
+                else #Catagorical
+                  nodeno=(examplevalue == node.splitpoint)? node.leftnodeid: node.rightnodeid
                 end
             end
         end
