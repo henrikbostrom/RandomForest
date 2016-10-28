@@ -10,12 +10,12 @@ immutable Node{T1, T2, T3}
     defaultprediction::Array{T3,1}
 end
 
-immutable TreeNode{T}
+immutable TreeNode{T,ST}
    nodeType::Symbol
    prediction::Array{T,1}
    varno::Int
    splittype::Symbol
-   splitpoint::Union{Float64,String} # Simple fix for now, but should be more specific
+   splitpoint::ST # Int for CATEGORIC and Float64 NUMERIC
    leftweight::Float64
    leftnode::TreeNode
    rightnode::TreeNode
