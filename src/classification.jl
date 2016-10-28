@@ -167,7 +167,7 @@ function generate_tree(method::LearningMethod{Classifier},trainingrefs,trainingw
     end
 end
 
-function default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,predictiontask,method::LearningMethod{Classifier})
+function default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,method::LearningMethod{Classifier})
     noclasses = size(trainingweights,1)
     classcounts = map(sum, trainingweights)
     noinstances = sum(classcounts)

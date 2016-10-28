@@ -2,7 +2,6 @@
 
 immutable Node
     depth::Int
-    nodenumber::Int
     trainingrefs::Array{Any,1}
     trainingweights::Array{Any,1}
     regressionvalues::Array{Float64,1} # regression
@@ -18,10 +17,8 @@ immutable TreeNode
    splittype::Symbol
    splitpoint::Float64
    leftweight::Float64
-   # leftnode::TreeRecursiveNode
-   # rightnode::TreeRecursiveNode
-   leftnodeid::Int
-   rightnodeid::Int
+   leftnode::TreeNode
+   rightnode::TreeNode
    TreeNode(n,p)=new(n,p)
    TreeNode(n,v,splt,spltp,lw,left,right)=new(n,0,v,splt,spltp,lw,left,right)
 end
@@ -120,7 +117,7 @@ type PredictionModel{T}
     version::Any
     oobperformance::Any
     variableimportance::Any
-    trees::Array{Array{TreeNode,1},1}
+    trees::Array{TreeNode,1}
     conformal::Any
     PredictionModel(m) = new(m)
     PredictionModel(method,class,ver,oob,varImp,trees,conformal) = new(method,class,ver,oob,varImp,trees,conformal)

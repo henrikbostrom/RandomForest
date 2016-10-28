@@ -194,7 +194,7 @@ end
 ##     return prediction
 ## end
 
-function default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,predictiontask,method::LearningMethod{Survival})
+function default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,method::LearningMethod{Survival})
     return generate_cumulative_hazard_function(trainingweights,timevalues,eventvalues)
 end
 
@@ -528,29 +528,26 @@ function make_split(method::LearningMethod{Survival},node,trainingdata,bestsplit
   return leftrefs,leftweights,[],lefttimevalues,lefteventvalues,rightrefs,rightweights,[],righttimevalues,righteventvalues,leftweight
 end
 
-function make_survival_prediction(tree,testdata,exampleno,time,prediction,nodeno=1,weight=1.0)
-    while true
-        node = tree[nodeno]
-        if node.nodeType == :LEAF
-            prediction += weight* get_cumulative_hazard(node.prediction,time)
+function make_survival_prediction(node::TreeNode,testdata,exampleno,time,prediction,weight=1.0)
+    if node.nodeType == :LEAF
+        prediction += weight* get_cumulative_hazard(node.prediction,time)
+        return prediction
+    else
+        # varno, splittype, splitpoint, splitweight = node[1]
+        examplevalue = testdata[node.varno][exampleno]
+        if isna(examplevalue)
+            prediction+=make_survival_prediction(node.leftnode,testdata,exampleno,prediction,weight*node.leftweight)
+            prediction+=make_survival_prediction(node.rightnode,testdata,exampleno,prediction,weight*(1-node.leftweight))
             return prediction
         else
-            # varno, splittype, splitpoint, splitweight = node[1]
-            examplevalue = testdata[node.varno][exampleno]
-            if isna(examplevalue)
-                prediction+=make_survival_prediction(tree,testdata,exampleno,time,prediction,node.leftnodeid,weight*node.leftweight)
-                prediction+=make_survival_prediction(tree,testdata,exampleno,time,prediction,node.rightnodeid,weight*(1-node.leftweight))
-                return prediction
-            else
-                if node.splittype == :NUMERIC
-                  nodeno=(examplevalue <= node.splitpoint)? node.leftnodeid: node.rightnodeid
-                else #Catagorical
-                  nodeno=(examplevalue == node.splitpoint)? node.leftnodeid: node.rightnodeid
-                end
+            if node.splittype == :NUMERIC
+              nextnode=(examplevalue <= node.splitpoint)? node.leftnode: node.rightnode
+            else #Catagorical
+              nextnode=(examplevalue == node.splitpoint)? node.leftnode: node.rightnode
             end
+            return make_survival_prediction(nextnode,testdata,exampleno,prediction,weight)
         end
     end
-    return prediction
 end
 
 function generate_model_internal(method::LearningMethod{Survival},oobs,classes)

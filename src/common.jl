@@ -7,56 +7,47 @@ global patchversion = 10
 ## Function for building a single tree.
 ##
 function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,trainingdata,variables,types,predictiontask,varimp)
-    tree = Any[]
-    depth = 0
-    nodeno = 1
-    noleafnodes = 0
-    noirregularleafnodes = 0
-    stack = Node[Node(depth,nodeno,alltrainingrefs,alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,default_prediction(alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,predictiontask,method))]
-    nextavailablenodeno = 2
-    if varimp
-        variableimportance = zeros(length(variables))
-    end
-    while stack != []
-        node = pop!(stack)
-        if leaf_node(node, method)
-            leaf = TreeNode(:LEAF,make_leaf(node, method))
-            push!(tree,(node.nodenumber,leaf))
-            noleafnodes += 1
-        else
-            bestsplit = find_best_split(node,trainingdata,variables,types,method)
-            if bestsplit == :NA
-                leaf = TreeNode(:LEAF,make_leaf(node,method))
-                push!(tree,(node.nodenumber,leaf))
-                noleafnodes += 1
-                noirregularleafnodes += 1
-            else
-                leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,leftweight = make_split(method,node,trainingdata,bestsplit)
-                varno, variable, splittype, splitpoint = bestsplit
-                if varimp
-                    if typeof(method.learningType) == Regressor #predictiontask == :REGRESSION
-                        variableimp = variance_reduction(node.trainingweights,node.regressionvalues,leftweights,leftregressionvalues,rightweights,rightregressionvalues)
-                    elseif typeof(method.learningType) == Classifier #predictiontask == :CLASS
-                        variableimp = information_gain(node.trainingweights,leftweights,rightweights)
-                    else #predictiontask == :SURVIVAL
-                        variableimp = hazard_score_gain(node.trainingweights,node.timevalues,node.eventvalues,leftweights,lefttimevalues,lefteventvalues,rightweights,righttimevalues,righteventvalues)
-                    end
-                    variableimportance[varno] += variableimp
-                end
-                push!(tree,(node.nodenumber,TreeNode(:NODE, varno,splittype,splitpoint,leftweight,nextavailablenodeno,nextavailablenodeno+1)))
-                defaultprediction = default_prediction(node.trainingweights,node.regressionvalues,node.timevalues,node.eventvalues,predictiontask,method)
-                push!(stack,Node(node.depth+1,nextavailablenodeno,leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,defaultprediction))
-                push!(stack,Node(node.depth+1,nextavailablenodeno+1,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,defaultprediction))
-                nextavailablenodeno += 2
-            end
-        end
-    end
+    leafnodesstats = Int[0, 0] # noleafnodes, noirregularleafnodes
+    node = Node(0,alltrainingrefs,alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,default_prediction(alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,method))
+    variableimportance = zeros(length(variables))
+    tree = get_tree_node(node, variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp)
     if varimp
         variableimportance = variableimportance/sum(variableimportance)
     else
         variableimportance = :NONE
     end
-    return restructure_tree(tree), variableimportance, noleafnodes, noirregularleafnodes
+    return tree, variableimportance, leafnodesstats[1], leafnodesstats[2]
+end
+
+function get_tree_node(node, variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp)
+    if leaf_node(node, method)
+        leafnodesstats[1] += 1
+        return TreeNode(:LEAF,make_leaf(node, method))
+    else
+        bestsplit = find_best_split(node,trainingdata,variables,types,method)
+        if bestsplit == :NA
+            leafnodesstats[1] += 1
+            leafnodesstats[2] += 1
+            return TreeNode(:LEAF,make_leaf(node,method))
+        else
+            leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,leftweight = make_split(method,node,trainingdata,bestsplit)
+            varno, variable, splittype, splitpoint = bestsplit
+            if varimp
+                if typeof(method.learningType) == Regressor #predictiontask == :REGRESSION
+                    variableimp = variance_reduction(node.trainingweights,node.regressionvalues,leftweights,leftregressionvalues,rightweights,rightregressionvalues)
+                elseif typeof(method.learningType) == Classifier #predictiontask == :CLASS
+                    variableimp = information_gain(node.trainingweights,leftweights,rightweights)
+                else #predictiontask == :SURVIVAL
+                    variableimp = hazard_score_gain(node.trainingweights,node.timevalues,node.eventvalues,leftweights,lefttimevalues,lefteventvalues,rightweights,righttimevalues,righteventvalues)
+                end
+                variableimportance[varno] += variableimp
+            end
+            defaultprediction = default_prediction(node.trainingweights,node.regressionvalues,node.timevalues,node.eventvalues,method)
+            
+            return TreeNode(:NODE, varno,splittype,splitpoint,leftweight, get_tree_node(Node(node.depth+1,leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp), 
+            get_tree_node(Node(node.depth+1,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp))
+        end
+    end
 end
 
 function get_variables_and_types(trainingdata)
@@ -120,47 +111,29 @@ function hazard_score_gain(trainingweights,timevalues,eventvalues,leftweights,le
     return orighazardscore-lefthazardscore-righthazardscore
 end
 
-function restructure_tree(tree)
-    nonodes = size(tree,1)
-    newtree = Array(TreeNode,nonodes)
-    for i = 1:nonodes
-        nodeno, node = tree[i]
-        newtree[nodeno] = node
-    end
-    return newtree
-end
-
-type StackNode
-    nodeno::Int
-    weight::Float64
-end
-
 ##
 ## Function for making a prediction with a single tree
 ##
-function make_prediction(tree,testdata,exampleno,prediction,nodeno=1,weight=1.0)
-    while true
-        node = tree[nodeno]
-        if node.nodeType == :LEAF
-            prediction += weight*node.prediction
+function make_prediction(node::TreeNode,testdata,exampleno,prediction,weight=1.0)
+    if node.nodeType == :LEAF
+        prediction += weight*node.prediction
+        return prediction
+    else
+        # varno, splittype, splitpoint, splitweight = node[1]
+        examplevalue = testdata[node.varno][exampleno]
+        if isna(examplevalue)
+            prediction+=make_prediction(node.leftnode,testdata,exampleno,prediction,weight*node.leftweight)
+            prediction+=make_prediction(node.rightnode,testdata,exampleno,prediction,weight*(1-node.leftweight))
             return prediction
         else
-            # varno, splittype, splitpoint, splitweight = node[1]
-            examplevalue = testdata[node.varno][exampleno]
-            if isna(examplevalue)
-                prediction+=make_prediction(tree,testdata,exampleno,prediction,node.leftnodeid,weight*node.leftweight)
-                prediction+=make_prediction(tree,testdata,exampleno,prediction,node.rightnodeid,weight*(1-node.leftweight))
-                return prediction
-            else
-                if node.splittype == :NUMERIC
-                  nodeno=(examplevalue <= node.splitpoint)? node.leftnodeid: node.rightnodeid
-                else #Catagorical
-                  nodeno=(examplevalue == node.splitpoint)? node.leftnodeid: node.rightnodeid
-                end
+            if node.splittype == :NUMERIC
+              nextnode=(examplevalue <= node.splitpoint)? node.leftnode: node.rightnode
+            else #Catagorical
+              nextnode=(examplevalue == node.splitpoint)? node.leftnode: node.rightnode
             end
+            return make_prediction(nextnode,testdata,exampleno,prediction,weight)
         end
     end
-    return prediction
 end
 
 # AMG: this is for running a single file. Note: we should allow data to be passed as argument in the next

@@ -195,7 +195,7 @@ function make_loo_prediction(tree,testdata,exampleno,prediction)
     return prediction
 end
 
-function default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,predictiontask,method::LearningMethod{Regressor})
+function default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,method::LearningMethod{Regressor})
     sumweights = sum(trainingweights)
     sumregressionvalues = sum(regressionvalues)
     return [sumweights,sumregressionvalues]
