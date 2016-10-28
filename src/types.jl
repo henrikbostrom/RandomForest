@@ -114,7 +114,7 @@ end
 type PredictionModel{T}
     method::LearningMethod{T}
     classes::Any
-    version::Any
+    version::VersionNumber
     oobperformance::Any
     variableimportance::Any
     trees::Array{TreeNode,1}

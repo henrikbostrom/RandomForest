@@ -102,7 +102,7 @@ end
 ##
 
 function experiment(;files = ".", separator = ',', protocol = 10, normalizetarget = false, normalizeinput = false, methods = [forest()], resultfile = :none)
-    println("RandomForest v. $(majorversion).$(minorversion).$(patchversion)")
+    println("RandomForest v. $rf_ver")
     if typeof(files) == String
         if isdir(files)
             dirfiles = readdir(files)

@@ -1,7 +1,4 @@
-# MOH FIXME:should use Julia standardized versioning instead
-global majorversion = 0
-global minorversion = 0
-global patchversion = 10
+global const rf_ver=v"0.0.10"
 
 ##
 ## Function for building a single tree.
@@ -47,8 +44,8 @@ function get_tree_node(node, variableimportance, leafnodesstats, trainingdata,va
                 variableimportance[varno] += variableimp
             end
             defaultprediction = default_prediction(node.trainingweights,node.regressionvalues,node.timevalues,node.eventvalues,method)
-            
-            return TreeNodeType(:NODE, varno,splittype,splitpoint,leftweight, get_tree_node(typeof(node)(node.depth+1,leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp, TreeNodeType), 
+
+            return TreeNodeType(:NODE, varno,splittype,splitpoint,leftweight, get_tree_node(typeof(node)(node.depth+1,leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp, TreeNodeType),
             get_tree_node(typeof(node)(node.depth+1,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp, TreeNodeType))
         end
     end
@@ -256,7 +253,7 @@ function generate_model(;method = forest())
         variables, types = get_variables_and_types(globaldata)
         variableimportance = hcat(variables,variableimportance)
         oobperformance, conformalfunction = generate_model_internal(method, oobs, classes)
-        result = PredictionModel{typeof(method.learningType)}(method,classes,(majorversion,minorversion,patchversion),oobperformance,variableimportance,vcat(trees...),conformalfunction)
+        result = PredictionModel{typeof(method.learningType)}(method,classes,rf_ver,oobperformance,variableimportance,vcat(trees...),conformalfunction)
     end
     return result
 end
