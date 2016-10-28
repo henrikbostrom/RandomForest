@@ -11,9 +11,10 @@ function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalue
     T1 = typeof(method.learningType) == Classifier ? Array{Int,1} : Int
     T2 = typeof(method.learningType) == Classifier ? Array{Float64,1} : Float64
     T3 = typeof(method.learningType) == Survival ? Array{Float64,1} : Float64
+    TreeNodeType = typeof(method.learningType) == Survival ? Array{Float64,1} : Float64
     node = Node{T1, T2, T3}(0,alltrainingrefs,alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,default_prediction(alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,method))
     variableimportance = zeros(length(variables))
-    tree = get_tree_node(node, variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp)
+    tree = get_tree_node(node, variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp,TreeNode{TreeNodeType})
     if varimp
         variableimportance = variableimportance/sum(variableimportance)
     else
@@ -22,16 +23,16 @@ function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalue
     return tree, variableimportance, leafnodesstats[1], leafnodesstats[2]
 end
 
-function get_tree_node(node, variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp)
+function get_tree_node(node, variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp,TreeNodeType)
     if leaf_node(node, method)
         leafnodesstats[1] += 1
-        return TreeNode(:LEAF,make_leaf(node, method))
+        return TreeNodeType(:LEAF,make_leaf(node, method))
     else
         bestsplit = find_best_split(node,trainingdata,variables,types,method)
         if bestsplit == :NA
             leafnodesstats[1] += 1
             leafnodesstats[2] += 1
-            return TreeNode(:LEAF,make_leaf(node,method))
+            return TreeNodeType(:LEAF,make_leaf(node,method))
         else
             leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,leftweight = make_split(method,node,trainingdata,bestsplit)
             varno, variable, splittype, splitpoint = bestsplit
@@ -47,8 +48,8 @@ function get_tree_node(node, variableimportance, leafnodesstats, trainingdata,va
             end
             defaultprediction = default_prediction(node.trainingweights,node.regressionvalues,node.timevalues,node.eventvalues,method)
             
-            return TreeNode(:NODE, varno,splittype,splitpoint,leftweight, get_tree_node(typeof(node)(node.depth+1,leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp), 
-            get_tree_node(typeof(node)(node.depth+1,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp))
+            return TreeNodeType(:NODE, varno,splittype,splitpoint,leftweight, get_tree_node(typeof(node)(node.depth+1,leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp, TreeNodeType), 
+            get_tree_node(typeof(node)(node.depth+1,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp, TreeNodeType))
         end
     end
 end

@@ -10,9 +10,9 @@ immutable Node{T1, T2, T3}
     defaultprediction::Array{T3,1}
 end
 
-immutable TreeNode
+immutable TreeNode{T}
    nodeType::Symbol
-   prediction::Any
+   prediction::Array{T,1}
    varno::Int
    splittype::Symbol
    splitpoint::Float64
@@ -20,7 +20,7 @@ immutable TreeNode
    leftnode::TreeNode
    rightnode::TreeNode
    TreeNode(n,p)=new(n,p)
-   TreeNode(n,v,splt,spltp,lw,left,right)=new(n,0,v,splt,spltp,lw,left,right)
+   TreeNode(n,v,splt,spltp,lw,left,right)=new(n,Array(T,0),v,splt,spltp,lw,left,right)
 end
 
 abstract LearningType
