@@ -204,7 +204,7 @@ function generate_cumulative_hazard_function(trainingweights,timevalues,eventval
     accevents = 0
 #    cumulativehazard = 0.0
     survivalprob = 1.0
-    chf = Any[]
+    chf = Array{Float64,1}[]
     for t = 1:size(timevalues,1)-1
         if timevalues[t] == timevalues[t+1]
             accweights += trainingweights[t]

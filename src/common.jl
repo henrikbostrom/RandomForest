@@ -8,7 +8,10 @@ global patchversion = 10
 ##
 function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,trainingdata,variables,types,predictiontask,varimp)
     leafnodesstats = Int[0, 0] # noleafnodes, noirregularleafnodes
-    node = Node(0,alltrainingrefs,alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,default_prediction(alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,method))
+    T1 = typeof(method.learningType) == Classifier ? Array{Int,1} : Int
+    T2 = typeof(method.learningType) == Classifier ? Array{Float64,1} : Float64
+    T3 = typeof(method.learningType) == Survival ? Array{Float64,1} : Float64
+    node = Node{T1, T2, T3}(0,alltrainingrefs,alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,default_prediction(alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,method))
     variableimportance = zeros(length(variables))
     tree = get_tree_node(node, variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp)
     if varimp
@@ -44,8 +47,8 @@ function get_tree_node(node, variableimportance, leafnodesstats, trainingdata,va
             end
             defaultprediction = default_prediction(node.trainingweights,node.regressionvalues,node.timevalues,node.eventvalues,method)
             
-            return TreeNode(:NODE, varno,splittype,splitpoint,leftweight, get_tree_node(Node(node.depth+1,leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp), 
-            get_tree_node(Node(node.depth+1,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp))
+            return TreeNode(:NODE, varno,splittype,splitpoint,leftweight, get_tree_node(typeof(node)(node.depth+1,leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp), 
+            get_tree_node(typeof(node)(node.depth+1,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp))
         end
     end
 end

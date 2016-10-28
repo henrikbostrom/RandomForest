@@ -4,8 +4,8 @@ function generate_trees(Arguments::Tuple{LearningMethod{Classifier},Any,Any,Any,
     srand(randseed)
     noclasses = length(classes)
     trainingdata = groupby(globaldata, :CLASS)
-    trainingrefs = Array(Any,noclasses)
-    trainingweights = Array(Any,noclasses)
+    trainingrefs = Array(Array{Int,1},noclasses)
+    trainingweights = Array(Array{Float64,1},noclasses)
     oobpredictions = Array(Any,noclasses)
     emptyprediction = [0; zeros(noclasses)]
     for c = 1:noclasses
@@ -135,8 +135,8 @@ function generate_tree(method::LearningMethod{Classifier},trainingrefs,trainingw
         else
             samplesize = convert(Int,round(sum(classweights)*method.bagsize))
         end
-        newtrainingweights = Array(Any,noclasses)
-        newtrainingrefs = Array(Any,noclasses)
+        newtrainingweights = Array(Array{Float64,1},noclasses)
+        newtrainingrefs = Array(Array{Int,1},noclasses)
         for c = 1:noclasses
             newtrainingweights[c] = zeros(length(trainingweights[c]))
         end
