@@ -24,15 +24,14 @@ function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalue
             push!(tree,(node.nodenumber,leaf))
             noleafnodes += 1
         else
-            bestsplit = find_best_split(node.trainingrefs,node.trainingweights,node.regressionvalues,node.timevalues,node.eventvalues,trainingdata,variables,types,predictiontask,method)
+            bestsplit = find_best_split(node,trainingdata,variables,types,method)
             if bestsplit == :NA
                 leaf = TreeNode(:LEAF,make_leaf(node,method))
                 push!(tree,(node.nodenumber,leaf))
                 noleafnodes += 1
                 noirregularleafnodes += 1
             else
-                leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,leftweight =
-                    make_split(method,node.trainingrefs,node.trainingweights,node.regressionvalues,node.timevalues,node.eventvalues,trainingdata,predictiontask,bestsplit)
+                leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,leftweight = make_split(method,node,trainingdata,bestsplit)
                 varno, variable, splittype, splitpoint = bestsplit
                 if varimp
                     if typeof(method.learningType) == Regressor #predictiontask == :REGRESSION

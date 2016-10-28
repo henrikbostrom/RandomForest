@@ -239,7 +239,7 @@ function make_leaf(node,method::LearningMethod{Regressor})
     return prediction
 end
 
-function find_best_split(trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,predictiontask,method::LearningMethod{Regressor})
+function find_best_split(node,trainingdata,variables,types,method::LearningMethod{Regressor})
     if method.randsub == :all
         sampleselection = collect(1:length(variables))
     elseif method.randsub == :default
@@ -261,25 +261,25 @@ function find_best_split(trainingrefs,trainingweights,regressionvalues,timevalue
     end
     if method.splitsample > 0
         splitsamplesize = method.splitsample
-        if sum(trainingweights) <= splitsamplesize
-            sampletrainingweights = trainingweights
-            sampletrainingrefs = trainingrefs
-            sampleregressionvalues = regressionvalues
+        if sum(node.trainingweights) <= splitsamplesize
+            sampletrainingweights = node.trainingweights
+            sampletrainingrefs = node.trainingrefs
+            sampleregressionvalues = node.regressionvalues
         else
             sampletrainingweights = Array(Float64,splitsamplesize)
             sampletrainingrefs = Array(Float64,splitsamplesize)
             sampleregressionvalues = Array(Float64,splitsamplesize)
             for i = 1:splitsamplesize
                 sampletrainingweights[i] = 1.0
-                randindex = rand(1:length(trainingrefs))
-                sampletrainingrefs[i] = trainingrefs[randindex]
-                sampleregressionvalues[i] = regressionvalues[randindex]
+                randindex = rand(1:length(node.trainingrefs))
+                sampletrainingrefs[i] = node.trainingrefs[randindex]
+                sampleregressionvalues[i] = node.regressionvalues[randindex]
             end
         end
     else
-        sampletrainingrefs = trainingrefs
-        sampletrainingweights = trainingweights
-        sampleregressionvalues = regressionvalues
+        sampletrainingrefs = node.trainingrefs
+        sampletrainingweights = node.trainingweights
+        sampleregressionvalues = node.regressionvalues
     end
     bestsplit = (-Inf,0,:NA,:NA,0.0)
     origregressionsum = sum(sampleregressionvalues .* sampletrainingweights)
@@ -426,7 +426,7 @@ function evaluate_regression_numeric_variable_allvals(bestsplit,varno,variable,s
     return bestsplit
 end
 
-function make_split(method::LearningMethod{Regressor},trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,predictiontask,bestsplit)
+function make_split(method::LearningMethod{Regressor},node,trainingdata,bestsplit)
   (varno, variable, splittype, splitpoint) = bestsplit
   leftrefs = Int[]
   leftweights = Float64[]
@@ -434,37 +434,37 @@ function make_split(method::LearningMethod{Regressor},trainingrefs,trainingweigh
   rightrefs = Int[]
   rightweights = Float64[]
   rightregressionvalues = Float64[]
-  values = trainingdata[varno][trainingrefs]
+  values = trainingdata[varno][node.trainingrefs]
   sumleftweights = 0.0
   sumrightweights = 0.0
   if splittype == :NUMERIC
-      for r = 1:length(trainingrefs)
-          ref = trainingrefs[r]
+      for r = 1:length(node.trainingrefs)
+          ref = node.trainingrefs[r]
           if values[r] <= splitpoint
               push!(leftrefs,ref)
-              push!(leftweights,trainingweights[r])
-              sumleftweights += trainingweights[r]
-              push!(leftregressionvalues,regressionvalues[r])
+              push!(leftweights,node.trainingweights[r])
+              sumleftweights += node.trainingweights[r]
+              push!(leftregressionvalues,node.regressionvalues[r])
           else
               push!(rightrefs,ref)
-              push!(rightweights,trainingweights[r])
-              sumrightweights += trainingweights[r]
-              push!(rightregressionvalues,regressionvalues[r])
+              push!(rightweights,node.trainingweights[r])
+              sumrightweights += node.trainingweights[r]
+              push!(rightregressionvalues,node.regressionvalues[r])
           end
       end
   else
-      for r = 1:length(trainingrefs)
-          ref = trainingrefs[r]
+      for r = 1:length(node.trainingrefs)
+          ref = node.trainingrefs[r]
           if values[r] == splitpoint
               push!(leftrefs,ref)
-              push!(leftweights,trainingweights[r])
-              sumleftweights += trainingweights[r]
-              push!(leftregressionvalues,regressionvalues[r])
+              push!(leftweights,node.trainingweights[r])
+              sumleftweights += node.trainingweights[r]
+              push!(leftregressionvalues,node.regressionvalues[r])
           else
               push!(rightrefs,ref)
-              push!(rightweights,trainingweights[r])
-              sumrightweights += trainingweights[r]
-              push!(rightregressionvalues,regressionvalues[r])
+              push!(rightweights,node.trainingweights[r])
+              sumrightweights += node.trainingweights[r]
+              push!(rightregressionvalues,node.regressionvalues[r])
           end
       end
   end
