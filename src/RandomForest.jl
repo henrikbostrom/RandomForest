@@ -148,7 +148,7 @@ function run_experiment(file, separator, protocol, normalizetarget, normalizeinp
             methods = map(x->LearningMethod(Classifier(), (getfield(x,i) for i in fieldnames(x)[2:end])...), methods)
         else # predictiontask == :SURVIVAL
             methods = map(x->LearningMethod(Survival(), (getfield(x,i) for i in fieldnames(x)[2:end])...), methods)
-        end        
+        end
         if predictiontask == :REGRESSION && normalizetarget
             regressionvalues = globaldata[:REGRESSION]
             minval = minimum(regressionvalues)
@@ -195,7 +195,7 @@ end
 function run_split(testoption,predictiontask,methods)
     if typeof(testoption) == Float64
         noexamples = size(globaldata,1)
-        notestexamples = convert(Int,floor(testoption*noexamples))
+        notestexamples = floor(Int,testoption*noexamples)
         notrainingexamples = noexamples-notestexamples
         tests = shuffle([trues(notestexamples);falses(notrainingexamples)])
         if ~(:TEST in names(globaldata))
@@ -216,9 +216,8 @@ function run_split(testoption,predictiontask,methods)
     nocoworkers = nprocs()-1
     numThreads = Threads.nthreads()
     time = 0
-    # MOH FIXME: At this point you should know that method result to expect
     methodresults = Array(Any,length(methods))
-    origseed = rand(1:1000_000_000)
+    origseed = rand(1:1000_000_000) #FIXME: randomizing the random seed doesn't help
     for m = 1:length(methods)
         results = Array{Any,1}()
         srand(origseed) #NOTE: To remove configuration order dependance
@@ -243,7 +242,7 @@ function run_split(testoption,predictiontask,methods)
             notrees = [methods[m].notrees]
             time = @elapsed results = generate_and_test_trees.([(methods[m],predictiontask,:test,n,rand(1:1000_000_000),randomoobs) for n in notrees])
         end
-        
+
         tic()
         methodresults[m] = run_split_internal(methods[m], results, time)
     end

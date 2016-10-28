@@ -15,7 +15,7 @@ immutable TreeNode{T}
    prediction::Array{T,1}
    varno::Int
    splittype::Symbol
-   splitpoint::Float64
+   splitpoint::Union{Float64,String} # Simple fix for now, but should be more specific
    leftweight::Float64
    leftnode::TreeNode
    rightnode::TreeNode
