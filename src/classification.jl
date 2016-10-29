@@ -637,7 +637,7 @@ function apply_trees(Arguments::Tuple{LearningMethod{Classifier},Any,Any})
     method, classes, trees = Arguments
     variables, types = get_variables_and_types(globaldata)
     globalarray = [globaldata]
-    testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,globalarray)    
+    testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,globalarray)
     newtestdata = transform_nonmissing_columns_to_arrays(method,variables,globalarray,testmissingvalues)
     replacements_for_missing_values!(method,newtestdata,globalarray,variables,types,testmissingvalues,testnonmissingvalues)
     nopredictions = size(globaldata,1)
