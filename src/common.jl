@@ -3,7 +3,7 @@ global const rf_ver=v"0.0.10"
 ##
 ## Function for building a single tree.
 ##
-function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,trainingdata,variables,types,predictiontask,varimp)
+function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,trainingdata,variables,types,varimp)
     leafnodesstats = Int[0, 0] # noleafnodes, noirregularleafnodes
     T1 = typeof(method.learningType) == Classifier ? Array{Int,1} : Int
     T2 = typeof(method.learningType) == Classifier ? Array{Float64,1} : Float64
@@ -170,11 +170,11 @@ function run_single_experiment(protocol, methods)
         result = (:NONE,:NONE,:NONE)
     else
         if typeof(protocol) == Float64 || protocol == :test
-            results = run_split(protocol,predictiontask,methods)
-            result = (predictiontask,"",results)
+            results = run_split(protocol,methods)
+            result = ("",results)
         elseif typeof(protocol) == Int64 || protocol == :cv
-            results = run_cross_validation(protocol,predictiontask,methods)
-            result = (predictiontask,"",results)
+            results = run_cross_validation(protocol,methods)
+            result = ("",results)
         else
             throw("Unknown experiment protocol")
         end
@@ -234,16 +234,16 @@ function generate_model(;method = forest())
         treesandoobs = Array{Any,1}()
         if nocoworkers > 0
             notrees = getnotrees(method, nocoworkers)
-            treesandoobs = pmap(generate_trees, [(method,predictiontask,classes,n,rand(1:1000_000_000)) for n in notrees])
+            treesandoobs = pmap(generate_trees, [(method,classes,n,rand(1:1000_000_000)) for n in notrees])
         elseif numThreads > 1
             notrees = getnotrees(method, numThreads)
             treesandoobs = Array{Any,1}(length(notrees))
             Threads.@threads for n in notrees
-                treesandoobs[Threads.threadid()] = generate_trees((method,predictiontask,classes,n,rand(1:1000_000_000)))
+                treesandoobs[Threads.threadid()] = generate_trees((method,classes,n,rand(1:1000_000_000)))
             end
         else
             notrees = [method.notrees]
-            treesandoobs = generate_trees.([(method,predictiontask,classes,n,rand(1:1000_000_000)) for n in notrees])
+            treesandoobs = generate_trees.([(method,classes,n,rand(1:1000_000_000)) for n in notrees])
         end
         trees = map(i->i[1], treesandoobs)
         oobs = map(i->i[2], treesandoobs)

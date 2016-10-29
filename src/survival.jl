@@ -1,5 +1,5 @@
-function generate_trees(Arguments::Tuple{LearningMethod{Survival},Any,Any,Any,Any})
-    method,predictiontask,classes,notrees,randseed = Arguments
+function generate_trees(Arguments::Tuple{LearningMethod{Survival},Any,Any,Any})
+    method,classes,notrees,randseed = Arguments
     s = size(globaldata,1)
     srand(randseed)
     trainingdata = globaldata
@@ -20,8 +20,8 @@ function generate_trees(Arguments::Tuple{LearningMethod{Survival},Any,Any,Any,An
     model = Array(Any,notrees)
     variableimportance = zeros(size(variables,1))
     for treeno = 1:notrees
-        sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
-        model[treeno], treevariableimportance, noleafs, noirregularleafs = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,predictiontask,oobpredictions,varimp = true)
+        sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
+        model[treeno], treevariableimportance, noleafs, noirregularleafs = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions,varimp = true)
         modelsize += noleafs
         variableimportance += treevariableimportance
     end
@@ -62,7 +62,7 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Survival}
     return newdata
 end
 
-function sample_replacements_for_missing_values!(method::LearningMethod{Survival},newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+function sample_replacements_for_missing_values!(method::LearningMethod{Survival},newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
     for v = 1:length(variables)
         if missingvalues[v] != []
             values = trainingdata[variables[v]]
@@ -98,7 +98,7 @@ function replacements_for_missing_values!(method::LearningMethod{Survival},newte
     end
 end
 
-function generate_tree(method::LearningMethod{Survival},trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,predictiontask,oobpredictions; varimp = false)
+function generate_tree(method::LearningMethod{Survival},trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,oobpredictions; varimp = false)
     if method.bagging
         newtrainingweights = zeros(length(trainingweights))
         if typeof(method.bagsize) == Int
@@ -113,7 +113,7 @@ function generate_tree(method::LearningMethod{Survival},trainingrefs,trainingwei
         newtrainingweights = newtrainingweights[nonzeroweights]
         newtimevalues = timevalues[nonzeroweights]
         neweventvalues = eventvalues[nonzeroweights]
-        model, variableimportance, noleafs, noirregularleafs = build_tree(method,newtrainingrefs,newtrainingweights,regressionvalues,newtimevalues,neweventvalues,trainingdata,variables,types,predictiontask,varimp)
+        model, variableimportance, noleafs, noirregularleafs = build_tree(method,newtrainingrefs,newtrainingweights,regressionvalues,newtimevalues,neweventvalues,trainingdata,variables,types,varimp)
         zeroweights = ~nonzeroweights
         oobrefs = trainingrefs[zeroweights]
         for oobref in oobrefs
@@ -121,7 +121,7 @@ function generate_tree(method::LearningMethod{Survival},trainingrefs,trainingwei
             oobpredictions[oobref] += [1,oobprediction,oobprediction^2]
         end
     else
-        model, variableimportance, noleafs, noirregularleafs = build_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,predictiontask,varimp)
+        model, variableimportance, noleafs, noirregularleafs = build_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,varimp)
         for i = 1:size(trainingrefs,1)
             trainingref = trainingrefs[i]
             emptyleaf, leafstats = make_loo_prediction(model,trainingdata,trainingref,0)

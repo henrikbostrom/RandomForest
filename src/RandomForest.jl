@@ -171,10 +171,10 @@ function run_experiment(file, separator, protocol, normalizetarget, normalizeinp
         end
         initiate_workers()
         if typeof(protocol) == Float64 || protocol == :test
-            results = run_split(protocol,predictiontask,methods)
+            results = run_split(protocol,methods)
             result = (predictiontask,file,results)
         elseif typeof(protocol) == Int64 || protocol == :cv
-            results = run_cross_validation(protocol,predictiontask,methods)
+            results = run_cross_validation(protocol,methods)
             result = (predictiontask,file,results)
         else
             throw("Unknown experiment protocol")
@@ -192,7 +192,7 @@ function read_data(file; separator = ',')
     return df
 end
 
-function run_split(testoption,predictiontask,methods)
+function run_split(testoption,methods)
     if typeof(testoption) == Float64
         noexamples = size(globaldata,1)
         notestexamples = floor(Int,testoption*noexamples)
@@ -231,16 +231,16 @@ function run_split(testoption,predictiontask,methods)
         end
         if nocoworkers > 0
             notrees = getnotrees(methods[m], nocoworkers)
-            time = @elapsed results = pmap(generate_and_test_trees,[(methods[m],predictiontask,:test,n,rand(1:1000_000_000),randomoobs) for n in notrees])
+            time = @elapsed results = pmap(generate_and_test_trees,[(methods[m],:test,n,rand(1:1000_000_000),randomoobs) for n in notrees])
         elseif numThreads > 1
             notrees = getnotrees(methods[m], numThreads)
             results = Array{Any,1}(length(notrees))
             time = @elapsed Threads.@threads for n in notrees
-                results[Threads.threadid()] = generate_and_test_trees((methods[m],predictiontask,:test,n,rand(1:1000_000_000),randomoobs))
+                results[Threads.threadid()] = generate_and_test_trees((methods[m],:test,n,rand(1:1000_000_000),randomoobs))
             end
         else
             notrees = [methods[m].notrees]
-            time = @elapsed results = generate_and_test_trees.([(methods[m],predictiontask,:test,n,rand(1:1000_000_000),randomoobs) for n in notrees])
+            time = @elapsed results = generate_and_test_trees.([(methods[m],:test,n,rand(1:1000_000_000),randomoobs) for n in notrees])
         end
 
         tic()
@@ -249,7 +249,7 @@ function run_split(testoption,predictiontask,methods)
     return methodresults
 end
 
-function run_cross_validation(protocol,predictiontask,methods)
+function run_cross_validation(protocol,methods)
     if typeof(protocol) == Int64
         nofolds = protocol
         folds = collect(1:nofolds)
@@ -314,16 +314,16 @@ function run_cross_validation(protocol,predictiontask,methods)
         end
         if nocoworkers > 0
             notrees = getnotrees(methods[m], nocoworkers)
-            time = @elapsed results = pmap(generate_and_test_trees,[(methods[m],predictiontask,:cv,n,rand(1:1000_000_000),randomoobs) for n in notrees])
+            time = @elapsed results = pmap(generate_and_test_trees,[(methods[m],:cv,n,rand(1:1000_000_000),randomoobs) for n in notrees])
         elseif numThreads > 1
             notrees = getnotrees(methods[m], numThreads)
             results = Array{Any,1}(length(notrees))
             time = @elapsed Threads.@threads for n in notrees
-                results[Threads.threadid()] = generate_and_test_trees((methods[m],predictiontask,:cv,n,rand(1:1000_000_000),randomoobs))
+                results[Threads.threadid()] = generate_and_test_trees((methods[m],:cv,n,rand(1:1000_000_000),randomoobs))
             end
         else
             notrees = [methods[m].notrees]
-            time = @elapsed results = generate_and_test_trees.([(methods[m],predictiontask,:cv,n,rand(1:1000_000_000),randomoobs) for n in notrees])
+            time = @elapsed results = generate_and_test_trees.([(methods[m],:cv,n,rand(1:1000_000_000),randomoobs) for n in notrees])
         end
         tic()
         allmodelsizes = try
