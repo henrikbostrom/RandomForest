@@ -110,35 +110,25 @@ end
 ##
 ## Function for making a prediction with a single tree
 ##
-# LEAF
-function make_prediction{T}(node::TreeNode{T,Void},testdata,exampleno,prediction,weight=1.0)
-   prediction += weight*node.prediction
-   return prediction
-end
-
-# Node Numeric
-function make_prediction{T}(node::TreeNode{T,Float64},testdata,exampleno,prediction,weight=1.0)
-    examplevalue = testdata[node.varno][exampleno]
-    if isna(examplevalue)
-        prediction+=make_prediction(node.leftnode,testdata,exampleno,prediction,weight*node.leftweight)
-        prediction+=make_prediction(node.rightnode,testdata,exampleno,prediction,weight*(1-node.leftweight))
+function make_prediction(node::TreeNode,testdata,exampleno,prediction,weight=1.0)
+    if node.nodeType == :LEAF
+        prediction += weight*node.prediction
         return prediction
     else
-        nextnode=(examplevalue <= node.splitpoint)? node.leftnode: node.rightnode
-        return make_prediction(nextnode,testdata,exampleno,prediction,weight)
-    end
-end
-
-# Node Categorical
-function make_prediction{T}(node::TreeNode{T,String},testdata,exampleno,prediction,weight=1.0)
-    examplevalue = testdata[node.varno][exampleno]
-    if isna(examplevalue)
-        prediction+=make_prediction(node.leftnode,testdata,exampleno,prediction,weight*node.leftweight)
-        prediction+=make_prediction(node.rightnode,testdata,exampleno,prediction,weight*(1-node.leftweight))
-        return prediction
-    else
-        nextnode=(examplevalue == node.splitpoint)? node.leftnode: node.rightnode
-        return make_prediction(nextnode,testdata,exampleno,prediction,weight)
+        # varno, splittype, splitpoint, splitweight = node[1]
+        examplevalue = testdata[node.varno][exampleno]
+        if isna(examplevalue)
+            prediction+=make_prediction(node.leftnode,testdata,exampleno,prediction,weight*node.leftweight)
+            prediction+=make_prediction(node.rightnode,testdata,exampleno,prediction,weight*(1-node.leftweight))
+            return prediction
+        else
+            if node.splittype == :NUMERIC
+              nextnode=(examplevalue <= node.splitpoint)? node.leftnode: node.rightnode
+            else #Catagorical
+              nextnode=(examplevalue == node.splitpoint)? node.leftnode: node.rightnode
+            end
+            return make_prediction(nextnode,testdata,exampleno,prediction,weight)
+        end
     end
 end
 
