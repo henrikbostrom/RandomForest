@@ -47,7 +47,7 @@ function get_tree_node(node, variableimportance, leafnodesstats, trainingdata,va
 
             leftnode=get_tree_node(typeof(node)(node.depth+1,leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp, PredictType)
             rightnode=get_tree_node(typeof(node)(node.depth+1,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp, PredictType)
-            return TreeNode{PredictType,(splittype==:CATEGORIC)? String:Float64}(:NODE, varno,splittype,splitpoint,leftweight,
+            return TreeNode{PredictType,typeof(splitpoint)}(:NODE, varno,splittype,splitpoint,leftweight,
                   leftnode,rightnode)
         end
     end
