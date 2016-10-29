@@ -9,9 +9,9 @@ function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalue
     T2 = typeof(method.learningType) == Classifier ? Array{Float64,1} : Float64
     T3 = typeof(method.learningType) == Survival ? Array{Float64,1} : Float64
     PredictType = typeof(method.learningType) == Survival ? Array{Array{Float64,1},1} : Array{Float64,1}
-    node = Node{T1, T2, T3}(0,alltrainingrefs,alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,default_prediction(alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,method))
+    treeData = TreeData{T1, T2, T3}(0,alltrainingrefs,alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,default_prediction(alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,method))
     variableimportance = zeros(length(variables))
-    tree = get_tree_node(node, variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp,PredictType)
+    tree = get_tree_node(treeData , variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp,PredictType)
     if varimp
         variableimportance = variableimportance/sum(variableimportance)
     else
@@ -20,33 +20,33 @@ function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalue
     return tree, variableimportance, leafnodesstats[1], leafnodesstats[2]
 end
 
-function get_tree_node(node, variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp,PredictType)
-    if leaf_node(node, method)
+function get_tree_node(treeData, variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp,PredictType)
+    if leaf_node(treeData, method)
         leafnodesstats[1] += 1
-        return TreeNode{PredictType,Void}(:LEAF,make_leaf(node, method))
+        return TreeNode{PredictType,Void}(:LEAF,make_leaf(treeData, method))
     else
-        bestsplit = find_best_split(node,trainingdata,variables,types,method)
+        bestsplit = find_best_split(treeData,trainingdata,variables,types,method)
         if bestsplit == :NA
             leafnodesstats[1] += 1
             leafnodesstats[2] += 1
-            return TreeNode{PredictType,Void}(:LEAF,make_leaf(node,method))
+            return TreeNode{PredictType,Void}(:LEAF,make_leaf(treeData,method))
         else
-            leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,leftweight = make_split(method,node,trainingdata,bestsplit)
+            leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,leftweight = make_split(method,treeData,trainingdata,bestsplit)
             varno, variable, splittype, splitpoint = bestsplit
             if varimp
                 if typeof(method.learningType) == Regressor #predictiontask == :REGRESSION
-                    variableimp = variance_reduction(node.trainingweights,node.regressionvalues,leftweights,leftregressionvalues,rightweights,rightregressionvalues)
+                    variableimp = variance_reduction(treeData.trainingweights,treeData.regressionvalues,leftweights,leftregressionvalues,rightweights,rightregressionvalues)
                 elseif typeof(method.learningType) == Classifier #predictiontask == :CLASS
-                    variableimp = information_gain(node.trainingweights,leftweights,rightweights)
+                    variableimp = information_gain(treeData.trainingweights,leftweights,rightweights)
                 else #predictiontask == :SURVIVAL
-                    variableimp = hazard_score_gain(node.trainingweights,node.timevalues,node.eventvalues,leftweights,lefttimevalues,lefteventvalues,rightweights,righttimevalues,righteventvalues)
+                    variableimp = hazard_score_gain(treeData.trainingweights,treeData.timevalues,treeData.eventvalues,leftweights,lefttimevalues,lefteventvalues,rightweights,righttimevalues,righteventvalues)
                 end
                 variableimportance[varno] += variableimp
             end
-            defaultprediction = default_prediction(node.trainingweights,node.regressionvalues,node.timevalues,node.eventvalues,method)
+            defaultprediction = default_prediction(treeData.trainingweights,treeData.regressionvalues,treeData.timevalues,treeData.eventvalues,method)
 
-            leftnode=get_tree_node(typeof(node)(node.depth+1,leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp, PredictType)
-            rightnode=get_tree_node(typeof(node)(node.depth+1,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp, PredictType)
+            leftnode=get_tree_node(typeof(treeData)(treeData.depth+1,leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp, PredictType)
+            rightnode=get_tree_node(typeof(treeData)(treeData.depth+1,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp, PredictType)
             return TreeNode{Void,typeof(splitpoint)}(:NODE, varno,splittype,splitpoint,leftweight,
                   leftnode,rightnode)
         end
@@ -110,7 +110,8 @@ end
 ##
 ## Function for making a prediction with a single tree
 ##
-function make_prediction(node::TreeNode,testdata,exampleno,prediction,weight=1.0)
+function make_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,prediction,weight=1.0)
+    local examplevalue::S
     if node.nodeType == :LEAF
         prediction += weight*node.prediction
         return prediction

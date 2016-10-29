@@ -1,6 +1,6 @@
 ## Type declarations
 
-immutable Node{T1, T2, T3}
+immutable TreeData{T1, T2, T3}
     depth::Int
     trainingrefs::Array{T1,1}
     trainingweights::Array{T2,1}
