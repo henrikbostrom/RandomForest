@@ -169,7 +169,7 @@ end
 
 function default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,method::LearningMethod{Classifier})
     noclasses = size(trainingweights,1)
-    classcounts = sum.(trainingweights)
+    classcounts = map(sum,trainingweights)
     noinstances = sum(classcounts)
     if method.laplace
         return [(classcounts[i]+1)/(noinstances+noclasses) for i=1:noclasses]
@@ -187,7 +187,7 @@ function leaf_node(node,method::LearningMethod{Classifier})
         return true
     else
         noclasses = size(node.trainingweights,1)
-        classweights = sum.(node.trainingweights)
+        classweights = map(sum,node.trainingweights)
         noinstances = sum(classweights)
         if noinstances >= 2*method.minleaf
             i = 1

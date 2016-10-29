@@ -88,11 +88,11 @@ function variance_reduction(trainingweights,regressionvalues,leftweights,leftreg
 end
 
 function information_gain(trainingweights,leftweights,rightweights)
-    origclasscounts = sum.(trainingweights)
+    origclasscounts = map(sum,trainingweights)
     orignoexamples = sum(origclasscounts)
-    leftclasscounts = sum.(leftweights)
+    leftclasscounts = map(sum,leftweights)
     leftnoexamples = sum(leftclasscounts)
-    rightclasscounts = sum.(rightweights)
+    rightclasscounts = map(sum,rightweights)
     rightnoexamples = sum(rightclasscounts)
     return -orignoexamples*entropy(origclasscounts,orignoexamples)+leftnoexamples*entropy(leftclasscounts,leftnoexamples)+rightnoexamples*entropy(rightclasscounts,rightnoexamples)
 end
