@@ -110,7 +110,7 @@ end
 ##
 ## Function for making a prediction with a single tree
 ##
-function make_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,prediction::T,weight=1.0)
+function make_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,prediction,weight=1.0)
     local examplevalue::S
     if node.nodeType == :LEAF
         prediction += weight*node.prediction
