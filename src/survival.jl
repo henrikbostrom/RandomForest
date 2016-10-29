@@ -1,4 +1,4 @@
-function generate_trees(Arguments::Tuple{LearningMethod{Survival},Any,Any,Any})
+function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},Int,Int})
     method,classes,notrees,randseed = Arguments
     s = size(globaldata,1)
     srand(randseed)

@@ -1,4 +1,4 @@
-function generate_trees(Arguments::Tuple{LearningMethod{Classifier},Any,Any,Any})
+function generate_trees(Arguments::Tuple{LearningMethod{Classifier},DataArray,Int,Int})
     method,classes,notrees,randseed = Arguments
     s = size(globaldata,1)
     srand(randseed)
@@ -6,12 +6,12 @@ function generate_trees(Arguments::Tuple{LearningMethod{Classifier},Any,Any,Any}
     trainingdata = groupby(globaldata, :CLASS)
     trainingrefs = Array(Array{Int,1},noclasses)
     trainingweights = Array(Array{Float64,1},noclasses)
-    oobpredictions = Array(Any,noclasses)
+    oobpredictions = Array(Array{Array{Float64,1},1},noclasses)
     emptyprediction = [0; zeros(noclasses)]
     for c = 1:noclasses
         trainingrefs[c] = collect(1:size(trainingdata[c],1))
         trainingweights[c] = trainingdata[c][:WEIGHT]
-        oobpredictions[c] = Array(Any,size(trainingdata[c],1))
+        oobpredictions[c] = Array(Array{Float64,1},size(trainingdata[c],1))
         for i = 1:size(trainingdata[c],1)
             oobpredictions[c][i] = emptyprediction
         end
@@ -25,7 +25,7 @@ function generate_trees(Arguments::Tuple{LearningMethod{Classifier},Any,Any,Any}
     modelsize = 0
     missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
     newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
-    model = Array(Any,notrees)
+    model = Array(TreeNode,notrees)
     variableimportance = zeros(size(variables,1))
     for treeno = 1:notrees
         sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
@@ -169,7 +169,7 @@ end
 
 function default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,method::LearningMethod{Classifier})
     noclasses = size(trainingweights,1)
-    classcounts = map(sum, trainingweights)
+    classcounts = sum.(trainingweights)
     noinstances = sum(classcounts)
     if method.laplace
         return [(classcounts[i]+1)/(noinstances+noclasses) for i=1:noclasses]
@@ -187,7 +187,7 @@ function leaf_node(node,method::LearningMethod{Classifier})
         return true
     else
         noclasses = size(node.trainingweights,1)
-        classweights = map(sum, node.trainingweights)
+        classweights = sum.(node.trainingweights)
         noinstances = sum(classweights)
         if noinstances >= 2*method.minleaf
             i = 1

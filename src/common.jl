@@ -59,14 +59,7 @@ function get_variables_and_types(trainingdata)
     variablechecks = [check_variable(v) for v in allvariables]
     variables = allvariables[variablechecks]
     alltypes = alltypes[variablechecks]
-    types = Array(Any,length(alltypes))
-    for t=1:length(alltypes)
-        if alltypes[t] in [Float64,Float32,Int,Int32]
-            types[t] = :NUMERIC
-        else
-            types[t] = :CATEGORIC
-        end
-    end
+    types::Array{Symbol,1} = [t <: Number ? :NUMERIC : :CATEGORIC for t in alltypes]
     return variables, types
 end
 
@@ -95,11 +88,11 @@ function variance_reduction(trainingweights,regressionvalues,leftweights,leftreg
 end
 
 function information_gain(trainingweights,leftweights,rightweights)
-    origclasscounts = [sum(trainingweights[c]) for c=1:size(trainingweights,1)]
+    origclasscounts = sum.(trainingweights)
     orignoexamples = sum(origclasscounts)
-    leftclasscounts = [sum(leftweights[c]) for c=1:size(leftweights,1)]
+    leftclasscounts = sum.(leftweights)
     leftnoexamples = sum(leftclasscounts)
-    rightclasscounts = [sum(rightweights[c]) for c=1:size(rightweights,1)]
+    rightclasscounts = sum.(rightweights)
     rightnoexamples = sum(rightclasscounts)
     return -orignoexamples*entropy(origclasscounts,orignoexamples)+leftnoexamples*entropy(leftclasscounts,leftnoexamples)+rightnoexamples*entropy(rightclasscounts,rightnoexamples)
 end
@@ -228,7 +221,7 @@ function generate_model(;method = forest())
         result = :NONE
     else
         method = fix_method_type(method)
-        classes = typeof(method.learningType) == Classifier ? unique(globaldata[:CLASS]) : []
+        classes = typeof(method.learningType) == Classifier ? unique(globaldata[:CLASS]) : Int[]
         nocoworkers = nprocs()-1
         numThreads = Threads.nthreads()
         treesandoobs = Array{Any,1}()

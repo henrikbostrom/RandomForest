@@ -1,4 +1,4 @@
-function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Any,Any,Any})
+function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Array{Int,1},Int,Int})
     method,classes,notrees,randseed = Arguments
     s = size(globaldata,1)
     srand(randseed)
