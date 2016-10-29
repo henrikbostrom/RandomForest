@@ -12,7 +12,7 @@ end
 
 immutable TreeNode{T,ST}
    nodeType::Symbol
-   prediction::Array{T,1}
+   prediction::T
    varno::Int
    splittype::Symbol
    splitpoint::ST # Int for CATEGORIC and Float64 NUMERIC
@@ -20,7 +20,7 @@ immutable TreeNode{T,ST}
    leftnode::TreeNode
    rightnode::TreeNode
    TreeNode(n,p)=new(n,p)
-   TreeNode(n,v,splt,spltp,lw,left,right)=new(n,Array(T,0),v,splt,spltp,lw,left,right)
+   TreeNode(n,v,splt,spltp,lw,left,right)=new(n,T(),v,splt,spltp,lw,left,right)
 end
 
 abstract LearningType

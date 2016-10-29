@@ -8,7 +8,7 @@ function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalue
     T1 = typeof(method.learningType) == Classifier ? Array{Int,1} : Int
     T2 = typeof(method.learningType) == Classifier ? Array{Float64,1} : Float64
     T3 = typeof(method.learningType) == Survival ? Array{Float64,1} : Float64
-    PredictType = typeof(method.learningType) == Survival ? Array{Float64,1} : Float64
+    PredictType = typeof(method.learningType) == Survival ? Array{Array{Float64,1},1} : Array{Float64,1}
     node = Node{T1, T2, T3}(0,alltrainingrefs,alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,default_prediction(alltrainingweights,allregressionvalues,alltimevalues,alleventvalues,method))
     variableimportance = zeros(length(variables))
     tree = get_tree_node(node, variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp,PredictType)
@@ -47,7 +47,7 @@ function get_tree_node(node, variableimportance, leafnodesstats, trainingdata,va
 
             leftnode=get_tree_node(typeof(node)(node.depth+1,leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp, PredictType)
             rightnode=get_tree_node(typeof(node)(node.depth+1,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp, PredictType)
-            return TreeNode{PredictType,typeof(splitpoint)}(:NODE, varno,splittype,splitpoint,leftweight,
+            return TreeNode{Void,typeof(splitpoint)}(:NODE, varno,splittype,splitpoint,leftweight,
                   leftnode,rightnode)
         end
     end
