@@ -182,7 +182,7 @@ function run_experiment(file, separator, protocol, normalizetarget, normalizeinp
         else
             throw("Unknown experiment protocol")
         end
-        println("Completed experiment with: $file")
+        typeof(file)==String && println("Completed experiment with: $file")
     end
     return result
 end
