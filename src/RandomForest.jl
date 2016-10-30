@@ -366,8 +366,7 @@ function load_data(source; separator = ',')
             global globaldata = source # Made global to allow access from workers
         end
         initiate_workers()
-        # println("Data loaded")
-        println("Data: $(source)")
+        println("Data loaded")
     else
         println("Data can only be loaded from text files or DataFrames")
     end
