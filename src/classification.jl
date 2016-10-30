@@ -134,7 +134,7 @@ function generate_tree(method::LearningMethod{Classifier},trainingrefs,trainingw
         if typeof(method.bagsize) == Int
             samplesize = method.bagsize
         else
-            samplesize = convert(Int,round(sum(classweights)*method.bagsize))
+            samplesize = round(Int,sum(classweights)*method.bagsize)
         end
         newtrainingweights = Array(Array{Float64,1},noclasses)
         newtrainingrefs = Array(Array{Int,1},noclasses)

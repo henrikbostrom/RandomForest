@@ -9,11 +9,15 @@ facts("*** Run Survival Test ***") do
   end
 
   context("Function: generate_model") do
-    load_data(readtable(Requests.get_streaming("https://raw.githubusercontent.com/henrikbostrom/RandomForest/testing/testData/pbc.csv")));
-    @fact generate_model().oobperformance --> less_than(0.25 + 0.25 * percent)
 
-    load_data(readtable(Requests.get_streaming("https://raw.githubusercontent.com/henrikbostrom/RandomForest/testing/testData/pharynx.csv")));
-    @fact generate_model().oobperformance --> less_than(0.44 + 0.44 * percent)
+        d=readtable(Requests.get_streaming("https://raw.githubusercontent.com/henrikbostrom/RandomForest/testing/testData/pbc.csv"));
+        load_data(d);
+        @fact generate_model().oobperformance --> less_than(0.25 + 0.25 * percent)
+
+        d=readtable(Requests.get_streaming("https://raw.githubusercontent.com/henrikbostrom/RandomForest/testing/testData/pharynx.csv"));
+        load_data(d);
+        @fact generate_model().oobperformance --> less_than(0.44 + 0.44 * percent)
+
   end
 
 end
