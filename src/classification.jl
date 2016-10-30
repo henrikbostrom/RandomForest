@@ -38,15 +38,15 @@ end
 
 function find_missing_values(method::LearningMethod{Classifier},variables,trainingdata)
     noclasses = length(trainingdata)
-    missingvalues = Array(Any,noclasses)
-    nonmissingvalues = Array(Any,noclasses)
+    missingvalues = Array(Array{Array{Int,1},1},noclasses)
+    nonmissingvalues = Array(Array{Array,1},noclasses)
     for c = 1:noclasses
-        missingvalues[c] = Array(Any,length(variables))
-        nonmissingvalues[c] = Array(Any,length(variables))
+        missingvalues[c] = Array(Array{Int,1},length(variables))
+        nonmissingvalues[c] = Array(Array,length(variables))
         for v = 1:length(variables)
-            missingvalues[c][v] = Int[]
-            nonmissingvalues[c][v] = Any[]
             variable = variables[v]
+            missingvalues[c][v] = Int[]
+            nonmissingvalues[c][v] = typeof(trainingdata[c][variable]).parameters[1][]
             if check_variable(variable)
                 values = trainingdata[c][variable]
                 for val = 1:length(values)
@@ -57,8 +57,6 @@ function find_missing_values(method::LearningMethod{Classifier},variables,traini
                         push!(nonmissingvalues[c][v],value)
                     end
                 end
-                # missingvalues[c][v] = filter(isna, convert(Array,trainingdata[c][variable]))
-                # nonmissingvalues[c][v] = filter(val->!isna(val), convert(Array, trainingdata[c][variable]))
             end
         end
     end
@@ -67,14 +65,15 @@ end
 
 function transform_nonmissing_columns_to_arrays(method::LearningMethod{Classifier},variables,trainingdata,missingvalues)
     noclasses = length(trainingdata)
-    newdata = Array(Any,noclasses)
+    newdata = Array(Array{Array,1},noclasses)
     for c = 1:noclasses
-        newdata[c] = Array(Any,length(variables))
+        newdata[c] = Array(Array,length(variables))
         for v = 1:length(variables)
-            if missingvalues[c][v] == []
-                newdata[c][v] = convert(Array,trainingdata[c][variables[v]])
-            else
-                newdata[c][v] = trainingdata[c][variables[v]]
+            if isempty(missingvalues[c][v])
+                variableType = typeof(trainingdata[c][variables[v]]).parameters[1]
+                newdata[c][v] = convert(Array{variableType,1},trainingdata[c][variables[v]])
+            # else
+            #     newdata[c][v] = trainingdata[c][variables[v]]
             end
         end
     end
@@ -85,8 +84,9 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Classifi
     noclasses = size(newtrainingdata,1)
     for c = 1:noclasses
         for v = 1:length(variables)
-            if missingvalues[c][v] != []
+            if !isempty(missingvalues[c][v])
                 values = trainingdata[c][variables[v]]
+                variableType = typeof(values).parameters[1]
                 valuefrequencies = map(Float64,[length(nonmissingvalues[cl][v]) for cl = 1:noclasses])
                 if sum(valuefrequencies) > 0
                     for i in missingvalues[c][v]
@@ -104,7 +104,7 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Classifi
                         values[i] =  newvalue # NOTE: The variable (and type) should be removed
                     end
                 end
-                newtrainingdata[c][v] = convert(Array,values)
+                newtrainingdata[c][v] = convert(Array{variableType,1},values)
             end
         end
     end
@@ -114,10 +114,11 @@ function replacements_for_missing_values!(method::LearningMethod{Classifier},new
     noclasses = size(newtestdata,1)
     for c = 1:noclasses
         for v = 1:length(variables)
-            if missingvalues[c][v] != []
-                values = convert(DataArray,testdata[c][variables[v]])
+            if !isempty(missingvalues[c][v])
+                variableType = typeof(testdata[c][variables[v]]).parameters[1]
+                values = convert(Array{Nullable{variableType},1},testdata[c][variables[v]],Nullable{variableType}())
                 for i in missingvalues[c][v]
-                    values[i] =  NA
+                    values[i] =  Nullable{variableType}()
                 end
                 newtestdata[c][v] = values
             end
@@ -127,7 +128,7 @@ end
 
 function generate_tree(method::LearningMethod{Classifier},trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,oobpredictions; varimp = false)
     noclasses = length(trainingweights)
-    zeroweights = Array(Any,noclasses)
+    zeroweights = Array(Array{Bool,1},noclasses)
     if method.bagging
         classweights = map(Float64,[length(t) for t in trainingrefs])
         if typeof(method.bagsize) == Int
@@ -251,8 +252,8 @@ function find_best_split(node,trainingdata,variables,types,method::LearningMetho
         splitsamplesize = method.splitsample
         noclasses = size(node.trainingrefs,1)
         sampleregressionvalues = node.regressionvalues
-        sampletrainingweights = Array(Any,noclasses)
-        sampletrainingrefs = Array(Any,noclasses)
+        sampletrainingweights = Array(typeof(node).parameters[2],noclasses)
+        sampletrainingrefs = Array(typeof(node).parameters[1],noclasses)
         for c = 1:noclasses
             if sum(node.trainingweights[c]) <= splitsamplesize
                 sampletrainingweights[c] = node.trainingweights[c]
@@ -289,7 +290,7 @@ function find_best_split(node,trainingdata,variables,types,method::LearningMetho
 end
 
 function evaluate_variable_classification(bestsplit,varno,variable,splittype,trainingrefs,trainingweights,origclasscounts,noclasses,trainingdata,method)
-    values = Array(Any,noclasses)
+    values = Array(Array,noclasses)
     for c = 1:noclasses
         values[c] = trainingdata[c][varno][trainingrefs[c]]
     end

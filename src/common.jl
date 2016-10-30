@@ -110,22 +110,22 @@ end
 ##
 ## Function for making a prediction with a single tree
 ##
-function make_prediction(node::TreeNode,testdata,exampleno,prediction,weight=1.0)
+function make_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,prediction,weight=1.0)
     if node.nodeType == :LEAF
         prediction += weight*node.prediction
         return prediction
     else
         # varno, splittype, splitpoint, splitweight = node[1]
-        examplevalue = testdata[node.varno][exampleno]
-        if isna(examplevalue)
+        examplevalue::Nullable{S} = testdata[node.varno][exampleno]
+        if isnull(examplevalue)
             prediction+=make_prediction(node.leftnode,testdata,exampleno,prediction,weight*node.leftweight)
             prediction+=make_prediction(node.rightnode,testdata,exampleno,prediction,weight*(1-node.leftweight))
             return prediction
         else
             if node.splittype == :NUMERIC
-              nextnode=(examplevalue <= node.splitpoint)? node.leftnode: node.rightnode
+              nextnode=(get(examplevalue) <= node.splitpoint)? node.leftnode: node.rightnode
             else #Catagorical
-              nextnode=(examplevalue == node.splitpoint)? node.leftnode: node.rightnode
+              nextnode=(get(examplevalue) == node.splitpoint)? node.leftnode: node.rightnode
             end
             return make_prediction(nextnode,testdata,exampleno,prediction,weight)
         end
