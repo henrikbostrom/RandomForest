@@ -547,8 +547,8 @@ end
 ##
 ## Functions to be executed on each worker
 ##
-function generate_and_test_trees(Arguments::Tuple{LearningMethod{Survival},Symbol,Symbol,Int64,Int64,Array{Int64,1}})
-    method,predictiontask,experimentype,notrees,randseed,randomoobs = Arguments
+function generate_and_test_trees(Arguments::Tuple{LearningMethod{Survival},Symbol,Int64,Int64,Array{Int64,1}})
+    method,experimentype,notrees,randseed,randomoobs = Arguments
     s = size(globaldata,1)
     srand(randseed)
     if experimentype == :test
@@ -573,8 +573,8 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Survival},Symbo
         model = Array(Any,notrees)
         oob = Array(Any,notrees)
         for treeno = 1:notrees
-            sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
-            model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,predictiontask,oobpredictions)
+            sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
+            model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions)
             modelsize += noleafs
             noirregularleafs += treenoirregularleafs
         end
@@ -648,8 +648,8 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Survival},Symbo
             totalnoirregularleafs = 0
             oob = Array(Any,notrees)
             for treeno = 1:notrees
-                sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
-                model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,predictiontask,oobpredictions[foldno])
+                sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
+                model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions[foldno])
                 modelsize += noleafs
                 totalnoirregularleafs += treenoirregularleafs
             end

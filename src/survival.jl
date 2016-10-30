@@ -1,5 +1,5 @@
-function generate_trees(Arguments::Tuple{LearningMethod{Survival},Any,Any,Any,Any})
-    method,predictiontask,classes,notrees,randseed = Arguments
+function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},Int,Int})
+    method,classes,notrees,randseed = Arguments
     s = size(globaldata,1)
     srand(randseed)
     trainingdata = globaldata
@@ -20,8 +20,8 @@ function generate_trees(Arguments::Tuple{LearningMethod{Survival},Any,Any,Any,An
     model = Array(Any,notrees)
     variableimportance = zeros(size(variables,1))
     for treeno = 1:notrees
-        sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
-        model[treeno], treevariableimportance, noleafs, noirregularleafs = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,predictiontask,oobpredictions,varimp = true)
+        sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
+        model[treeno], treevariableimportance, noleafs, noirregularleafs = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions,varimp = true)
         modelsize += noleafs
         variableimportance += treevariableimportance
     end
@@ -62,7 +62,7 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Survival}
     return newdata
 end
 
-function sample_replacements_for_missing_values!(method::LearningMethod{Survival},newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+function sample_replacements_for_missing_values!(method::LearningMethod{Survival},newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
     for v = 1:length(variables)
         if missingvalues[v] != []
             values = trainingdata[variables[v]]
@@ -98,7 +98,7 @@ function replacements_for_missing_values!(method::LearningMethod{Survival},newte
     end
 end
 
-function generate_tree(method::LearningMethod{Survival},trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,predictiontask,oobpredictions; varimp = false)
+function generate_tree(method::LearningMethod{Survival},trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,oobpredictions; varimp = false)
     if method.bagging
         newtrainingweights = zeros(length(trainingweights))
         if typeof(method.bagsize) == Int
@@ -113,7 +113,7 @@ function generate_tree(method::LearningMethod{Survival},trainingrefs,trainingwei
         newtrainingweights = newtrainingweights[nonzeroweights]
         newtimevalues = timevalues[nonzeroweights]
         neweventvalues = eventvalues[nonzeroweights]
-        model, variableimportance, noleafs, noirregularleafs = build_tree(method,newtrainingrefs,newtrainingweights,regressionvalues,newtimevalues,neweventvalues,trainingdata,variables,types,predictiontask,varimp)
+        model, variableimportance, noleafs, noirregularleafs = build_tree(method,newtrainingrefs,newtrainingweights,regressionvalues,newtimevalues,neweventvalues,trainingdata,variables,types,varimp)
         zeroweights = ~nonzeroweights
         oobrefs = trainingrefs[zeroweights]
         for oobref in oobrefs
@@ -121,7 +121,7 @@ function generate_tree(method::LearningMethod{Survival},trainingrefs,trainingwei
             oobpredictions[oobref] += [1,oobprediction,oobprediction^2]
         end
     else
-        model, variableimportance, noleafs, noirregularleafs = build_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,predictiontask,varimp)
+        model, variableimportance, noleafs, noirregularleafs = build_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,varimp)
         for i = 1:size(trainingrefs,1)
             trainingref = trainingrefs[i]
             emptyleaf, leafstats = make_loo_prediction(model,trainingdata,trainingref,0)
@@ -194,7 +194,7 @@ end
 ##     return prediction
 ## end
 
-function default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,predictiontask,method::LearningMethod{Survival})
+function default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,method::LearningMethod{Survival})
     return generate_cumulative_hazard_function(trainingweights,timevalues,eventvalues)
 end
 
@@ -204,7 +204,7 @@ function generate_cumulative_hazard_function(trainingweights,timevalues,eventval
     accevents = 0
 #    cumulativehazard = 0.0
     survivalprob = 1.0
-    chf = Any[]
+    chf = Array{Float64,1}[]
     for t = 1:size(timevalues,1)-1
         if timevalues[t] == timevalues[t+1]
             accweights += trainingweights[t]
@@ -230,12 +230,12 @@ function generate_cumulative_hazard_function(trainingweights,timevalues,eventval
     return chf
 end
 
-function leaf_node(trainingweights,regressionvalues,eventvalues,predictiontask,depth,method::LearningMethod{Survival})
-    if method.maxdepth > 0 && method.maxdepth == depth
+function leaf_node(node,method::LearningMethod{Survival})
+    if method.maxdepth > 0 && method.maxdepth == node.depth
         return true
     else
-        noinstances = sum(trainingweights)
-        if sum(trainingweights) >= 2*method.minleaf && sum(eventvalues) > 0
+        noinstances = sum(node.trainingweights)
+        if noinstances >= 2*method.minleaf && sum(node.eventvalues) > 0
             return false
         else
             return true
@@ -243,11 +243,11 @@ function leaf_node(trainingweights,regressionvalues,eventvalues,predictiontask,d
     end
 end
 
-function make_leaf(trainingweights,regressionvalues,timevalues,eventvalues,predictiontask,defaultprediction,method::LearningMethod{Survival})
-    return generate_cumulative_hazard_function(trainingweights,timevalues,eventvalues)
+function make_leaf(node,method::LearningMethod{Survival})
+    return generate_cumulative_hazard_function(node.trainingweights,node.timevalues,node.eventvalues)
 end
 
-function find_best_split(trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,predictiontask,method::LearningMethod{Survival})
+function find_best_split(node,trainingdata,variables,types,method::LearningMethod{Survival})
     if method.randsub == :all
         sampleselection = collect(1:length(variables))
     elseif method.randsub == :default
@@ -269,11 +269,11 @@ function find_best_split(trainingrefs,trainingweights,regressionvalues,timevalue
     end
     if method.splitsample > 0
         splitsamplesize = method.splitsample
-        if sum(trainingweights) <= splitsamplesize
-            sampletrainingweights = trainingweights
-            sampletrainingrefs = trainingrefs
-            sampletimevalues = timevalues
-            sampleeventvalues = eventvalues
+        if sum(node.trainingweights) <= splitsamplesize
+            sampletrainingweights = node.trainingweights
+            sampletrainingrefs = node.trainingrefs
+            sampletimevalues = node.timevalues
+            sampleeventvalues = node.eventvalues
         else
             sampletrainingweights = Array(Float64,splitsamplesize)
             sampletrainingrefs = Array(Float64,splitsamplesize)
@@ -281,17 +281,17 @@ function find_best_split(trainingrefs,trainingweights,regressionvalues,timevalue
             sampleeventvalues = Array(Float64,splitsamplesize)
             for i = 1:splitsamplesize
                 sampletrainingweights[i] = 1.0
-                randindex = rand(1:length(trainingrefs))
-                sampletrainingrefs[i] = trainingrefs[randindex]
-                sampletimevalues[i] = timevalues[randindex]
-                sampleeventvalues[i] = eventvalues[randindex]
+                randindex = rand(1:length(node.trainingrefs))
+                sampletrainingrefs[i] = node.trainingrefs[randindex]
+                sampletimevalues[i] = node.timevalues[randindex]
+                sampleeventvalues[i] = node.eventvalues[randindex]
             end
         end
     else
-        sampletrainingrefs = trainingrefs
-        sampletrainingweights = trainingweights
-        sampletimevalues = timevalues
-        sampleeventvalues = eventvalues
+        sampletrainingrefs = node.trainingrefs
+        sampletrainingweights = node.trainingweights
+        sampletimevalues = node.timevalues
+        sampleeventvalues = node.eventvalues
     end
     bestsplit = (-Inf,0,:NA,:NA,0.0)
     origweightsum = sum(sampletrainingweights)
@@ -476,7 +476,7 @@ function evaluate_survival_numeric_variable_allvals(bestsplit,varno,variable,spl
     return bestsplit
 end
 
-function make_split(method::LearningMethod{Survival},trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,predictiontask,bestsplit)
+function make_split(method::LearningMethod{Survival},node,trainingdata,bestsplit)
     (varno, variable, splittype, splitpoint) = bestsplit
     leftrefs = Int[]
     leftweights = Float64[]
@@ -486,41 +486,41 @@ function make_split(method::LearningMethod{Survival},trainingrefs,trainingweight
     rightweights = Float64[]
     righttimevalues = Float64[]
     righteventvalues = Float64[]
-    values = trainingdata[varno][trainingrefs]
+    values = trainingdata[varno][node.trainingrefs]
     sumleftweights = 0.0
     sumrightweights = 0.0
     if splittype == :NUMERIC
-      for r = 1:length(trainingrefs)
-          ref = trainingrefs[r]
+      for r = 1:length(node.trainingrefs)
+          ref = node.trainingrefs[r]
           if values[r] <= splitpoint
               push!(leftrefs,ref)
-              push!(leftweights,trainingweights[r])
-              sumleftweights += trainingweights[r]
-              push!(lefttimevalues,timevalues[r])
-              push!(lefteventvalues,eventvalues[r])
+              push!(leftweights,node.trainingweights[r])
+              sumleftweights += node.trainingweights[r]
+              push!(lefttimevalues,node.timevalues[r])
+              push!(lefteventvalues,node.eventvalues[r])
           else
               push!(rightrefs,ref)
-              push!(rightweights,trainingweights[r])
-              sumrightweights += trainingweights[r]
-              push!(righttimevalues,timevalues[r])
-              push!(righteventvalues,eventvalues[r])
+              push!(rightweights,node.trainingweights[r])
+              sumrightweights += node.trainingweights[r]
+              push!(righttimevalues,node.timevalues[r])
+              push!(righteventvalues,node.eventvalues[r])
           end
       end
   else
-      for r = 1:length(trainingrefs)
-          ref = trainingrefs[r]
+      for r = 1:length(node.trainingrefs)
+          ref = node.trainingrefs[r]
           if values[r] == splitpoint
               push!(leftrefs,ref)
-              push!(leftweights,trainingweights[r])
-              sumleftweights += trainingweights[r]
-              push!(lefttimevalues,timevalues[r])
-              push!(lefteventvalues,eventvalues[r])
+              push!(leftweights,node.trainingweights[r])
+              sumleftweights += node.trainingweights[r]
+              push!(lefttimevalues,node.timevalues[r])
+              push!(lefteventvalues,node.eventvalues[r])
           else
               push!(rightrefs,ref)
-              push!(rightweights,trainingweights[r])
-              sumrightweights += trainingweights[r]
-              push!(righttimevalues,timevalues[r])
-              push!(righteventvalues,eventvalues[r])
+              push!(rightweights,node.trainingweights[r])
+              sumrightweights += node.trainingweights[r]
+              push!(righttimevalues,node.timevalues[r])
+              push!(righteventvalues,node.eventvalues[r])
           end
       end
   end
@@ -528,40 +528,26 @@ function make_split(method::LearningMethod{Survival},trainingrefs,trainingweight
   return leftrefs,leftweights,[],lefttimevalues,lefteventvalues,rightrefs,rightweights,[],righttimevalues,righteventvalues,leftweight
 end
 
-function make_survival_prediction(tree,testdata,exampleno,time,prediction)
-    stack = Any[]
-    nodeno = 1
-    weight = 1.0
-    push!(stack,(nodeno,weight))
-    while stack != []
-        nodeno, weight = pop!(stack)
-        node = tree[nodeno]
-        if node[1] == :LEAF
-            prediction += weight*get_cumulative_hazard(node[2],time)
+function make_survival_prediction(node::TreeNode,testdata,exampleno,time,prediction,weight=1.0)
+    if node.nodeType == :LEAF
+        prediction += weight* get_cumulative_hazard(node.prediction,time)
+        return prediction
+    else
+        # varno, splittype, splitpoint, splitweight = node[1]
+        examplevalue = testdata[node.varno][exampleno]
+        if isna(examplevalue)
+            prediction+=make_survival_prediction(node.leftnode,testdata,exampleno,prediction,weight*node.leftweight)
+            prediction+=make_survival_prediction(node.rightnode,testdata,exampleno,prediction,weight*(1-node.leftweight))
+            return prediction
         else
-            varno, splittype, splitpoint, splitweight = node[1]
-            examplevalue = testdata[varno][exampleno]
-            if isna(examplevalue)
-                push!(stack,(node[2],weight*splitweight))
-                push!(stack,(node[3],weight*(1-splitweight)))
-            else
-                if splittype == :NUMERIC
-                    if examplevalue <= splitpoint
-                        push!(stack,(node[2],weight))
-                    else
-                        push!(stack,(node[3],weight))
-                    end
-                else
-                    if examplevalue == splitpoint
-                        push!(stack,(node[2],weight))
-                    else
-                        push!(stack,(node[3],weight))
-                    end
-                end
+            if node.splittype == :NUMERIC
+              nextnode=(examplevalue <= node.splitpoint)? node.leftnode: node.rightnode
+            else #Catagorical
+              nextnode=(examplevalue == node.splitpoint)? node.leftnode: node.rightnode
             end
+            return make_survival_prediction(nextnode,testdata,exampleno,prediction,weight)
         end
     end
-    return prediction
 end
 
 function generate_model_internal(method::LearningMethod{Survival},oobs,classes)
@@ -656,27 +642,28 @@ function generate_model_internal(method::LearningMethod{Survival},oobs,classes)
 end
 
 function apply_model(model::PredictionModel{Survival}; confidence = :std)
+    numThreads = Threads.nthreads()
     nocoworkers = nprocs()-1
+    predictions = zeros(size(globaldata,1))
+    squaredpredictions = zeros(size(globaldata,1))
     if nocoworkers > 0
-        notrees = [div(model.method.notrees,nocoworkers) for i=1:nocoworkers]
-        for i = 1:mod(model.method.notrees,nocoworkers)
-            notrees[i] += 1
-        end
-        alltrees = Array(Any,nocoworkers)
-        index = 0
-        for i = 1:nocoworkers
-            alltrees[i] = model.trees[index+1:index+notrees[i]]
-            index += notrees[i]
-        end
-        results = pmap(apply_trees,[(model.method,model.classes,subtrees) for subtrees in alltrees])
-        predictions = results[1][1]
-        squaredpredictions = results[1][2]
-        for r = 2:length(results)
+        alltrees = getworkertrees(model, nocoworkers)
+        results = pmap(apply_trees,[(model.method,[],subtrees) for subtrees in alltrees])
+        for r = 1:length(results)
             predictions += results[r][1]
             squaredpredictions += results[r][2]
         end
+    elseif numThreads > 1
+        alltrees = getworkertrees(model, numThreads)
+        Threads.@threads for subtrees in notrees
+            results = apply_trees((model.method,[],subtrees))
+            predictions += results[1]
+            squaredpredictions += results[2]
+        end
     else
-        predictions, squaredpredictions = apply_trees((model.method,model.classes,model.trees))
+        results = apply_trees((model.method,[],model.trees))
+        predictions += results[1]
+        squaredpredictions += results[2]
     end
     predictions = predictions/model.method.notrees
     squaredpredictions = squaredpredictions/model.method.notrees

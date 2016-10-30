@@ -1,5 +1,5 @@
-function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Any,Any,Any,Any})
-    method,predictiontask,classes,notrees,randseed = Arguments
+function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Array{Int,1},Int,Int})
+    method,classes,notrees,randseed = Arguments
     s = size(globaldata,1)
     srand(randseed)
     trainingdata = globaldata
@@ -20,8 +20,8 @@ function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Any,Any,Any,A
     model = Array(Any,notrees)
     variableimportance = zeros(size(variables,1))
     for treeno = 1:notrees
-        sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
-        model[treeno], treevariableimportance, noleafs, noirregularleafs = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,predictiontask,oobpredictions,varimp = true)
+        sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
+        model[treeno], treevariableimportance, noleafs, noirregularleafs = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions,varimp = true)
         modelsize += noleafs
         variableimportance += treevariableimportance
     end
@@ -62,7 +62,7 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Regressor
     return newdata
 end
 
-function sample_replacements_for_missing_values!(method::LearningMethod{Regressor},newtrainingdata,trainingdata,predictiontask,variables,types,missingvalues,nonmissingvalues)
+function sample_replacements_for_missing_values!(method::LearningMethod{Regressor},newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
     for v = 1:length(variables)
         if missingvalues[v] != []
             values = trainingdata[variables[v]]
@@ -98,7 +98,7 @@ function replacements_for_missing_values!(method::LearningMethod{Regressor},newt
     end
 end
 
-function generate_tree(method::LearningMethod{Regressor},trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,predictiontask,oobpredictions; varimp = false)
+function generate_tree(method::LearningMethod{Regressor},trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,oobpredictions; varimp = false)
     zeroweights = zeros(length(trainingweights))
     if method.bagging
         newtrainingweights = zeros(length(trainingweights))
@@ -113,7 +113,7 @@ function generate_tree(method::LearningMethod{Regressor},trainingrefs,trainingwe
         newtrainingrefs = trainingrefs[nonzeroweights]
         newtrainingweights = newtrainingweights[nonzeroweights]
         newregressionvalues = regressionvalues[nonzeroweights]
-        model, variableimportance, noleafs, noirregularleafs = build_tree(method,newtrainingrefs,newtrainingweights,newregressionvalues,timevalues,eventvalues,trainingdata,variables,types,predictiontask,varimp)
+        model, variableimportance, noleafs, noirregularleafs = build_tree(method,newtrainingrefs,newtrainingweights,newregressionvalues,timevalues,eventvalues,trainingdata,variables,types,varimp)
         zeroweights = ~nonzeroweights
         oobrefs = trainingrefs[zeroweights]
         for oobref in oobrefs
@@ -122,7 +122,7 @@ function generate_tree(method::LearningMethod{Regressor},trainingrefs,trainingwe
             oobpredictions[oobref] += [1,oobprediction,oobprediction^2]
         end
     else
-        model, variableimportance, noleafs, noirregularleafs = build_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,predictiontask,varimp)
+        model, variableimportance, noleafs, noirregularleafs = build_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,varimp)
         for i = 1:size(trainingrefs,1)
             trainingref = trainingrefs[i]
             emptyleaf, leafstats = make_loo_prediction(model,trainingdata,trainingref,0)
@@ -195,7 +195,7 @@ function make_loo_prediction(tree,testdata,exampleno,prediction)
     return prediction
 end
 
-function default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,predictiontask,method::LearningMethod{Regressor})
+function default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,method::LearningMethod{Regressor})
     sumweights = sum(trainingweights)
     sumregressionvalues = sum(regressionvalues)
     return [sumweights,sumregressionvalues]
@@ -206,18 +206,18 @@ function default_prediction(trainingweights,regressionvalues,timevalues,eventval
     ## end
 end
 
-function leaf_node(trainingweights,regressionvalues,eventvalues,predictiontask,depth,method::LearningMethod{Regressor})
-    if method.maxdepth > 0 && method.maxdepth == depth
+function leaf_node(node,method::LearningMethod{Regressor})
+    if method.maxdepth > 0 && method.maxdepth == node.depth
         return true
     else
-        noinstances = sum(trainingweights)
+        noinstances = sum(node.trainingweights)
         if noinstances >= 2*method.minleaf
-            firstvalue = regressionvalues[1]
+            firstvalue = node.regressionvalues[1]
             i = 2
             multiplevalues = false
-            novalues = length(regressionvalues)
+            novalues = length(node.regressionvalues)
             while i <= novalues &&  ~multiplevalues
-                multiplevalues = firstvalue != regressionvalues[i]
+                multiplevalues = firstvalue != node.regressionvalues[i]
                 i += 1
             end
             return ~multiplevalues
@@ -227,9 +227,9 @@ function leaf_node(trainingweights,regressionvalues,eventvalues,predictiontask,d
     end
 end
 
-function make_leaf(trainingweights,regressionvalues,timevalues,eventvalues,predictiontask,defaultprediction,method::LearningMethod{Regressor})
-    sumweights = sum(trainingweights)
-    sumregressionvalues = sum(regressionvalues)
+function make_leaf(node,method::LearningMethod{Regressor})
+    sumweights = sum(node.trainingweights)
+    sumregressionvalues = sum(node.regressionvalues)
     return [sumweights,sumregressionvalues]
     ## if sumweights > 0
     ##     prediction = sum(trainingweights .* regressionvalues)/sumweights
@@ -239,7 +239,7 @@ function make_leaf(trainingweights,regressionvalues,timevalues,eventvalues,predi
     return prediction
 end
 
-function find_best_split(trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,predictiontask,method::LearningMethod{Regressor})
+function find_best_split(node,trainingdata,variables,types,method::LearningMethod{Regressor})
     if method.randsub == :all
         sampleselection = collect(1:length(variables))
     elseif method.randsub == :default
@@ -261,25 +261,25 @@ function find_best_split(trainingrefs,trainingweights,regressionvalues,timevalue
     end
     if method.splitsample > 0
         splitsamplesize = method.splitsample
-        if sum(trainingweights) <= splitsamplesize
-            sampletrainingweights = trainingweights
-            sampletrainingrefs = trainingrefs
-            sampleregressionvalues = regressionvalues
+        if sum(node.trainingweights) <= splitsamplesize
+            sampletrainingweights = node.trainingweights
+            sampletrainingrefs = node.trainingrefs
+            sampleregressionvalues = node.regressionvalues
         else
             sampletrainingweights = Array(Float64,splitsamplesize)
             sampletrainingrefs = Array(Float64,splitsamplesize)
             sampleregressionvalues = Array(Float64,splitsamplesize)
             for i = 1:splitsamplesize
                 sampletrainingweights[i] = 1.0
-                randindex = rand(1:length(trainingrefs))
-                sampletrainingrefs[i] = trainingrefs[randindex]
-                sampleregressionvalues[i] = regressionvalues[randindex]
+                randindex = rand(1:length(node.trainingrefs))
+                sampletrainingrefs[i] = node.trainingrefs[randindex]
+                sampleregressionvalues[i] = node.regressionvalues[randindex]
             end
         end
     else
-        sampletrainingrefs = trainingrefs
-        sampletrainingweights = trainingweights
-        sampleregressionvalues = regressionvalues
+        sampletrainingrefs = node.trainingrefs
+        sampletrainingweights = node.trainingweights
+        sampleregressionvalues = node.regressionvalues
     end
     bestsplit = (-Inf,0,:NA,:NA,0.0)
     origregressionsum = sum(sampleregressionvalues .* sampletrainingweights)
@@ -426,7 +426,7 @@ function evaluate_regression_numeric_variable_allvals(bestsplit,varno,variable,s
     return bestsplit
 end
 
-function make_split(method::LearningMethod{Regressor},trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,predictiontask,bestsplit)
+function make_split(method::LearningMethod{Regressor},node,trainingdata,bestsplit)
   (varno, variable, splittype, splitpoint) = bestsplit
   leftrefs = Int[]
   leftweights = Float64[]
@@ -434,37 +434,37 @@ function make_split(method::LearningMethod{Regressor},trainingrefs,trainingweigh
   rightrefs = Int[]
   rightweights = Float64[]
   rightregressionvalues = Float64[]
-  values = trainingdata[varno][trainingrefs]
+  values = trainingdata[varno][node.trainingrefs]
   sumleftweights = 0.0
   sumrightweights = 0.0
   if splittype == :NUMERIC
-      for r = 1:length(trainingrefs)
-          ref = trainingrefs[r]
+      for r = 1:length(node.trainingrefs)
+          ref = node.trainingrefs[r]
           if values[r] <= splitpoint
               push!(leftrefs,ref)
-              push!(leftweights,trainingweights[r])
-              sumleftweights += trainingweights[r]
-              push!(leftregressionvalues,regressionvalues[r])
+              push!(leftweights,node.trainingweights[r])
+              sumleftweights += node.trainingweights[r]
+              push!(leftregressionvalues,node.regressionvalues[r])
           else
               push!(rightrefs,ref)
-              push!(rightweights,trainingweights[r])
-              sumrightweights += trainingweights[r]
-              push!(rightregressionvalues,regressionvalues[r])
+              push!(rightweights,node.trainingweights[r])
+              sumrightweights += node.trainingweights[r]
+              push!(rightregressionvalues,node.regressionvalues[r])
           end
       end
   else
-      for r = 1:length(trainingrefs)
-          ref = trainingrefs[r]
+      for r = 1:length(node.trainingrefs)
+          ref = node.trainingrefs[r]
           if values[r] == splitpoint
               push!(leftrefs,ref)
-              push!(leftweights,trainingweights[r])
-              sumleftweights += trainingweights[r]
-              push!(leftregressionvalues,regressionvalues[r])
+              push!(leftweights,node.trainingweights[r])
+              sumleftweights += node.trainingweights[r]
+              push!(leftregressionvalues,node.regressionvalues[r])
           else
               push!(rightrefs,ref)
-              push!(rightweights,trainingweights[r])
-              sumrightweights += trainingweights[r]
-              push!(rightregressionvalues,regressionvalues[r])
+              push!(rightweights,node.trainingweights[r])
+              sumrightweights += node.trainingweights[r]
+              push!(rightregressionvalues,node.regressionvalues[r])
           end
       end
   end
@@ -564,27 +564,28 @@ function generate_model_internal(method::LearningMethod{Regressor}, oobs, classe
 end
 
 function apply_model(model::PredictionModel{Regressor}; confidence = :std)
+    numThreads = Threads.nthreads()
     nocoworkers = nprocs()-1
+    predictions = zeros(size(globaldata,1))
+    squaredpredictions = zeros(size(globaldata,1))
     if nocoworkers > 0
-        notrees = [div(model.method.notrees,nocoworkers) for i=1:nocoworkers]
-        for i = 1:mod(model.method.notrees,nocoworkers)
-            notrees[i] += 1
-        end
-        alltrees = Array(Any,nocoworkers)
-        index = 0
-        for i = 1:nocoworkers
-            alltrees[i] = model.trees[index+1:index+notrees[i]]
-            index += notrees[i]
-        end
-        results = pmap(apply_trees,[(model.method,model.classes,subtrees) for subtrees in alltrees])
-        predictions = results[1][1]
-        squaredpredictions = results[1][2]
-        for r = 2:length(results)
+        alltrees = getworkertrees(model, nocoworkers)
+        results = pmap(apply_trees,[(model.method,[],subtrees) for subtrees in alltrees])
+        for r = 1:length(results)
             predictions += results[r][1]
             squaredpredictions += results[r][2]
         end
+    elseif numThreads > 1
+        alltrees = getworkertrees(model, numThreads)
+        Threads.@threads for subtrees in notrees
+            results = apply_trees((model.method,[],subtrees))
+            predictions += results[1]
+            squaredpredictions += results[2]
+        end
     else
-        predictions, squaredpredictions = apply_trees((model.method,[],model.trees))
+        results = apply_trees((model.method,[],model.trees))
+        predictions += results[1]
+        squaredpredictions += results[2]
     end
     predictions = predictions/model.method.notrees
     squaredpredictions = squaredpredictions/model.method.notrees

@@ -1,5 +1,28 @@
 ## Type declarations
 
+immutable TreeData{T1, T2, T3}
+    depth::Int
+    trainingrefs::Array{T1,1}
+    trainingweights::Array{T2,1}
+    regressionvalues::Array{Float64,1} # regression
+    timevalues::Array{Float64,1} # survival analysis
+    eventvalues::Array{Float64,1} # survivial analysis
+    defaultprediction::Array{T3,1}
+end
+
+immutable TreeNode{T,ST}
+   nodeType::Symbol
+   prediction::T
+   varno::Int
+   splittype::Symbol
+   splitpoint::ST # Int for CATEGORIC and Float64 NUMERIC
+   leftweight::Float64
+   leftnode::TreeNode
+   rightnode::TreeNode
+   TreeNode(n,p)=new(n,p)
+   TreeNode(n,v,splt,spltp,lw,left,right)=new(n,T(),v,splt,spltp,lw,left,right)
+end
+
 abstract LearningType
 
 type Undefined <: LearningType
@@ -91,10 +114,10 @@ end
 type PredictionModel{T}
     method::LearningMethod{T}
     classes::Any
-    version::Any
+    version::VersionNumber
     oobperformance::Any
     variableimportance::Any
-    trees::Any
+    trees::Array{TreeNode,1}
     conformal::Any
     PredictionModel(m) = new(m)
     PredictionModel(method,class,ver,oob,varImp,trees,conformal) = new(method,class,ver,oob,varImp,trees,conformal)
