@@ -1,23 +1,16 @@
-using RandomForest, FactCheck, Requests, DataFrames
 include("testhelpers.jl")
 
-eta = 0.05;
-
+eta = 0.1;
 facts("*** Run Classifcation Test ***") do
 
-
   context("Function: experiment") do
-    file="glass.txt"
-    @fact test_exp(file)[1][3][1].Acc --> roughly(0.79; atol = eta)
-    file="autos.txt"
-    @fact test_exp(file)[1][3][1].Acc --> roughly(0.83; atol = eta)
+    @fact test_exp("glass.txt")[1][3][1].Acc --> greater_than(0.79 - eta)
+    @fact test_exp("autos.txt")[1][3][1].Acc --> greater_than(0.83 - eta)
   end
 
   context("Function: generate_model") do
-    file="glass.txt"
-    @fact test_gen(file).oobperformance --> roughly(0.79; atol = eta)
-    file="autos.txt"
-    @fact test_gen(file).oobperformance --> roughly(0.83; atol = eta)
+    @fact test_gen("glass.txt").oobperformance --> greater_than(0.79 - eta)
+    @fact test_gen("autos.txt").oobperformance --> greater_than(0.83 - eta)
   end
 
 end

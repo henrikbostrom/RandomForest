@@ -1,21 +1,16 @@
-using RandomForest, FactCheck, Requests, DataFrames
+include("testhelpers.jl")
 
 percent = 0.1
 facts("*** Run Regression Test ***") do
 
   context("Function: experiment") do
-    @fact experiment(files=[Requests.get_streaming("https://raw.githubusercontent.com/henrikbostrom/RandomForest/testing/testData/laser.txt")], printable = false)[1][3][1].MSE --> less_than(72.5 + 72.5 * percent)
-    @fact experiment(files=[Requests.get_streaming("https://raw.githubusercontent.com/henrikbostrom/RandomForest/testing/testData/plastic.txt")], printable = false)[1][3][1].MSE --> less_than(3.0 + 3.0 * percent)
+    @fact test_exp("laser.txt")[1][3][1].MSE --> less_than(72.5 + 72.5 * percent)
+    @fact test_exp("plastic.txt")[1][3][1].MSE --> less_than(3.0 + 3.0 * percent)
   end
 
-    context("Function: generate_model") do
-        d=readtable(Requests.get_streaming("https://raw.githubusercontent.com/henrikbostrom/RandomForest/testing/testData/laser.txt"));
-        load_data(d);
-        @fact generate_model().oobperformance --> less_than(72.5 + 72.5 * percent)
-
-        d=readtable(Requests.get_streaming("https://raw.githubusercontent.com/henrikbostrom/RandomForest/testing/testData/plastic.txt"));
-        load_data(d);
-        @fact generate_model().oobperformance --> less_than(3.0 + 3.0 * percent)
-    end
+  context("Function: generate_model") do
+      @fact test_gen("laser.txt").oobperformance --> less_than(72.5 + 72.5 * percent)
+      @fact test_gen("plastic.txt").oobperformance --> less_than(3.0 + 3.0 * percent)
+  end
 
 end
