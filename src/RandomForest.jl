@@ -101,7 +101,7 @@ end
 ## Functions for running experiments
 ##
 
-function experiment(;files = ".", separator = ',', protocol = 10, normalizetarget = false, normalizeinput = false, methods = [forest()], resultfile = :none)
+function experiment(;files = ".", separator = ',', protocol = 10, normalizetarget = false, normalizeinput = false, methods = [forest()], resultfile = :none, printable = true)
     println("RandomForest v. $rf_ver")
     if typeof(files) == String
         if isdir(files)
@@ -118,10 +118,12 @@ function experiment(;files = ".", separator = ',', protocol = 10, normalizetarge
     classificationresults = [pt == :CLASS for (pt,f,r) in results]
     regressionresults = [pt == :REGRESSION for (pt,f,r) in results]
     survivalresults = [pt == :SURVIVAL for (pt,f,r) in results]
-    present_results(sort(results[classificationresults]),methods)
-    present_results(sort(results[regressionresults]),methods)
-    present_results(sort(results[survivalresults]),methods)
-    println("Total time: $(round(totaltime,2)) s.")
+    if printable
+      present_results(sort(results[classificationresults]),methods)
+      present_results(sort(results[regressionresults]),methods)
+      present_results(sort(results[survivalresults]),methods)
+      println("Total time: $(round(totaltime,2)) s.")
+    end
     if resultfile != :none
         origstdout = STDOUT
         resultfilestream = open(resultfile,"w+")
@@ -133,6 +135,7 @@ function experiment(;files = ".", separator = ',', protocol = 10, normalizetarge
         redirect_stdout(origstdout)
         close(resultfilestream)
     end
+    return results
 end
 
 function run_experiment(file, separator, protocol, normalizetarget, normalizeinput, methods)
@@ -354,7 +357,8 @@ function load_data(source; separator = ',')
     if typeof(source) == String
         global globaldata = read_data(source, separator=separator) # Made global to allow access from workers
         initiate_workers()
-        println("Data loaded")
+        # println("Data loaded")
+        println("Data: $(source)")
     elseif typeof(source) == DataFrame
         if ~(:WEIGHT in names(source))
             global globaldata = hcat(source,DataFrame(WEIGHT = ones(size(source,1))))
@@ -362,7 +366,8 @@ function load_data(source; separator = ',')
             global globaldata = source # Made global to allow access from workers
         end
         initiate_workers()
-        println("Data loaded")
+        # println("Data loaded")
+        println("Data: $(source)")
     else
         println("Data can only be loaded from text files or DataFrames")
     end
