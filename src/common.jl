@@ -47,7 +47,7 @@ function get_tree_node(treeData, variableimportance, leafnodesstats, trainingdat
 
             leftnode=get_tree_node(typeof(treeData)(treeData.depth+1,leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp, PredictType)
             rightnode=get_tree_node(typeof(treeData)(treeData.depth+1,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp, PredictType)
-            return TreeNode{PredictType,typeof(splitpoint)}(:NODE, varno,splittype,splitpoint,leftweight,
+            return TreeNode{Void,typeof(splitpoint)}(:NODE, varno,splittype,splitpoint,leftweight,
                   leftnode,rightnode)
         end
     end
@@ -110,8 +110,7 @@ end
 ##
 ## Function for making a prediction with a single tree
 ##
-function make_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,prediction,weight=1.0)
-    local examplevalue::Nullable{S}
+function make_prediction(node::TreeNode,testdata,exampleno,prediction,weight=1.0)
     if node.nodeType == :LEAF
         prediction += weight*node.prediction
         return prediction
@@ -124,9 +123,9 @@ function make_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,prediction,
             return prediction
         else
             if node.splittype == :NUMERIC
-              nextnode=(get(examplevalue) <= node.splitpoint)? node.leftnode: node.rightnode
+              nextnode=(examplevalue <= node.splitpoint)? node.leftnode: node.rightnode
             else #Catagorical
-              nextnode=(get(examplevalue) == node.splitpoint)? node.leftnode: node.rightnode
+              nextnode=(examplevalue == node.splitpoint)? node.leftnode: node.rightnode
             end
             return make_prediction(nextnode,testdata,exampleno,prediction,weight)
         end
