@@ -47,7 +47,7 @@ function get_tree_node(treeData, variableimportance, leafnodesstats, trainingdat
 
             leftnode=get_tree_node(typeof(treeData)(treeData.depth+1,leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp, PredictType)
             rightnode=get_tree_node(typeof(treeData)(treeData.depth+1,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,defaultprediction), variableimportance, leafnodesstats, trainingdata,variables,types,method,varimp, PredictType)
-            return TreeNode{PredictType,typeof(splitpoint)}(:NODE, varno,splittype,splitpoint,leftweight,
+            return TreeNode{Void,typeof(splitpoint)}(:NODE, varno,splittype,splitpoint,leftweight,
                   leftnode,rightnode)
         end
     end
@@ -111,14 +111,13 @@ end
 ## Function for making a prediction with a single tree
 ##
 function make_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,prediction,weight=1.0)
-    local examplevalue::Nullable{S}
     if node.nodeType == :LEAF
         prediction += weight*node.prediction
         return prediction
     else
         # varno, splittype, splitpoint, splitweight = node[1]
-        examplevalue = testdata[node.varno][exampleno]
-        if isna(examplevalue)
+        examplevalue::Nullable{S} = testdata[node.varno][exampleno]
+        if isnull(examplevalue)
             prediction+=make_prediction(node.leftnode,testdata,exampleno,prediction,weight*node.leftweight)
             prediction+=make_prediction(node.rightnode,testdata,exampleno,prediction,weight*(1-node.leftweight))
             return prediction
