@@ -1,17 +1,19 @@
-using RandomForest, Base.Test, FactCheck
+using RandomForest, FactCheck, Requests, DataFrames
 
+percent = 0.1
 facts("*** Run Survival Test ***") do
 
   context("Function: experiment") do
-    @fact experiment(files=["./survival/pbc.csv"], printable = false)[1][3][1].MSE --> roughly(0.25; atol = 0.05)
-    @fact experiment(files=["./survival/pharynx.csv"], printable = false)[1][3][1].MSE --> roughly(0.44; atol = 0.05)
+    @fact experiment(files=[Requests.get_streaming("https://raw.githubusercontent.com/henrikbostrom/RandomForest/testing/testData/pbc.csv")], printable = false)[1][3][1].MSE --> less_than(0.25 + 0.25 * percent)
+    @fact experiment(files=[Requests.get_streaming("https://raw.githubusercontent.com/henrikbostrom/RandomForest/testing/testData/pharynx.csv")], printable = false)[1][3][1].MSE --> less_than(0.44 + 0.44 * percent)
   end
 
   context("Function: generate_model") do
-    load_data("./survival/pbc.csv");
-    @fact generate_model().oobperformance --> roughly(0.25; atol = 0.05)
-    load_data("./survival/pharynx.csv");
-    @fact generate_model().oobperformance --> roughly(0.44; atol = 0.05)
+    load_data(readtable(Requests.get_streaming("https://raw.githubusercontent.com/henrikbostrom/RandomForest/testing/testData/pbc.csv")));
+    @fact generate_model().oobperformance --> less_than(0.25 + 0.25 * percent)
+
+    load_data(readtable(Requests.get_streaming("https://raw.githubusercontent.com/henrikbostrom/RandomForest/testing/testData/pharynx.csv")));
+    @fact generate_model().oobperformance --> less_than(0.44 + 0.44 * percent)
   end
 
 end

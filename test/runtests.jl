@@ -1,6 +1,7 @@
 using RandomForest
-using Base.Test
 using FactCheck
+using Requests
+using DataFrames
 
 tests = [
     "classification.jl",
