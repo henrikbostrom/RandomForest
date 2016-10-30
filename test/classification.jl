@@ -1,4 +1,4 @@
-include("testhelpers.jl")
+isdefined(:helperloaded) || include("testhelpers.jl")
 
 eta = 0.1;
 facts("*** Run Classifcation Test ***") do

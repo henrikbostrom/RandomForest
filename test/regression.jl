@@ -1,4 +1,4 @@
-include("testhelpers.jl")
+isdefined(:helperloaded) || include("testhelpers.jl")
 
 percent = 0.1
 facts("*** Run Regression Test ***") do

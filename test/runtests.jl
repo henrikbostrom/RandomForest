@@ -1,7 +1,5 @@
-using RandomForest
-using FactCheck
-using Requests
-using DataFrames
+include("testhelpers.jl")
+helperloaded=true
 
 tests = [
     "classification.jl",

@@ -1,4 +1,4 @@
-using RandomForest, FactCheck, Requests, DataFrames
+isdefined(:helperloaded) || include("testhelpers.jl")
 
 percent = 0.1
 facts("*** Run Survival Test ***") do
