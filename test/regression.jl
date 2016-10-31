@@ -9,8 +9,8 @@ facts("*** Run Regression Test ***") do
   end
 
   context("Function: generate_model") do
-      @fact test_gen("laser.txt").oobperformance --> less_than(72.5 + 72.5 * percent)
-      @fact test_gen("plastic.txt").oobperformance --> less_than(3.0 + 3.0 * percent)
+    @fact test_gen("laser.txt").oobperformance --> less_than(72.5 + 72.5 * percent)
+    @fact test_gen("plastic.txt").oobperformance --> less_than(3.0 + 3.0 * percent)
   end
 
 end
