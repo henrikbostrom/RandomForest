@@ -1,0 +1,8 @@
+
+ *** test_exp *** 
+fileName	type	elapsedTime
+glass	 	CLASS	 	20.923119428
+laser	 	REGRESSION	 	11.447944922
+plastic	 	REGRESSION	 	10.479847018
+pbc	 	NONE	 	0.851679684
+pharynx	 	NONE	 	0.818056402
