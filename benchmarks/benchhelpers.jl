@@ -11,4 +11,5 @@ function test_gen(file)
   println("Testing: $file")
   load_data(readtable(Requests.get_streaming(baseurl*file)))
   generate_model()
+  return "Prdection Model"
 end
