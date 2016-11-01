@@ -203,7 +203,7 @@ function getworkertrees(model, nocoworkers)
     for i = 1:mod(model.method.notrees,nocoworkers)
         notrees[i] += 1
     end
-    alltrees = Array(Any,nocoworkers)
+    alltrees = Array(Array,nocoworkers)
     index = 0
     for i = 1:nocoworkers
         alltrees[i] = model.trees[index+1:index+notrees[i]]
@@ -224,7 +224,6 @@ function generate_model(;method = forest())
         classes = typeof(method.learningType) == Classifier ? unique(globaldata[:CLASS]) : Int[]
         nocoworkers = nprocs()-1
         numThreads = Threads.nthreads()
-        treesandoobs = Array{Any,1}()
         if nocoworkers > 0
             notrees = getnotrees(method, nocoworkers)
             treesandoobs = pmap(generate_trees, [(method,classes,n,rand(1:1000_000_000)) for n in notrees])
@@ -297,7 +296,7 @@ function prediction_task(data)
 end
 
 function initiate_workers()
-    pr = Array(Any,nprocs())
+    pr = Array(Future,nprocs())
     for i = 2:nprocs()
         pr[i] = remotecall(load_global_dataset,i)
     end
@@ -311,7 +310,7 @@ function load_global_dataset()
 end
 
 function update_workers()
-    pr = Array(Any,nprocs())
+    pr = Array(Future,nprocs())
     for i = 2:nprocs()
         pr[i] = remotecall(update_global_dataset,i)
     end

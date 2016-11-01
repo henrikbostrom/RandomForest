@@ -230,7 +230,7 @@ function run_split(testoption,methods)
                 randomoobs[i] = rand(1:notrainingexamples)
             end
         else
-            randomoobs = Array(Int64,0)
+            randomoobs = Array(Int,0)
         end
         if nocoworkers > 0
             notrees = getnotrees(methods[m], nocoworkers)
