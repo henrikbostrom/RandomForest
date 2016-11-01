@@ -1,8 +1,14 @@
-
- *** test_exp *** 
-fileName	type	elapsedTime
-glass	 	CLASS	 	20.923119428
-laser	 	REGRESSION	 	11.447944922
-plastic	 	REGRESSION	 	10.479847018
-pbc	 	NONE	 	0.851679684
-pharynx	 	NONE	 	0.818056402
+*** test_exp *** 
+fileName	 	type	 	elapsedTime
+glass.txt	 	CLASS	 	30.314671209
+laser.txt	 	REGRESSION	 	12.35956144
+plastic.txt	 	REGRESSION	 	11.165742706
+pbc.csv	 	SURVIVAL	 	13.990018629
+pharynx.csv	 	SURVIVAL	 	7.581528085
+*** test_gen *** 
+fileName	 	type	 	elapsedTime
+glass.txt	 	Prdection Model	 	5.998773996
+laser.txt	 	Prdection Model	 	3.543387907
+plastic.txt	 	Prdection Model	 	2.839144627
+pbc.csv	 	Prdection Model	 	4.218761954
+pharynx.csv	 	Prdection Model	 	5.174797641
