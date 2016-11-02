@@ -422,204 +422,46 @@ end
 ##
 function generate_and_test_trees(Arguments::Tuple{LearningMethod{Classifier},Symbol,Int64,Int64,Array{Int64,1}})
     method,experimentype,notrees,randseed,randomoobs = Arguments
+    classes = unique(globaldata[:CLASS])
     s = size(globaldata,1)
     srand(randseed)
+    noclasses = length(classes)
+    variables, types = get_variables_and_types(globaldata)
     if experimentype == :test
-        classes = unique(globaldata[:CLASS])
-        noclasses = length(classes)
-        classdata = Array(Any,noclasses)
-        for c = 1:noclasses
-            classdata[c] = globaldata[globaldata[:CLASS] .== classes[c],:]
-        end
-        variables, types = get_variables_and_types(globaldata)
-        modelsize = 0
-        noirregularleafs = 0
-        trainingdata = Array(Any,noclasses)
-        trainingrefs = Array(Any,noclasses)
-        trainingweights = Array(Any,noclasses)
-        testdata = Array(Any,noclasses)
-        oobpredictions = Array(Any,noclasses)
-        emptyprediction = zeros(noclasses)
-        for c = 1:noclasses
-            testdata[c] = classdata[c][classdata[c][:TEST] .== true,:]
-            trainingdata[c] = classdata[c][classdata[c][:TEST] .== false,:]
-            trainingrefs[c] = collect(1:size(trainingdata[c],1))
-            trainingweights[c] = trainingdata[c][:WEIGHT]
-            oobpredictions[c] = Array(Any,size(trainingdata[c],1))
-            for i = 1:size(trainingdata[c],1)
-                oobpredictions[c][i] = [0;emptyprediction]
-            end
-        end
-        randomclassoobs = Array(Any,size(randomoobs,1))
-        for i = 1:size(randomclassoobs,1)
-            oobref = randomoobs[i]
-            c = 1
-            while oobref > size(trainingrefs[c],1)
-                oobref -= size(trainingrefs[c],1)
-                c += 1
-            end
-            randomclassoobs[i] = (c,oobref)
-        end
-        regressionvalues = []
-        timevalues = []
-        eventvalues = []
-        missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
-        newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
+        model,oobpredictions,variableimportance, modelsize, noirregularleafs, randomclassoobs, oob = generate_trees((method,classes,notrees,randseed);curdata=globaldata[globaldata[:TEST] .== false,:], randomoobs=randomoobs, varimparg = false)
+        testData = groupby(globaldata[globaldata[:TEST] .== true,:], :CLASS)
         testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
         newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
-        model = Array(Any,notrees)
-        oob = Array(Any,notrees)
-        for treeno = 1:notrees
-            sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
-            model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions)
-            modelsize += noleafs
-            noirregularleafs += treenoirregularleafs
-        end
+        replacements_for_missing_values!(method,newtestdata,testdata,variables,types,testmissingvalues,testnonmissingvalues)
         nopredictions = sum([size(testdata[c],1) for c = 1:noclasses])
-        testexamplecounter = 0
-        predictions = Array(Any,nopredictions)
-        correctclassificationcounter = 0.0
-        totalnotrees = 0
-        squaredproberror = 0.0
-        for c = 1:noclasses
-            correctclassvector = zeros(noclasses)
-            correctclassvector[c] = 1.0
-            for i = 1:size(testdata[c],1)
-                classprobabilities = zeros(noclasses)
-                nosampledtrees = 0
-                testexamplecounter += 1
-                if method.modpred
-                    randomoobclass, randomoobref = randomclassoobs[testexamplecounter]
-                end
-                for t = 1:length(model)
-                    if method.modpred
-                        if oob[t][randomoobclass][randomoobref]
-                            prediction = make_prediction(model[t],newtestdata[c],i,zeros(noclasses))
-                            classprobabilities += prediction
-                            correctclassificationcounter += 1-abs(sign(indmax(prediction)-c))
-                            squaredproberror += sqL2dist(correctclassvector,prediction)
-                            nosampledtrees += 1
-                        end
-                    else
-                        prediction = make_prediction(model[t],newtestdata[c],i,zeros(noclasses))
-                        classprobabilities += prediction
-                        correctclassificationcounter += 1-abs(sign(indmax(prediction)-c))
-                        squaredproberror += sqL2dist(correctclassvector,prediction)
-                    end
-                end
-                if ~method.modpred
-                    nosampledtrees = length(model)
-                end
-                totalnotrees += nosampledtrees
-                predictions[testexamplecounter] = [nosampledtrees;classprobabilities]
-            end
-        end
+        predictions = Array(Array{Float64,1},nopredictions)
+        totalnotrees,correctclassificationcounter,squaredproberror = make_prediction_analysis(method, model, newtestdata, randomclassoobs, oob, noclasses, predictions)
         return (modelsize,predictions,([totalnotrees;correctclassificationcounter],[totalnotrees;squaredproberror]),oobpredictions,noirregularleafs)
     else # experimentype == :cv
         folds = sort(unique(globaldata[:FOLD]))
         nofolds = length(folds)
-        classes = unique(globaldata[:CLASS])
-        noclasses = length(classes)
-        classdata = Array(Any,noclasses)
-        for c = 1:noclasses
-            classdata[c] = globaldata[globaldata[:CLASS] .== classes[c],:]
-        end
         nocorrectclassifications = Array(Any,nofolds)
         squaredproberrors = Array(Any,nofolds)
-        predictions = Array(Any,size(globaldata,1))
-        variables, types = get_variables_and_types(globaldata)
-        oobpredictions = Array(Any,nofolds)
-        modelsizes = Array(Int64,nofolds)
-        noirregularleafs = Array(Int64,nofolds)
+        predictions = Array(Array{Float64,1},size(globaldata,1))
+        oobpredictions = Array(Array,nofolds)
+        modelsizes = Array(Int,nofolds)
+        noirregularleafs = Array(Int,nofolds)
         testexamplecounter = 0
         foldno = 0
         for fold in folds
             foldno += 1
-            trainingdata = Array(Any,noclasses)
-            trainingrefs = Array(Any,noclasses)
-            trainingweights = Array(Any,noclasses)
-            testdata = Array(Any,noclasses)
-            oobpredictions[foldno] = Array(Any,noclasses)
-            emptyprediction = zeros(noclasses)
-            for c = 1:noclasses
-                trainingdata[c] = classdata[c][classdata[c][:FOLD] .!= fold,:]
-                testdata[c] = classdata[c][classdata[c][:FOLD] .== fold,:]
-                trainingrefs[c] = collect(1:size(trainingdata[c],1))
-                trainingweights[c] = trainingdata[c][:WEIGHT]
-                oobpredictions[foldno][c] = Array(Any,size(trainingdata[c],1))
-                for i = 1:size(trainingdata[c],1)
-                    oobpredictions[foldno][c][i] = [0;emptyprediction]
-                end
-            end
-            if size(randomoobs,1) > 0
-                randomclassoobs = Array(Any,size(randomoobs[foldno],1))
-                for i = 1:size(randomclassoobs,1)
-                    oobref = randomoobs[foldno][i]
-                    c = 1
-                    while oobref > size(trainingrefs[c],1)
-                        oobref -= size(trainingrefs[c],1)
-                        c += 1
-                    end
-                    randomclassoobs[i] = (c,oobref)
-                end
-            end
-            regressionvalues = []
-            timevalues = []
-            eventvalues = []
-            missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
-            newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
+            trainingdata = globaldata[globaldata[:FOLD] .!= fold,:]
+            folddata = globaldata[globaldata[:FOLD] .== fold,:]
+            testdata = groupby(folddata, :CLASS)
+            model,oobpredictions[foldno],variableimportance, modelsizes[foldno], noirregularleafs[foldno], randomclassoobs, oob = generate_trees((method,classes,notrees,randseed);curdata=trainingdata, randomoobs=size(randomoobs,1) > 0 ? randomoobs[foldno] : [], varimparg = false)
+            
             testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
             newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
-            model = Array(Any,notrees)
-            modelsize = 0
-            totalnoirregularleafs = 0
-            oob = Array(Any,notrees)
-            for treeno = 1:notrees
-                sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
-                model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions[foldno])
-                modelsize += noleafs
-                totalnoirregularleafs += treenoirregularleafs
-            end
-            modelsizes[foldno] = modelsize
-            noirregularleafs[foldno] = totalnoirregularleafs
-            correctclassificationcounter = 0
-            squaredproberror = 0.0
-            totalnotrees = 0
-            foldtestexamplecounter = 0
-            for c = 1:noclasses
-                correctclassvector = zeros(noclasses)
-                correctclassvector[c] = 1.0
-                for i = 1:size(testdata[c],1)
-                    foldtestexamplecounter += 1
-                    classprobabilities = zeros(noclasses)
-                    nosampledtrees = 0
-                    if method.modpred
-                        randomoobclass, randomoobref = randomclassoobs[foldtestexamplecounter]
-                    end
-                    for t = 1:length(model)
-                        if method.modpred
-                            if oob[t][randomoobclass][randomoobref]
-                                prediction = make_prediction(model[t],newtestdata[c],i,zeros(noclasses))
-                                classprobabilities += prediction
-                                correctclassificationcounter += 1-abs(sign(indmax(prediction)-c))
-                                squaredproberror += sqL2dist(correctclassvector,prediction)
-                                nosampledtrees += 1
-                            end
-                        else
-                            prediction = make_prediction(model[t],newtestdata[c],i,zeros(noclasses))
-                            classprobabilities += prediction
-                            correctclassificationcounter += 1-abs(sign(indmax(prediction)-c))
-                            squaredproberror += sqL2dist(correctclassvector,prediction)
-                        end
-                    end
-                    if ~method.modpred
-                        nosampledtrees = length(model)
-                    end
-                    testexamplecounter += 1
-                    totalnotrees += nosampledtrees
-                    predictions[testexamplecounter] = [nosampledtrees;classprobabilities]
-                end
-            end
+            replacements_for_missing_values!(method,newtestdata,testdata,variables,types,testmissingvalues,testnonmissingvalues)
+        
+            totalnotrees,correctclassificationcounter,squaredproberror = make_prediction_analysis(method, model, newtestdata, randomclassoobs, oob, noclasses, predictions; predictionexamplecounter=testexamplecounter)
+            testexamplecounter += size(folddata,1)
+            
             nocorrectclassifications[foldno] = [totalnotrees;correctclassificationcounter]
             squaredproberrors[foldno] = [totalnotrees;squaredproberror]
         end
@@ -627,3 +469,44 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Classifier},Sym
     end
 end
 
+function make_prediction_analysis(method::LearningMethod{Classifier}, model, newtestdata, randomclassoobs, oob, noclasses, predictions; predictionexamplecounter = 0)
+    correctclassificationcounter = 0
+    squaredproberror = 0.0
+    totalnotrees = 0
+    testexamplecounter = 0
+    for c = 1:noclasses
+        correctclassvector = zeros(noclasses)
+        correctclassvector[c] = 1.0
+        for i = 1:size(newtestdata[c][1],1)
+            testexamplecounter += 1
+            classprobabilities = zeros(noclasses)
+            nosampledtrees = 0
+            if method.modpred
+                randomoobclass, randomoobref = randomclassoobs[testexamplecounter]
+            end
+            for t = 1:length(model)
+                if method.modpred
+                    if oob[t][randomoobclass][randomoobref]
+                        prediction = make_prediction(model[t],newtestdata[c],i,zeros(noclasses))
+                        classprobabilities += prediction
+                        correctclassificationcounter += 1-abs(sign(indmax(prediction)-c))
+                        squaredproberror += sqL2dist(correctclassvector,prediction)
+                        nosampledtrees += 1
+                    end
+                else
+                    prediction = make_prediction(model[t],newtestdata[c],i,zeros(noclasses))
+                    classprobabilities += prediction
+                    correctclassificationcounter += 1-abs(sign(indmax(prediction)-c))
+                    squaredproberror += sqL2dist(correctclassvector,prediction)
+                end
+            end
+            if ~method.modpred
+                nosampledtrees = length(model)
+            end
+            predictionexamplecounter += 1
+            totalnotrees += nosampledtrees
+            predictions[predictionexamplecounter] = [nosampledtrees;classprobabilities]
+        end
+    end
+    return (totalnotrees,correctclassificationcounter,squaredproberror)
+end

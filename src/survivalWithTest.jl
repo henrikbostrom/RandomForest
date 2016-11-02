@@ -551,8 +551,8 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Survival},Symbo
     method,experimentype,notrees,randseed,randomoobs = Arguments
     s = size(globaldata,1)
     srand(randseed)
+    variables, types = get_variables_and_types(globaldata)
     if experimentype == :test
-        variables, types = get_variables_and_types(globaldata)
         modelsize = 0
         noirregularleafs = 0
         testdata = globaldata[globaldata[:TEST] .== true,:]
@@ -570,6 +570,7 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Survival},Symbo
         newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
         testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
         newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
+        replacements_for_missing_values!(method,newtestdata,testdata,variables,types,testmissingvalues,testnonmissingvalues)
         model = Array(Any,notrees)
         oob = Array(Any,notrees)
         for treeno = 1:notrees
@@ -620,7 +621,6 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Survival},Symbo
         squarederrors = Array(Any,nofolds)
         predictions = Array(Any,size(globaldata,1))
         squaredpredictions = Array(Any,size(globaldata,1))
-        variables, types = get_variables_and_types(globaldata)
         oobpredictions = Array(Any,nofolds)
         modelsizes = Array(Int64,nofolds)
         noirregularleafs = Array(Int64,nofolds)
@@ -643,6 +643,7 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Survival},Symbo
             newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
             testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
             newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
+            replacements_for_missing_values!(method,newtestdata,testdata,variables,types,testmissingvalues,testnonmissingvalues)
             model = Array(Any,notrees)
             modelsize = 0
             totalnoirregularleafs = 0

@@ -1,9 +1,9 @@
-function generate_trees(Arguments::Tuple{LearningMethod{Classifier},DataArray,Int,Int})
+function generate_trees(Arguments::Tuple{LearningMethod{Classifier},DataArray,Int,Int};curdata=globaldata, randomoobs=[], varimparg = true)
     method,classes,notrees,randseed = Arguments
-    s = size(globaldata,1)
+    s = size(curdata,1)
     srand(randseed)
     noclasses = length(classes)
-    trainingdata = groupby(globaldata, :CLASS)
+    trainingdata = groupby(curdata, :CLASS)
     trainingrefs = Array(Array{Int,1},noclasses)
     trainingweights = Array(Array{Float64,1},noclasses)
     oobpredictions = Array(Array{Array{Float64,1},1},noclasses)
@@ -19,21 +19,37 @@ function generate_trees(Arguments::Tuple{LearningMethod{Classifier},DataArray,In
     regressionvalues = []
     timevalues = []
     eventvalues = []
+    
+    randomclassoobs = Array(Any,size(randomoobs,1))
+    for i = 1:size(randomclassoobs,1)
+        oobref = randomoobs[i]
+        c = 1
+        while oobref > size(trainingrefs[c],1)
+            oobref -= size(trainingrefs[c],1)
+            c += 1
+        end
+        randomclassoobs[i] = (c,oobref)
+    end
     # starting from here till the end of the function is duplicated between here and the Regressor and Survival dispatchers
     # need to be cleaned
-    variables, types = get_variables_and_types(globaldata)
+    variables, types = get_variables_and_types(curdata)
     modelsize = 0
+    noirregularleafs = 0
     missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
     newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
     model = Array(TreeNode,notrees)
+    oob = Array(Array,notrees)
     variableimportance = zeros(size(variables,1))
     for treeno = 1:notrees
         sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
-        model[treeno], treevariableimportance, noleafs, noirregularleafs = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions,varimp = true)
+        model[treeno], treevariableimportance, noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions;varimp = varimparg)
         modelsize += noleafs
-        variableimportance += treevariableimportance
+        noirregularleafs += treenoirregularleafs
+        if (varimparg)
+            variableimportance += treevariableimportance
+        end
     end
-    return (model,oobpredictions,variableimportance)
+    return (model,oobpredictions,variableimportance, modelsize, noirregularleafs, randomclassoobs, oob)
 end
 
 function find_missing_values(method::LearningMethod{Classifier},variables,trainingdata)
@@ -161,11 +177,7 @@ function generate_tree(method::LearningMethod{Classifier},trainingrefs,trainingw
     else
         model, variableimportance, noleafs, noirregularleafs = build_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,varimp)
     end
-    if varimp
-        return model, variableimportance, noleafs, noirregularleafs, zeroweights
-    else
-        return model, noleafs, noirregularleafs, zeroweights
-    end
+    return model, variableimportance, noleafs, noirregularleafs, zeroweights
 end
 
 function default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,method::LearningMethod{Classifier})
