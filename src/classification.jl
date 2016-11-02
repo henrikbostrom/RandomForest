@@ -3,12 +3,13 @@ function generate_trees(Arguments::Tuple{LearningMethod{Classifier},DataArray,In
     s = size(curdata,1)
     srand(randseed)
     noclasses = length(classes)
-    trainingdata = groupby(curdata, :CLASS)
+    trainingdata = Array(DataFrame, noclasses)
     trainingrefs = Array(Array{Int,1},noclasses)
     trainingweights = Array(Array{Float64,1},noclasses)
     oobpredictions = Array(Array{Array{Float64,1},1},noclasses)
     emptyprediction = [0; zeros(noclasses)]
     for c = 1:noclasses
+        trainingdata[c] = curdata[curdata[:CLASS] .== classes[c],:]
         trainingrefs[c] = collect(1:size(trainingdata[c],1))
         trainingweights[c] = trainingdata[c][:WEIGHT]
         oobpredictions[c] = Array(Array{Float64,1},size(trainingdata[c],1))
