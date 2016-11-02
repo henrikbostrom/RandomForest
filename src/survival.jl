@@ -530,22 +530,22 @@ function make_split(method::LearningMethod{Survival},node,trainingdata,bestsplit
   return leftrefs,leftweights,[],lefttimevalues,lefteventvalues,rightrefs,rightweights,[],righttimevalues,righteventvalues,leftweight
 end
 
-function make_survival_prediction(node::TreeNode,testdata,exampleno,time,prediction,weight=1.0)
+function make_survival_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,time,prediction,weight=1.0)
     if node.nodeType == :LEAF
         prediction += weight* get_cumulative_hazard(node.prediction,time)
         return prediction
     else
         # varno, splittype, splitpoint, splitweight = node[1]
-        examplevalue = testdata[node.varno][exampleno]
-        if isna(examplevalue)
+        examplevalue::Nullable{S} = testdata[node.varno][exampleno]
+        if isnull(examplevalue)
             prediction+=make_survival_prediction(node.leftnode,testdata,exampleno,prediction,weight*node.leftweight)
             prediction+=make_survival_prediction(node.rightnode,testdata,exampleno,prediction,weight*(1-node.leftweight))
             return prediction
         else
             if node.splittype == :NUMERIC
-              nextnode=(examplevalue <= node.splitpoint)? node.leftnode: node.rightnode
+              nextnode=(get(examplevalue) <= node.splitpoint)? node.leftnode: node.rightnode
             else #Catagorical
-              nextnode=(examplevalue == node.splitpoint)? node.leftnode: node.rightnode
+              nextnode=(get(examplevalue) == node.splitpoint)? node.leftnode: node.rightnode
             end
             return make_survival_prediction(nextnode,testdata,exampleno,prediction,weight)
         end
