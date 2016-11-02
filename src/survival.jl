@@ -4,20 +4,20 @@ function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},I
     srand(randseed)
     trainingdata = globaldata
     trainingrefs = collect(1:size(trainingdata,1))
-    trainingweights = trainingdata[:WEIGHT]
+    trainingweights = trainingdata[:WEIGHT].data
     regressionvalues = []
-    timevalues = convert(Array,trainingdata[:TIME])
-    eventvalues = convert(Array,trainingdata[:EVENT])
-    oobpredictions = Array(Any,size(trainingdata,1))
+    timevalues = trainingdata[:TIME].data
+    eventvalues = trainingdata[:EVENT].data
+    oobpredictions = Array(Array{Float64},size(trainingdata,1))
     for i = 1:size(trainingdata,1)
-        oobpredictions[i] = [0,0,0]
+        oobpredictions[i] = zeros(3)
     end
     # starting from here till the end of the function is duplicated between here and the Classifier and Regressor dispatchers
     variables, types = get_variables_and_types(globaldata)
     modelsize = 0
     missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
     newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
-    model = Array(Any,notrees)
+    model = Array(TreeNode,notrees)
     variableimportance = zeros(size(variables,1))
     for treeno = 1:notrees
         sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
@@ -29,11 +29,13 @@ function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},I
 end
 
 function find_missing_values(method::LearningMethod{Survival},variables,trainingdata)
-    missingvalues = Array(Any,length(variables))
-    nonmissingvalues = Array(Any,length(variables))
+    #NOTE: could be further improved with function barrier in val loop. Also identical to the regression version
+    missingvalues = Array(Array{Int,1},length(variables))
+    nonmissingvalues = Array(Array,length(variables))
     for v = 1:length(variables)
+        variable = variables[v]
         missingvalues[v] = Int[]
-        nonmissingvalues[v] = Any[]
+        nonmissingvalues[v] = typeof(trainingdata[variable]).parameters[1][]
         variable = variables[v]
         if check_variable(variable)
             values = trainingdata[variable]
@@ -51,20 +53,20 @@ function find_missing_values(method::LearningMethod{Survival},variables,training
 end
 
 function transform_nonmissing_columns_to_arrays(method::LearningMethod{Survival},variables,trainingdata,missingvalues)
-    newdata = Array(Any,length(variables))
+    #NOTE: Identical to the regression version
+    newdata = Array(Array,length(variables))
     for v = 1:length(variables)
-        if missingvalues[v] == []
+        if isempty(missingvalues[v])
             newdata[v] = convert(Array,trainingdata[variables[v]])
-        else
-            newdata[v] = trainingdata[variables[v]]
         end
     end
     return newdata
 end
 
 function sample_replacements_for_missing_values!(method::LearningMethod{Survival},newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
+    #NOTE: Identical to the regression version
     for v = 1:length(variables)
-        if missingvalues[v] != []
+        if !isempty(missingvalues[v])
             values = trainingdata[variables[v]]
             if length(nonmissingvalues[v]) > 0
                 for i in missingvalues[v]
@@ -87,11 +89,13 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Survival
 end
 
 function replacements_for_missing_values!(method::LearningMethod{Survival},newtestdata,testdata,variables,types,missingvalues,nonmissingvalues)
+    #NOTE: Identical to the regression version
     for v = 1:length(variables)
-        if missingvalues[v] != []
-            values = convert(DataArray,testdata[variables[v]])
+        if !isempty(missingvalues[v])
+            variableType = typeof(testdata[variables[v]]).parameters[1]
+            values = convert(Array{Nullable{variableType},1},testdata[variables[v]],Nullable{variableType}())
             for i in missingvalues[v]
-                values[i] =  NA
+                values[i] =  Nullable{variableType}()
             end
             newtestdata[v] = values
         end
@@ -104,7 +108,7 @@ function generate_tree(method::LearningMethod{Survival},trainingrefs,trainingwei
         if typeof(method.bagsize) == Int
             samplesize = method.bagsize
         else
-            samplesize = convert(Int,round(length(trainingrefs)*method.bagsize))
+            samplesize = round(Int,length(trainingrefs)*method.bagsize)
         end
         selectedsample = rand(1:length(trainingrefs),samplesize)
         newtrainingweights[selectedsample] += 1.0
@@ -201,7 +205,7 @@ end
 function generate_cumulative_hazard_function(trainingweights,timevalues,eventvalues) # Assuming all values sorted according to time
     atrisk = sum(trainingweights)
     accweights = 0.0
-    accevents = 0
+    accevents = 0.0
 #    cumulativehazard = 0.0
     survivalprob = 1.0
     chf = Array{Float64,1}[]
@@ -215,7 +219,7 @@ function generate_cumulative_hazard_function(trainingweights,timevalues,eventval
 #            cumulativehazard += (accevents+eventvalues[t]*trainingweights[t])/atrisk
             survivalprob *= 1-(accevents+eventvalues[t]*trainingweights[t])/atrisk
             accweights = 0.0
-            accevents = 0
+            accevents = 0.0
 #            push!(chf,[t,cumulativehazard])
             push!(chf,[t,1-survivalprob])
             atrisk -= accweights+trainingweights[t]
@@ -440,7 +444,8 @@ function evaluate_survival_numeric_variable_randval(bestsplit,varno,variable,spl
 end
 
 function evaluate_survival_numeric_variable_allvals(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,method) # NOTE: to be fixed!
-    numericvalues = Dict{Any, Any}()
+    #NOTE: Identical to the regression version evaluate_regression_numeric_variable_allvals
+    numericvalues = Dict{typeof(allvalues).parameters[1], Array{Float64,1}}()
     for i = 1:length(allvalues)
         numericvalues[allvalues[i]] = get(numericvalues,allvalues[i],[0,0]) .+ [trainingweights[i]*regressionvalues[i],trainingweights[i]]
     end
@@ -450,14 +455,11 @@ function evaluate_survival_numeric_variable_allvals(bestsplit,varno,variable,spl
         regressionsum += value[1]
         weightsum += value[2]
     end
-    splitpoints = Array(Any,length(numericvalues),2)
-    splitpoints[:,1] = collect(keys(numericvalues))
-    splitpoints[:,2] = collect(values(numericvalues))
-    splitpoints = sortrows(splitpoints,by=x->x[1])
+    sortedkeys = sort(collect(keys(numericvalues)))
     leftregressionsum = 0.0
     leftweightsum = 0.0
-    for s = 1:size(splitpoints,1)-1
-        weightandregressionsum = splitpoints[s,2]
+    for s = 1:size(sortedkeys,1)-1
+        weightandregressionsum = numericvalues[sortedkeys[s]]
         leftregressionsum += weightandregressionsum[1]
         leftweightsum += weightandregressionsum[2]
         rightregressionsum = origregressionsum-leftregressionsum
@@ -470,7 +472,7 @@ function evaluate_survival_numeric_variable_allvals(bestsplit,varno,variable,spl
             variancereduction = -Inf
         end
         if variancereduction > bestsplit[1]
-            bestsplit = (variancereduction,varno,variable,splittype,splitpoints[s,1])
+            bestsplit = (variancereduction,varno,variable,splittype,sortedkeys[s])
         end
     end
     return bestsplit
@@ -551,6 +553,7 @@ function make_survival_prediction(node::TreeNode,testdata,exampleno,time,predict
 end
 
 function generate_model_internal(method::LearningMethod{Survival},oobs,classes)
+    #NOTE: Identical to the regression version
     oobpredictions = oobs[1]
     for r = 2:length(oobs)
         oobpredictions += oobs[r]
@@ -642,6 +645,7 @@ function generate_model_internal(method::LearningMethod{Survival},oobs,classes)
 end
 
 function apply_model(model::PredictionModel{Survival}; confidence = :std)
+    #NOTE: Identical to the regression version
     numThreads = Threads.nthreads()
     nocoworkers = nprocs()-1
     predictions = zeros(size(globaldata,1))
@@ -692,7 +696,7 @@ function apply_model(model::PredictionModel{Survival}; confidence = :std)
                 alpha = Inf
             end
         end
-        results = Array(Any,size(predictions,1))
+        results = Array(Tuple,size(predictions,1))
         for i = 1:size(predictions,1)
             delta = squaredpredictions[i]-predictions[i]^2
             errorrange = alpha*(delta+0.01)
@@ -720,14 +724,15 @@ function apply_model(model::PredictionModel{Survival}; confidence = :std)
     return results
 end
 
-function apply_trees(Arguments::Tuple{LearningMethod{Survival},Any,Any})
+function apply_trees(Arguments::Tuple{LearningMethod{Survival},Array,Array})
+    #NOTE: Identical to the regression version
     method, classes, trees = Arguments
     variables, types = get_variables_and_types(globaldata)
     testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,globaldata)
     newtestdata = transform_nonmissing_columns_to_arrays(method,variables,globaldata,testmissingvalues)
     replacements_for_missing_values!(method,newtestdata,globaldata,variables,types,testmissingvalues,testnonmissingvalues)
     nopredictions = size(globaldata,1)
-    timevalues = convert(Array,globaldata[:TIME])    
+    timevalues = convert(Array,globaldata[:TIME])
     predictions = Array(Float64,nopredictions)
     squaredpredictions = Array(Float64,nopredictions)
     for i = 1:nopredictions
@@ -742,4 +747,3 @@ function apply_trees(Arguments::Tuple{LearningMethod{Survival},Any,Any})
     results = (predictions,squaredpredictions)
     return results
 end
-
