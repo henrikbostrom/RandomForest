@@ -6,9 +6,9 @@ function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Array{Int,1},
     trainingrefs = collect(1:size(trainingdata,1))
     trainingweights = trainingdata[:WEIGHT]
     regressionvalues = trainingdata[:REGRESSION]
-    oobpredictions = Array(Any,size(trainingdata,1))
+    oobpredictions = Array(Array{Float64,1},size(trainingdata,1))
     for i = 1:size(trainingdata,1)
-        oobpredictions[i] = [0,0,0]
+        oobpredictions[i] = zeros(3)
     end
     timevalues = []
     eventvalues = []
@@ -17,7 +17,7 @@ function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Array{Int,1},
     modelsize = 0
     missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
     newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
-    model = Array(Any,notrees)
+    model = Array(TreeNode,notrees)
     variableimportance = zeros(size(variables,1))
     for treeno = 1:notrees
         sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
@@ -98,13 +98,12 @@ function replacements_for_missing_values!(method::LearningMethod{Regressor},newt
 end
 
 function generate_tree(method::LearningMethod{Regressor},trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,oobpredictions; varimp = false)
-    zeroweights = Array{Bool,1}()
     if method.bagging
         newtrainingweights = zeros(length(trainingweights))
         if typeof(method.bagsize) == Int
             samplesize = method.bagsize
         else
-            samplesize = convert(Int,round(length(trainingrefs)*method.bagsize))
+            samplesize = round(Int,length(trainingrefs)*method.bagsize)
         end
         selectedsample = rand(1:length(trainingrefs),samplesize)
         newtrainingweights[selectedsample] += 1.0
@@ -611,7 +610,7 @@ function apply_model(model::PredictionModel{Regressor}; confidence = :std)
                 alpha = Inf
             end
         end
-        results = Array(Any,size(predictions,1))
+        results = Array(Tuple,size(predictions,1))
         for i = 1:size(predictions,1)
             delta = squaredpredictions[i]-predictions[i]^2
             errorrange = alpha*(delta+0.01)
