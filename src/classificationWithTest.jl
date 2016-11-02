@@ -435,7 +435,7 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Classifier},Sym
         replacements_for_missing_values!(method,newtestdata,testdata,variables,types,testmissingvalues,testnonmissingvalues)
         nopredictions = sum([size(testdata[c],1) for c = 1:noclasses])
         predictions = Array(Array{Float64,1},nopredictions)
-        totalnotrees,correctclassificationcounter,squaredproberror = make_prediction_analysis(method, model, newtestdata, randomclassoobs, oob, noclasses, predictions)
+        totalnotrees,correctclassificationcounter,squaredproberror = make_prediction_analysis(method, model, newtestdata, randomclassoobs, oob, predictions)
         return (modelsize,predictions,([totalnotrees;correctclassificationcounter],[totalnotrees;squaredproberror]),oobpredictions,noirregularleafs)
     else # experimentype == :cv
         folds = sort(unique(globaldata[:FOLD]))
@@ -445,22 +445,25 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Classifier},Sym
         predictions = Array(Array{Float64,1},size(globaldata,1))
         oobpredictions = Array(Array,nofolds)
         modelsizes = Array(Int,nofolds)
+        classdata = groupby(globaldata, :CLASS)
         noirregularleafs = Array(Int,nofolds)
         testexamplecounter = 0
         foldno = 0
         for fold in folds
             foldno += 1
             trainingdata = globaldata[globaldata[:FOLD] .!= fold,:]
-            folddata = globaldata[globaldata[:FOLD] .== fold,:]
-            testdata = groupby(folddata, :CLASS)
+            testdata = Array(Any,noclasses)
+            for c = 1:noclasses
+                testdata[c] = classdata[c][classdata[c][:FOLD] .== fold,:]
+            end
             model,oobpredictions[foldno],variableimportance, modelsizes[foldno], noirregularleafs[foldno], randomclassoobs, oob = generate_trees((method,classes,notrees,randseed);curdata=trainingdata, randomoobs=size(randomoobs,1) > 0 ? randomoobs[foldno] : [], varimparg = false)
             
             testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
             newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
             replacements_for_missing_values!(method,newtestdata,testdata,variables,types,testmissingvalues,testnonmissingvalues)
         
-            totalnotrees,correctclassificationcounter,squaredproberror = make_prediction_analysis(method, model, newtestdata, randomclassoobs, oob, noclasses, predictions; predictionexamplecounter=testexamplecounter)
-            testexamplecounter += size(folddata,1)
+            totalnotrees,correctclassificationcounter,squaredproberror = make_prediction_analysis(method, model, newtestdata, randomclassoobs, oob, predictions; predictionexamplecounter=testexamplecounter)
+            testexamplecounter += sum([size(testdata[c],1) for c = 1:noclasses])
             
             nocorrectclassifications[foldno] = [totalnotrees;correctclassificationcounter]
             squaredproberrors[foldno] = [totalnotrees;squaredproberror]
@@ -469,11 +472,12 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Classifier},Sym
     end
 end
 
-function make_prediction_analysis(method::LearningMethod{Classifier}, model, newtestdata, randomclassoobs, oob, noclasses, predictions; predictionexamplecounter = 0)
+function make_prediction_analysis(method::LearningMethod{Classifier}, model, newtestdata, randomclassoobs, oob, predictions; predictionexamplecounter = 0)
     correctclassificationcounter = 0
     squaredproberror = 0.0
     totalnotrees = 0
     testexamplecounter = 0
+    noclasses = length(newtestdata)
     for c = 1:noclasses
         correctclassvector = zeros(noclasses)
         correctclassvector[c] = 1.0
