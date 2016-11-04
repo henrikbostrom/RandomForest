@@ -82,13 +82,12 @@ end
 
 function transform_nonmissing_columns_to_arrays(method::LearningMethod{Classifier},variables,trainingdata,missingvalues)
     noclasses = length(trainingdata)
-    newdata = Array(Array{Array,1},noclasses)
+    newdata = Array(Dict{Symbol,Array},noclasses)
     for c = 1:noclasses
-        newdata[c] = Array(Array,length(variables))
+        newdata[c] = Dict{Symbol,Array}()
         for v = 1:length(variables)
             if isempty(missingvalues[c][v])
-                variableType = typeof(trainingdata[c][variables[v]]).parameters[1]
-                newdata[c][v] = convert(Array{variableType,1},trainingdata[c][variables[v]])
+                newdata[c][variables[v]] = convert(Array,trainingdata[c][variables[v]])
             # else
             #     newdata[c][v] = trainingdata[c][variables[v]]
             end
@@ -98,7 +97,7 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Classifie
 end
 
 function sample_replacements_for_missing_values!(method::LearningMethod{Classifier},newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
-    noclasses = size(newtrainingdata,1)
+    noclasses = length(newtrainingdata)
     for c = 1:noclasses
         for v = 1:length(variables)
             if !isempty(missingvalues[c][v])
@@ -121,7 +120,7 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Classifi
                         values[i] =  newvalue # NOTE: The variable (and type) should be removed
                     end
                 end
-                newtrainingdata[c][v] = convert(Array{variableType,1},values)
+                newtrainingdata[c][variables[v]] = convert(Array{variableType,1},values)
             end
         end
     end
@@ -137,7 +136,7 @@ function replacements_for_missing_values!(method::LearningMethod{Classifier},new
                 for i in missingvalues[c][v]
                     values[i] =  Nullable{variableType}()
                 end
-                newtestdata[c][v] = values
+                newtestdata[c][variables[v]] = values
             end
         end
     end
@@ -181,7 +180,7 @@ function generate_tree(method::LearningMethod{Classifier},trainingrefs,trainingw
     return model, variableimportance, noleafs, noirregularleafs, zeroweights
 end
 
-function default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,method::LearningMethod{Classifier})
+function default_prediction(trainingweights)
     noclasses = size(trainingweights,1)
     classcounts = map(sum,trainingweights)
     noinstances = sum(classcounts)
@@ -223,22 +222,21 @@ function leaf_node(node,method::LearningMethod{Classifier})
     end
 end
 
-function make_leaf(node,method::LearningMethod{Classifier})
+function make_leaf(node,method::LearningMethod{Classifier}, parenttrainingweights)
     noclasses = size(node.trainingweights,1)
     classcounts = zeros(noclasses)
     for i=1:noclasses
         classcounts[i] = sum(node.trainingweights[i])
     end
     noinstances = sum(classcounts)
-    prediction = node.defaultprediction
     if noinstances > 0
         if method.laplace
-            prediction = [(classcounts[i]+1)/(noinstances+noclasses) for i=1:noclasses]
+            return [(classcounts[i]+1)/(noinstances+noclasses) for i=1:noclasses]
         else
-            prediction = [classcounts[i]/noinstances for i=1:noclasses]
+            return [classcounts[i]/noinstances for i=1:noclasses]
         end
     end
-    return prediction
+    return prediction = default_prediction(parenttrainingweights)
 end
 
 function find_best_split(node,trainingdata,variables,types,method::LearningMethod{Classifier})
@@ -264,7 +262,6 @@ function find_best_split(node,trainingdata,variables,types,method::LearningMetho
     if method.splitsample > 0
         splitsamplesize = method.splitsample
         noclasses = size(node.trainingrefs,1)
-        sampleregressionvalues = node.regressionvalues
         sampletrainingweights = Array(Array{Float64,1},noclasses) #typeof(node).parameters[2]
         sampletrainingrefs = Array(Array{Int,1},noclasses) #typeof(node).parameters[1]
         for c = 1:noclasses
@@ -283,7 +280,6 @@ function find_best_split(node,trainingdata,variables,types,method::LearningMetho
     else
         sampletrainingrefs = node.trainingrefs
         sampletrainingweights = node.trainingweights
-        sampleregressionvalues = node.regressionvalues
     end
     bestsplit = (-Inf,0,:NA,:NA,0.0)
     noclasses = size(node.trainingrefs,1)
@@ -305,7 +301,7 @@ end
 function evaluate_variable_classification(bestsplit,varno,variable,splittype,trainingrefs,trainingweights,origclasscounts,noclasses,trainingdata,method)
     values = Array(Array,noclasses)
     for c = 1:noclasses
-        values[c] = trainingdata[c][varno][trainingrefs[c]]
+        values[c] = trainingdata[c][variable][trainingrefs[c]]
     end
     if splittype == :CATEGORIC
         if method.randval
@@ -460,24 +456,25 @@ function entropy(counts,total)
     return entropyval
 end
 
+# @iprofile begin
 function make_split(method::LearningMethod{Classifier},node,trainingdata,bestsplit)
     (varno, variable, splittype, splitpoint) = bestsplit
     noclasses = size(node.trainingrefs,1)
+    
     leftrefs = Array(Array,noclasses)
     leftweights = Array(Array,noclasses)
     rightrefs = Array(Array,noclasses)
     rightweights = Array(Array,noclasses)
-    values = Array(Array,noclasses)
     for c = 1:noclasses
+        values = trainingdata[c][variable][node.trainingrefs[c]]
         leftrefs[c] = Int[]
         leftweights[c] = Float64[]
         rightrefs[c] = Int[]
         rightweights[c] = Float64[]
-        values[c] = trainingdata[c][varno][node.trainingrefs[c]]
         if splittype == :NUMERIC
             for r = 1:length(node.trainingrefs[c])
                 ref = node.trainingrefs[c][r]
-                if values[c][r] <= splitpoint
+                if values[r] <= splitpoint
                     push!(leftrefs[c],ref)
                     push!(leftweights[c],node.trainingweights[c][r])
                 else
@@ -488,7 +485,7 @@ function make_split(method::LearningMethod{Classifier},node,trainingdata,bestspl
         else
             for r = 1:length(node.trainingrefs[c])
                 ref = node.trainingrefs[c][r]
-                if values[c][r] == splitpoint
+                if values[r] == splitpoint
                     push!(leftrefs[c],ref)
                     push!(leftweights[c],node.trainingweights[c][r])
                 else
@@ -497,12 +494,19 @@ function make_split(method::LearningMethod{Classifier},node,trainingdata,bestspl
                 end
             end
         end
+        # leftrefIds = splittype == :NUMERIC ? map(r->values[r] <= splitpoint, 1:length(node.trainingrefs[c])) : map(r->values[r] == splitpoint, 1:length(node.trainingrefs[c]))
+        # leftrefs[c] = node.trainingrefs[c][leftrefIds]
+        # leftweights[c] = node.trainingweights[c][leftrefIds]
+        # rightrefIds = !leftrefIds
+        # rightrefs[c] = node.trainingrefs[c][rightrefIds]
+        # rightweights[c] = node.trainingweights[c][rightrefIds]
     end
     noleftexamples = sum([sum(leftweights[i]) for i=1:noclasses])
     norightexamples = sum([sum(rightweights[i]) for i=1:noclasses])
     leftweight = noleftexamples/(noleftexamples+norightexamples)
-    return leftrefs,leftweights,[],[],[],rightrefs,rightweights,[],[],[],leftweight
+    return leftrefs,leftweights,rightrefs,rightweights,leftweight
 end
+# end
 
 function generate_model_internal(method::LearningMethod{Classifier}, oobs, classes)
     if method.conformal == :default
