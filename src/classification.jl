@@ -316,23 +316,7 @@ end
 
 function evaluate_classification_categoric_variable_randval(bestsplit,varno,variable,splittype,origclasscounts,noclasses,values,trainingweights,method)
     key = values[wsample(1:noclasses,origclasscounts)][rand(1:end)]
-    leftclasscounts = zeros(noclasses)
-    rightclasscounts = Array(Float64,noclasses)
-    for c = 1:noclasses
-        for i = 1:length(values[c])
-            if values[c][i] == key
-                leftclasscounts[c] += trainingweights[c][i]
-            end
-        end
-        rightclasscounts[c] = origclasscounts[c]-leftclasscounts[c]
-    end
-    if sum(leftclasscounts) >= method.minleaf && sum(rightclasscounts) >= method.minleaf
-        splitvalue = -information_content(leftclasscounts,rightclasscounts)
-        if splitvalue > bestsplit[1]
-            bestsplit = (splitvalue,varno,variable,splittype,key)
-        end
-    end
-    return bestsplit
+    return evaluate_classification_common(key, ==, bestsplit, varno,variable,splittype, values, noclasses, trainingweights, origclasscounts, method)
 end
 
 function evaluate_classification_categoric_variable_allvals(bestsplit,varno,variable,splittype,origclasscounts,noclasses,allvalues,trainingweights,method)
@@ -341,23 +325,8 @@ function evaluate_classification_categoric_variable_allvals(bestsplit,varno,vari
         allkeys = vcat(allkeys,allvalues[c])
     end
     keys = unique(allkeys)
-    rightclasscounts = Array(Float64,noclasses)
     for key in keys
-        leftclasscounts = zeros(noclasses)
-        for c = 1:noclasses
-            for i = 1:length(allvalues[c])
-                if allvalues[c][i] == key
-                    leftclasscounts[c] += trainingweights[c][i]
-                end
-            end
-            rightclasscounts[c] = origclasscounts[c]-leftclasscounts[c]
-        end
-        if sum(leftclasscounts) >= method.minleaf && sum(rightclasscounts) >= method.minleaf
-            splitvalue = -information_content(leftclasscounts,rightclasscounts)
-            if splitvalue > bestsplit[1]
-                bestsplit = (splitvalue,varno,variable,splittype,key)
-            end
-        end
+        bestsplit = evaluate_classification_common(key, ==, bestsplit, varno,variable,splittype, allvalues, noclasses, trainingweights, origclasscounts, method)
     end
     return bestsplit
 end
@@ -379,22 +348,7 @@ function evaluate_classification_numeric_variable_randval(bestsplit,varno,variab
     end
     if maxval > minval
         splitpoint = minval+rand()*(maxval-minval)
-        leftclasscounts = zeros(noclasses)
-        rightclasscounts = Array(Float64,noclasses)
-        for c = 1:noclasses
-            for i = 1:length(allvalues[c])
-                if allvalues[c][i] <= splitpoint
-                    leftclasscounts[c] += trainingweights[c][i]
-                end
-            end
-            rightclasscounts[c] = origclasscounts[c]-leftclasscounts[c]
-        end
-        if sum(leftclasscounts) >= method.minleaf && sum(rightclasscounts) >= method.minleaf
-            splitvalue = -information_content(leftclasscounts,rightclasscounts)
-            if splitvalue > bestsplit[1]
-                bestsplit = (splitvalue,varno,variable,splittype,splitpoint)
-            end
-        end
+        bestsplit = evaluate_classification_common(splitpoint, <=, bestsplit, varno,variable,splittype, allvalues, noclasses, trainingweights, origclasscounts, method)
     end
     return bestsplit
 end
@@ -415,11 +369,37 @@ function evaluate_classification_numeric_variable_allvals(bestsplit,varno,variab
     for s = 1:size(sortedkeys,1)-1
         leftclasscounts += numericvalues[sortedkeys[s]]
         rightclasscounts = origclasscounts-leftclasscounts
-        splitvalue = -information_content(leftclasscounts,rightclasscounts)
         if sum(leftclasscounts) >= method.minleaf && sum(rightclasscounts) >= method.minleaf
+            splitvalue = -information_content(leftclasscounts,rightclasscounts)
             if splitvalue > bestsplit[1]
                 bestsplit = (splitvalue,varno,variable,splittype,sortedkeys[s])
             end
+        end
+    end
+    return bestsplit
+end
+
+function calculateleftclasscount(values, trainingweights, key, op)
+    lcc = 0.0
+    for i = 1:length(values)
+        if op(values[i], key)
+            lcc += trainingweights[i]
+        end
+    end
+    return lcc
+end
+
+function evaluate_classification_common(key, op, bestsplit, varno,variable,splittype, values, noclasses, trainingweights, origclasscounts, method)
+    leftclasscounts = zeros(noclasses)
+    rightclasscounts = Array(Float64,noclasses)
+    for c = 1:noclasses
+        leftclasscounts[c] = calculateleftclasscount(values[c], trainingweights[c], key, op)
+        rightclasscounts[c] = origclasscounts[c]-leftclasscounts[c]
+    end
+    if sum(leftclasscounts) >= method.minleaf && sum(rightclasscounts) >= method.minleaf
+        splitvalue = -information_content(leftclasscounts,rightclasscounts)
+        if splitvalue > bestsplit[1]
+            bestsplit = (splitvalue,varno,variable,splittype,key)
         end
     end
     return bestsplit
@@ -466,27 +446,15 @@ function make_split(method::LearningMethod{Classifier},node,trainingdata,bestspl
         leftweights[c] = Float64[]
         rightrefs[c] = Int[]
         rightweights[c] = Float64[]
-        if splittype == :NUMERIC
-            for r = 1:length(node.trainingrefs[c])
-                ref = node.trainingrefs[c][r]
-                if values[r] <= splitpoint
-                    push!(leftrefs[c],ref)
-                    push!(leftweights[c],node.trainingweights[c][r])
-                else
-                    push!(rightrefs[c],ref)
-                    push!(rightweights[c],node.trainingweights[c][r])
-                end
-            end
-        else
-            for r = 1:length(node.trainingrefs[c])
-                ref = node.trainingrefs[c][r]
-                if values[r] == splitpoint
-                    push!(leftrefs[c],ref)
-                    push!(leftweights[c],node.trainingweights[c][r])
-                else
-                    push!(rightrefs[c],ref)
-                    push!(rightweights[c],node.trainingweights[c][r])
-                end
+        op = splittype == :NUMERIC ? (<=) : (==)
+        for r = 1:length(node.trainingrefs[c])
+            ref = node.trainingrefs[c][r]
+            if op(values[r], splitpoint)
+                push!(leftrefs[c],ref)
+                push!(leftweights[c],node.trainingweights[c][r])
+            else
+                push!(rightrefs[c],ref)
+                push!(rightweights[c],node.trainingweights[c][r])
             end
         end
         # leftrefIds = splittype == :NUMERIC ? map(r->values[r] <= splitpoint, 1:length(node.trainingrefs[c])) : map(r->values[r] == splitpoint, 1:length(node.trainingrefs[c]))
