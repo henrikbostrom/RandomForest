@@ -4,8 +4,8 @@ function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Array{Int,1},
     srand(randseed)
     trainingdata = globaldata
     trainingrefs = collect(1:size(trainingdata,1))
-    trainingweights = trainingdata[:WEIGHT]
-    regressionvalues = convert(Array, trainingdata[:REGRESSION])
+    trainingweights = trainingdata[:WEIGHT].data
+    regressionvalues = trainingdata[:REGRESSION].data
     oobpredictions = Array(Array{Float64,1},size(trainingdata,1))
     for i = 1:size(trainingdata,1)
         oobpredictions[i] = zeros(3)
@@ -54,7 +54,7 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Regressor
     newdata = Array(Array,length(variables))
     for v = 1:length(variables)
         if isempty(missingvalues[v])
-            newdata[v] = convert(Array,trainingdata[variables[v]])
+            newdata[v] = trainingdata[variables[v]].data
         end
     end
     return newdata
@@ -79,7 +79,7 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Regresso
                     values[i] =  newvalue # NOTE: The variable (and type) should be removed
                 end
             end
-            newtrainingdata[v] = convert(Array,values)
+            newtrainingdata[v] = values.data
         end
     end
 end
@@ -89,9 +89,6 @@ function replacements_for_missing_values!(method::LearningMethod{Regressor},newt
         if !isempty(missingvalues[v])
             variableType = typeof(testdata[variables[v]]).parameters[1]
             values = convert(Array{Nullable{variableType},1},testdata[variables[v]],Nullable{variableType}())
-            for i in missingvalues[v]
-                values[i] =  Nullable{variableType}()
-            end
             newtestdata[v] = values
         end
     end
@@ -110,7 +107,8 @@ function generate_tree(method::LearningMethod{Regressor},trainingrefs,trainingwe
         nonzeroweights = [newtrainingweights[i] > 0 for i=1:length(trainingweights)]
         newtrainingrefs = trainingrefs[nonzeroweights]
         newtrainingweights = newtrainingweights[nonzeroweights]
-        model, variableimportance, noleafs, noirregularleafs = build_tree(method,newtrainingrefs,newtrainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,varimp)
+        newregressionvalues = regressionvalues[nonzeroweights]
+        model, variableimportance, noleafs, noirregularleafs = build_tree(method,newtrainingrefs,newtrainingweights,newregressionvalues,timevalues,eventvalues,trainingdata,variables,types,varimp)
         zeroweights = ~nonzeroweights
         oobrefs = trainingrefs[zeroweights]
         for oobref in oobrefs
@@ -203,19 +201,18 @@ function default_prediction(trainingweights,regressionvalues,timevalues,eventval
     ## end
 end
 
-function leaf_node(node,method::LearningMethod{Regressor},regressionvalues,timevalues,eventvalues)
+function leaf_node(node,method::LearningMethod{Regressor})
     if method.maxdepth > 0 && method.maxdepth == node.depth
         return true
     else
-        curregressionvalues = regressionvalues[node.trainingrefs]
         noinstances = sum(node.trainingweights)
         if noinstances >= 2*method.minleaf
-            firstvalue = curregressionvalues[1]
+            firstvalue = node.regressionvalues[1]
             i = 2
             multiplevalues = false
-            novalues = length(curregressionvalues)
+            novalues = length(node.regressionvalues)
             while i <= novalues &&  ~multiplevalues
-                multiplevalues = firstvalue != curregressionvalues[i]
+                multiplevalues = firstvalue != node.regressionvalues[i]
                 i += 1
             end
             return ~multiplevalues
@@ -225,9 +222,9 @@ function leaf_node(node,method::LearningMethod{Regressor},regressionvalues,timev
     end
 end
 
-function make_leaf(node,method::LearningMethod{Regressor},parenttrainingweights, regressionvalues,timevalues,eventvalues)
+function make_leaf(node,method::LearningMethod{Regressor}, parenttrainingweights)
     sumweights = sum(node.trainingweights)
-    sumregressionvalues = sum(regressionvalues[node.trainingrefs])
+    sumregressionvalues = sum(node.regressionvalues)
     return [sumweights,sumregressionvalues]
     ## if sumweights > 0
     ##     prediction = sum(trainingweights .* regressionvalues)/sumweights
@@ -237,7 +234,7 @@ function make_leaf(node,method::LearningMethod{Regressor},parenttrainingweights,
     return prediction
 end
 
-function find_best_split(node,trainingdata,variables,types,method::LearningMethod{Regressor},regressionvalues,timevalues,eventvalues)
+function find_best_split(node,trainingdata,variables,types,method::LearningMethod{Regressor})
     if method.randsub == :all
         sampleselection = collect(1:length(variables))
     elseif method.randsub == :default
@@ -257,13 +254,12 @@ function find_best_split(node,trainingdata,variables,types,method::LearningMetho
             sampleselection = sample(1:length(variables),convert(Int,floor(method.randsub*length(variables))+1),replace=false)
         end
     end
-    curregressionvalues = regressionvalues[node.trainingrefs]
     if method.splitsample > 0
         splitsamplesize = method.splitsample
         if sum(node.trainingweights) <= splitsamplesize
             sampletrainingweights = node.trainingweights
             sampletrainingrefs = node.trainingrefs
-            sampleregressionvalues = curregressionvalues
+            sampleregressionvalues = node.regressionvalues
         else
             sampletrainingweights = Array(Float64,splitsamplesize)
             sampletrainingrefs = Array(Float64,splitsamplesize)
@@ -272,13 +268,13 @@ function find_best_split(node,trainingdata,variables,types,method::LearningMetho
                 sampletrainingweights[i] = 1.0
                 randindex = rand(1:length(node.trainingrefs))
                 sampletrainingrefs[i] = node.trainingrefs[randindex]
-                sampleregressionvalues[i] = curregressionvalues[randindex]
+                sampleregressionvalues[i] = node.regressionvalues[randindex]
             end
         end
     else
         sampletrainingrefs = node.trainingrefs
         sampletrainingweights = node.trainingweights
-        sampleregressionvalues = curregressionvalues
+        sampleregressionvalues = node.regressionvalues
     end
     bestsplit = (-Inf,0,:NA,:NA,0.0)
     origregressionsum = sum(sampleregressionvalues .* sampletrainingweights)
@@ -423,7 +419,7 @@ function evaluate_regression_numeric_variable_allvals(bestsplit,varno,variable,s
     return bestsplit
 end
 
-function make_split(method::LearningMethod{Regressor},node,trainingdata,bestsplit,regressionvalues,timevalues,eventvalues)
+function make_split(method::LearningMethod{Regressor},node,trainingdata,bestsplit)
   (varno, variable, splittype, splitpoint) = bestsplit
   leftrefs = Int[]
   leftweights = Float64[]
@@ -434,7 +430,6 @@ function make_split(method::LearningMethod{Regressor},node,trainingdata,bestspli
   values = trainingdata[varno][node.trainingrefs]
   sumleftweights = 0.0
   sumrightweights = 0.0
-  curregressionvalues = regressionvalues[node.trainingrefs]
   if splittype == :NUMERIC
       for r = 1:length(node.trainingrefs)
           ref = node.trainingrefs[r]
@@ -442,12 +437,12 @@ function make_split(method::LearningMethod{Regressor},node,trainingdata,bestspli
               push!(leftrefs,ref)
               push!(leftweights,node.trainingweights[r])
               sumleftweights += node.trainingweights[r]
-              push!(leftregressionvalues,curregressionvalues[r])
+              push!(leftregressionvalues,node.regressionvalues[r])
           else
               push!(rightrefs,ref)
               push!(rightweights,node.trainingweights[r])
               sumrightweights += node.trainingweights[r]
-              push!(rightregressionvalues,curregressionvalues[r])
+              push!(rightregressionvalues,node.regressionvalues[r])
           end
       end
   else
@@ -457,17 +452,17 @@ function make_split(method::LearningMethod{Regressor},node,trainingdata,bestspli
               push!(leftrefs,ref)
               push!(leftweights,node.trainingweights[r])
               sumleftweights += node.trainingweights[r]
-              push!(leftregressionvalues,curregressionvalues[r])
+              push!(leftregressionvalues,node.regressionvalues[r])
           else
               push!(rightrefs,ref)
               push!(rightweights,node.trainingweights[r])
               sumrightweights += node.trainingweights[r]
-              push!(rightregressionvalues,curregressionvalues[r])
+              push!(rightregressionvalues,node.regressionvalues[r])
           end
       end
   end
   leftweight = sumleftweights/(sumleftweights+sumrightweights)
-  return leftrefs,leftweights,rightrefs,rightweights,leftweight
+  return leftrefs,leftweights,leftregressionvalues,[],[],rightrefs,rightweights,rightregressionvalues,[],[],leftweight
 end
 
 function generate_model_internal(method::LearningMethod{Regressor}, oobs, classes)

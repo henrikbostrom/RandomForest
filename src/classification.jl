@@ -11,7 +11,7 @@ function generate_trees(Arguments::Tuple{LearningMethod{Classifier},DataArray,In
     for c = 1:noclasses
         trainingdata[c] = curdata[curdata[:CLASS] .== classes[c],:]
         trainingrefs[c] = collect(1:size(trainingdata[c],1))
-        trainingweights[c] = trainingdata[c][:WEIGHT]
+        trainingweights[c] = trainingdata[c][:WEIGHT].data
         oobpredictions[c] = Array(Array{Float64,1},size(trainingdata[c],1))
         for i = 1:size(trainingdata[c],1)
             oobpredictions[c][i] = emptyprediction
@@ -87,7 +87,7 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Classifie
         newdata[c] = Array(Array,length(variables))
         for v = 1:length(variables)
             if isempty(missingvalues[c][v])
-                newdata[c][v] = convert(Array,trainingdata[c][variables[v]])
+                newdata[c][v] = trainingdata[c][variables[v]].data
             end
         end
     end
@@ -117,7 +117,7 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Classifi
                         values[i] =  newvalue # NOTE: The variable (and type) should be removed
                     end
                 end
-                newtrainingdata[c][v] = convert(Array,values)
+                newtrainingdata[c][v] = values.data
             end
         end
     end
@@ -130,9 +130,6 @@ function replacements_for_missing_values!(method::LearningMethod{Classifier},new
             if !isempty(missingvalues[c][v])
                 variableType = typeof(testdata[c][variables[v]]).parameters[1]
                 values = convert(Array{Nullable{variableType},1},testdata[c][variables[v]],Nullable{variableType}())
-                for i in missingvalues[c][v]
-                    values[i] =  Nullable{variableType}()
-                end
                 newtestdata[c][v] = values
             end
         end
@@ -464,7 +461,7 @@ function make_split(method::LearningMethod{Classifier},node,trainingdata,bestspl
     noleftexamples = sum([sum(leftweights[i]) for i=1:noclasses])
     norightexamples = sum([sum(rightweights[i]) for i=1:noclasses])
     leftweight = noleftexamples/(noleftexamples+norightexamples)
-    return leftrefs,leftweights,rightrefs,rightweights,leftweight
+    return leftrefs,leftweights,[],[],[],rightrefs,rightweights,[],[],[],leftweight
 end
 # end
 
