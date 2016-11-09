@@ -82,14 +82,12 @@ end
 
 function transform_nonmissing_columns_to_arrays(method::LearningMethod{Classifier},variables,trainingdata,missingvalues)
     noclasses = length(trainingdata)
-    newdata = Array(Dict{Symbol,Array},noclasses)
+    newdata = Array(Array{Array,1},noclasses)
     for c = 1:noclasses
-        newdata[c] = Dict{Symbol,Array}()
+        newdata[c] = Array(Array,length(variables))
         for v = 1:length(variables)
             if isempty(missingvalues[c][v])
-                newdata[c][variables[v]] = convert(Array,trainingdata[c][variables[v]])
-            # else
-            #     newdata[c][v] = trainingdata[c][variables[v]]
+                newdata[c][v] = convert(Array,trainingdata[c][variables[v]])
             end
         end
     end
@@ -102,7 +100,6 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Classifi
         for v = 1:length(variables)
             if !isempty(missingvalues[c][v])
                 values = trainingdata[c][variables[v]]
-                variableType = typeof(values).parameters[1]
                 valuefrequencies = [length(nonmissingvalues[cl][v]) for cl = 1:noclasses]
                 if sum(valuefrequencies) > 0
                     for i in missingvalues[c][v]
@@ -120,7 +117,7 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Classifi
                         values[i] =  newvalue # NOTE: The variable (and type) should be removed
                     end
                 end
-                newtrainingdata[c][variables[v]] = convert(Array{variableType,1},values)
+                newtrainingdata[c][v] = convert(Array,values)
             end
         end
     end
@@ -136,7 +133,7 @@ function replacements_for_missing_values!(method::LearningMethod{Classifier},new
                 for i in missingvalues[c][v]
                     values[i] =  Nullable{variableType}()
                 end
-                newtestdata[c][variables[v]] = values
+                newtestdata[c][v] = values
             end
         end
     end
@@ -296,7 +293,7 @@ end
 function evaluate_variable_classification(bestsplit,varno,variable,splittype,trainingrefs,trainingweights,origclasscounts,noclasses,trainingdata,method)
     values = Array(Array,noclasses)
     for c = 1:noclasses
-        values[c] = trainingdata[c][variable][trainingrefs[c]]
+        values[c] = trainingdata[c][varno][trainingrefs[c]]
     end
     if splittype == :CATEGORIC
         if method.randval
@@ -441,7 +438,7 @@ function make_split(method::LearningMethod{Classifier},node,trainingdata,bestspl
     rightrefs = Array(Array,noclasses)
     rightweights = Array(Array,noclasses)
     for c = 1:noclasses
-        values = trainingdata[c][variable][node.trainingrefs[c]]
+        values = trainingdata[c][varno][node.trainingrefs[c]]
         leftrefs[c] = Int[]
         leftweights[c] = Float64[]
         rightrefs[c] = Int[]
