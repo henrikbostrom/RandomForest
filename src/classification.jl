@@ -242,16 +242,14 @@ end
 function find_best_split(node,trainingdata,variables,types,method::LearningMethod{Classifier})
     if method.randsub == :all
         sampleselection = collect(1:length(variables))
-    elseif method.randsub == :default
-        sampleselection = sample(1:length(variables),convert(Int,floor(log(2,length(variables)))+1),replace=false)
-    elseif method.randsub == :log2
-        sampleselection = sample(1:length(variables),convert(Int,floor(log(2,length(variables)))+1),replace=false)
+    elseif method.randsub == :default || method.randsub == :log2
+        sampleselection = sample(1:length(variables),floor(Int,log(2,length(variables))+1),replace=false)
     elseif method.randsub == :sqrt
-        sampleselection = sample(1:length(variables),convert(Int,floor(sqrt(length(variables)))),replace=false)
+        sampleselection = sample(1:length(variables),floor(Int,sqrt(length(variables))),replace=false)
     else
         if typeof(method.randsub) == Int
             if method.randsub > length(variables)
-                [1:length(variables)]
+                sampleselection = collect(1:length(variables))
             else
                 sampleselection = sample(1:length(variables),method.randsub,replace=false)
             end
@@ -270,7 +268,7 @@ function find_best_split(node,trainingdata,variables,types,method::LearningMetho
                 sampletrainingrefs[c] = node.trainingrefs[c]
             else
                 sampletrainingweights[c] = Array(Float64,splitsamplesize)
-                sampletrainingrefs[c] = Array(Float64,splitsamplesize)
+                sampletrainingrefs[c] = Array(Int,splitsamplesize)
                 for i = 1:splitsamplesize
                     sampletrainingweights[c][i] = 1.0
                     sampletrainingrefs[c][i] = node.trainingrefs[c][rand(1:end)]
@@ -283,10 +281,7 @@ function find_best_split(node,trainingdata,variables,types,method::LearningMetho
     end
     bestsplit = (-Inf,0,:NA,:NA,0.0)
     noclasses = size(node.trainingrefs,1)
-    origclasscounts = Array(Float64,noclasses)
-    for c = 1:noclasses
-        origclasscounts[c] = sum(sampletrainingweights[c])
-    end
+    origclasscounts = map(sum,sampletrainingweights)
     for v = 1:length(sampleselection)
         bestsplit = evaluate_variable_classification(bestsplit,sampleselection[v],variables[sampleselection[v]],types[sampleselection[v]],sampletrainingrefs,sampletrainingweights,origclasscounts,noclasses,trainingdata,method)
     end
