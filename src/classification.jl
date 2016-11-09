@@ -218,10 +218,7 @@ end
 
 function make_leaf(node,method::LearningMethod{Classifier}, parenttrainingweights)
     noclasses = size(node.trainingweights,1)
-    classcounts = zeros(noclasses)
-    for i=1:noclasses
-        classcounts[i] = sum(node.trainingweights[i])
-    end
+    classcounts = [sum(node.trainingweights[i]) for i = 1:noclasses]
     noinstances = sum(classcounts)
     if noinstances > 0
         if method.laplace
