@@ -329,12 +329,8 @@ end
 function get_types(dict,trainintarr,trainfloarr,trainstrarr)
   types = Symbol[]
   for key in keys(dict)
-    if dict[key][1] == :trainfloarr
-      push!(types, :Float64)
-    elseif dict[key][1] == :trainintarr
-      push!(types, :Int)
-    else
-      push!(types, :String)
+    if check_variable(key)
+      (dict[key][1] == :trainfloarr || dict[key][1] == :trainintarr) ? push!(types, :NUMERIC) : push!(types, :CATEGORIC)
     end
   end
   return types

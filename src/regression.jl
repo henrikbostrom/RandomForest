@@ -24,9 +24,6 @@ function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Array{Int,1},
     variables = get_variables(vardict)
     missingvalues, nonmissingvalues = find_missing_values(method,variables,trainintarr,trainfloarr,trainstrarr,vardict)
     newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainintarr,trainfloarr,trainstrarr,missingvalues,vardict)
-    f = open("dump_shared.csv","w")
-    println(f, newtrainingdata)
-    close(f)
     model = Array(TreeNode,notrees)
     variableimportance = zeros(size(variables,1))
     for treeno = 1:notrees
