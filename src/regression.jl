@@ -9,8 +9,8 @@ function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Array{Int,1},
     trainstrarr = strarr
 
     trainingrefs = collect(1:s)
-    trainingweights = get_array(:WEIGHT,trainintarr,trainfloarr,trainstrarr)
-    regressionvalues = get_array(:REGRESSION,trainintarr,trainfloarr,trainstrarr)
+    trainingweights = convert(Array, get_array(:WEIGHT,trainintarr,trainfloarr,trainstrarr))
+    regressionvalues = convert(Array, get_array(:REGRESSION,trainintarr,trainfloarr,trainstrarr))
     oobpredictions = Array(Array{Float64,1},s)
     for i = 1:s
         oobpredictions[i] = zeros(3)
@@ -47,7 +47,7 @@ function find_missing_values(method::LearningMethod{Regressor},variables,trainin
             nonmissingvalues[v] = typeof(values[1])[]
             for val = 1:length(values)
                 value = values[val]
-                if isna(value)
+                if isnull(value)
                     push!(missingvalues[v],val)
                 else
                     push!(nonmissingvalues[v],value)

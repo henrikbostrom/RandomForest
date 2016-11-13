@@ -45,6 +45,7 @@ __precompile__()
 module RandomForest
 
 using DataFrames
+using NullableArrays
 
 export
     experiment,
@@ -378,9 +379,14 @@ function divide_data()
   global vardict = Dict{Symbol, Tuple}()
   variables = names(globaldata)
   types = eltypes(globaldata)
-  global intarr = Array{Int,2}(size(globaldata,1),count(i-> i<:Int, types))
-  global floarr = Array{Float64,2}(size(globaldata,1),count(i-> i<:Float64, types))
-  global strarr = Array{String,2}(size(globaldata,1),count(i-> i<:String, types))
+  
+  # global intarr = Array{Int,2}(size(globaldata,1),count(i-> i<:Int, types))
+  # global floarr = Array{Float64,2}(size(globaldata,1),count(i-> i<:Float64,types))
+  # global strarr = Array{String,2}(size(globaldata,1),count(i-> i<:String, types))
+
+  global intarr = NullableArray(Int,size(globaldata,1),count(i-> i<:Int, types))
+  global floarr = NullableArray(Float64,size(globaldata,1),count(i-> i<:Float64, types))
+  global strarr = NullableArray(String,size(globaldata,1),count(i-> i<:String, types))
 
   curIndInt = 1
   curIndFlo = 1

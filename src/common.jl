@@ -323,7 +323,7 @@ function get_array(sym,trainintarr,trainfloarr,trainstrarr)
   else
     return trainstrarr[:, vardict[sym][2]]
   end
-  return eval(vardict[sym][1])[:, vardict[sym][2]]
+  # return eval(vardict[sym][1])[:, vardict[sym][2]]
 end
 
 function get_types(dict,trainintarr,trainfloarr,trainstrarr)
