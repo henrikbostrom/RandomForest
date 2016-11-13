@@ -356,6 +356,7 @@ end
 function load_data(source; separator = ',')
     if typeof(source) == String
         global globaldata = read_data(source, separator=separator) # Made global to allow access from workers
+        divide_data()
         initiate_workers()
         # println("Data loaded")
         println("Data: $(source)")
@@ -370,6 +371,35 @@ function load_data(source; separator = ',')
     else
         println("Data can only be loaded from text files or DataFrames")
     end
+end
+
+
+function divide_data()
+  global vardict = Dict{Symbol, Tuple}()
+  variables = names(globaldata)
+  types = eltypes(globaldata)
+  global intarr = Array{Int,2}(size(globaldata,1),count(i-> i<:Int, types))
+  global floarr = Array{Float64,2}(size(globaldata,1),count(i-> i<:Float64, types))
+  global strarr = Array{String,2}(size(globaldata,1),count(i-> i<:String, types))
+
+  curIndInt = 1
+  curIndFlo = 1
+  curIndStr = 1
+  for i in 1:length(variables)
+    if types[i] == Int
+      vardict[variables[i]] = (:trainintarr, curIndInt)
+      intarr[:, curIndInt] = globaldata[variables[i]];
+      curIndInt += 1
+    elseif types[i] == Float64
+      vardict[variables[i]] = (:trainfloarr, curIndFlo)
+      floarr[:, curIndFlo] = globaldata[variables[i]];
+      curIndFlo += 1
+    else
+      vardict[variables[i]] = (:trainstrarr, curIndStr)
+      strarr[:, curIndStr] = globaldata[variables[i]];
+      curIndStr += 1
+    end
+  end
 end
 
 end

@@ -305,8 +305,47 @@ function initiate_workers()
     end
 end
 
+# function load_global_dataset()
+#     global globaldata = @fetchfrom(1,globaldata)
+# end
 function load_global_dataset()
-    global globaldata = @fetchfrom(1,globaldata)
+  global vardict = @fetchfrom(1,vardict)#, @fetchfrom(1,Intarr)
+  global intarr = @fetchfrom(1,intarr)
+  global floarr = @fetchfrom(1,floarr)
+  global strarr = @fetchfrom(1,strarr)
+end
+
+function get_array(sym,trainintarr,trainfloarr,trainstrarr)
+  if vardict[sym][1] == :trainintarr
+    return trainintarr[:, vardict[sym][2]]
+  elseif vardict[sym][1] == :trainfloarr
+    return trainfloarr[:, vardict[sym][2]]
+  else
+    return trainstrarr[:, vardict[sym][2]]
+  end
+  return eval(vardict[sym][1])[:, vardict[sym][2]]
+end
+
+function get_types(dict,trainintarr,trainfloarr,trainstrarr)
+  types = Symbol[]
+  for key in keys(dict)
+    if dict[key][1] == :trainfloarr
+      push!(types, :Float64)
+    elseif dict[key][1] == :trainintarr
+      push!(types, :Int)
+    else
+      push!(types, :String)
+    end
+  end
+  return types
+end
+
+function get_variables(dict)
+  vars = Symbol[]
+  for key in keys(dict)
+    check_variable(key) ? push!(vars, key) : ""
+  end
+  return vars
 end
 
 function update_workers()
