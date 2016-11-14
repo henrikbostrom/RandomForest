@@ -4,9 +4,9 @@ function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Array{Int,1},
     srand(randseed)
     # trainingdata = globaldata
     trainvardict = vardict
-    trainintarr = intarr
-    trainfloarr = floarr
-    trainstrarr = strarr
+    trainintarr = transform(intarr)
+    trainfloarr = transform(floarr)
+    trainstrarr = size(strarr,2) > 0 ? remap(vardict, transform(strarr)) : strarr
 
     trainingrefs = collect(1:s)
     trainingweights = convert(Array, get_array(:WEIGHT,trainintarr,trainfloarr,trainstrarr))

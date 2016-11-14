@@ -354,6 +354,18 @@ function update_workers()
     end
 end
 
+transform(arr) = map(i -> get(i), arr)
+
+function remap(dict, strarr)
+  for key in keys(dict)
+    if dict[key][1] == :trainstrarr
+      indeces = strarr[:, dict[key][1]]
+      strarr[:, dict[key][1]] = dict[key][3][indeces]
+    end
+  end
+  return strarr
+end
+
 function update_global_dataset()
     global globaltests = @fetchfrom(1,globaltests)
     global globaldata = hcat(globaltests,globaldata)

@@ -379,14 +379,18 @@ function divide_data()
   global vardict = Dict{Symbol, Tuple}()
   variables = names(globaldata)
   types = eltypes(globaldata)
-  
+
   # global intarr = Array{Int,2}(size(globaldata,1),count(i-> i<:Int, types))
   # global floarr = Array{Float64,2}(size(globaldata,1),count(i-> i<:Float64,types))
   # global strarr = Array{String,2}(size(globaldata,1),count(i-> i<:String, types))
 
-  global intarr = NullableArray(Int,size(globaldata,1),count(i-> i<:Int, types))
-  global floarr = NullableArray(Float64,size(globaldata,1),count(i-> i<:Float64, types))
-  global strarr = NullableArray(String,size(globaldata,1),count(i-> i<:String, types))
+  # global intarr = NullableArray(Int,size(globaldata,1),count(i-> i<:Int, types))
+  # global floarr = NullableArray(Float64,size(globaldata,1),count(i-> i<:Float64, types))
+  # global strarr = NullableArray(String,size(globaldata,1),count(i-> i<:String, types))
+
+  global intarr = SharedArray(Nullable{Int},size(globaldata,1),count(i-> i<:Int, types))
+  global floarr = SharedArray(Nullable{Float64},size(globaldata,1),count(i-> i<:Float64, types))
+  global strarr = SharedArray(Nullable{Int},size(globaldata,1),count(i-> i<:String, types))
 
   curIndInt = 1
   curIndFlo = 1
@@ -401,8 +405,13 @@ function divide_data()
       floarr[:, curIndFlo] = globaldata[variables[i]];
       curIndFlo += 1
     else
-      vardict[variables[i]] = (:trainstrarr, curIndStr)
-      strarr[:, curIndStr] = globaldata[variables[i]];
+      # vardict[variables[i]] = (:trainstrarr, curIndStr)
+      # strarr[:, curIndStr] = globaldata[variables[i]];
+      # curIndStr += 1
+      uniqueValues = unique(globaldata[variables[i]])
+      vardict[variables[i]] = (:trainstrarr, curIndInt, uniqueValues)
+      newvar = indexin(globaldata[variables[i]], uniqueValues)
+      strarr[:, curIndInt] = globaldata[variables[i]];
       curIndStr += 1
     end
   end
