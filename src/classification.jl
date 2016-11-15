@@ -2,47 +2,65 @@ function generate_trees(Arguments::Tuple{LearningMethod{Classifier},DataArray,In
     method,classes,notrees,randseed = Arguments
     s = size(curdata,1)
     srand(randseed)
+
     noclasses = length(classes)
-    trainingdata = Array(DataFrame, noclasses)
+    # trainingdata = Array(DataFrame, noclasses)
+    trainvardict = vardict
+    trainintarr = Array(Array{Nullable{Int64},2}, noclasses)
+    trainfloarr = Array(typeof(floarr), noclasses)
+    tstrarr = (size(strarr,2) > 0) ? remap(vardict, strarr) : strarr
+    trainstrarr = Array(typeof(strarr), noclasses)
     trainingrefs = Array(Array{Int,1},noclasses)
     trainingweights = Array(Array{Float64,1},noclasses)
     oobpredictions = Array(Array{Array{Float64,1},1},noclasses)
     emptyprediction = [0; zeros(noclasses)]
-    for c = 1:noclasses
-        trainingdata[c] = curdata[curdata[:CLASS] .== classes[c],:]
-        trainingrefs[c] = collect(1:size(trainingdata[c],1))
-        trainingweights[c] = trainingdata[c][:WEIGHT]
-        oobpredictions[c] = Array(Array{Float64,1},size(trainingdata[c],1))
-        for i = 1:size(trainingdata[c],1)
-            oobpredictions[c][i] = emptyprediction
-        end
+
+    classArray = transform(get_array(:CLASS,intarr,floarr,strarr))
+    uniqueClasses = unique(classArray)
+
+    for (i, c) in enumerate(uniqueClasses)
+      indeces = find(x -> (x == c), classArray)
+      trainintarr[i] = intarr[indeces, :]
+      trainfloarr[i] = floarr[indeces, :]
+      trainstrarr[i] = strarr[indeces, :]
+
+      # trainingdata[c] = curdata[curdata[:] .== classes[c],:]
+      # trainingdata[c][:WEIGHT]
+
+      trainingrefs[i] = collect(1:length(indeces))
+      trainingweights[i] = transform(get_array(:WEIGHT,intarr,floarr,strarr))[indeces]
+      oobpredictions[i] = Array(Array{Float64,1},length(indeces))
+      for j = 1:length(indeces)
+          oobpredictions[i][j] = emptyprediction
+      end
     end
     regressionvalues = []
     timevalues = []
     eventvalues = []
-    
+
     randomclassoobs = Array(Any,size(randomoobs,1))
-    for i = 1:size(randomclassoobs,1)
-        oobref = randomoobs[i]
+    for j = 1:size(randomclassoobs,1)
+        oobref = randomoobs[j]
         c = 1
-        while oobref > size(trainingrefs[c],1)
-            oobref -= size(trainingrefs[c],1)
+        while oobref > size(trainingrefs[i],1)
+            oobref -= size(trainingrefs[i],1)
             c += 1
         end
-        randomclassoobs[i] = (c,oobref)
+        randomclassoobs[j] = (i,oobref)
     end
     # starting from here till the end of the function is duplicated between here and the Regressor and Survival dispatchers
     # need to be cleaned
-    variables, types = get_variables_and_types(curdata)
     modelsize = 0
     noirregularleafs = 0
-    missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
-    newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
+    types = get_types(vardict,intarr,floarr,strarr)
+    variables = get_variables(vardict)
+    missingvalues, nonmissingvalues = find_missing_values(method,variables,trainintarr,trainfloarr,trainstrarr,vardict)
+    newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainintarr,trainfloarr,trainstrarr,missingvalues,vardict)
     model = Array(TreeNode,notrees)
     oob = Array(Array,notrees)
     variableimportance = zeros(size(variables,1))
     for treeno = 1:notrees
-        sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
+        sample_replacements_for_missing_values!(method,newtrainingdata,vardict,variables,types,missingvalues,nonmissingvalues,trainintarr,trainfloarr,trainstrarr)
         model[treeno], treevariableimportance, noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions;varimp = varimparg)
         modelsize += noleafs
         noirregularleafs += treenoirregularleafs
@@ -53,8 +71,8 @@ function generate_trees(Arguments::Tuple{LearningMethod{Classifier},DataArray,In
     return (model,oobpredictions,variableimportance, modelsize, noirregularleafs, randomclassoobs, oob)
 end
 
-function find_missing_values(method::LearningMethod{Classifier},variables,trainingdata)
-    noclasses = length(trainingdata)
+function find_missing_values(method::LearningMethod{Classifier},variables,trainintarr,trainfloarr,trainstrarr,vardict)
+    noclasses = length(trainintarr)
     missingvalues = Array(Array{Array{Int,1},1},noclasses)
     nonmissingvalues = Array(Array{Array,1},noclasses)
     for c = 1:noclasses
@@ -63,12 +81,13 @@ function find_missing_values(method::LearningMethod{Classifier},variables,traini
         for v = 1:length(variables)
             variable = variables[v]
             missingvalues[c][v] = Int[]
-            nonmissingvalues[c][v] = typeof(trainingdata[c][variable]).parameters[1][]
+            # nonmissingvalues[c][v] = typeof(trainingdata[c][variable]).parameters[1][]
             if check_variable(variable)
-                values = trainingdata[c][variable]
+                values = get_array(variable,trainintarr[c],trainfloarr[c],trainstrarr[c])
+                nonmissingvalues[c][v] = typeof(values[1])[]
                 for val = 1:length(values)
                     value = values[val]
-                    if isna(value)
+                    if isnull(value)
                         push!(missingvalues[c][v],val)
                     else
                         push!(nonmissingvalues[c][v],value)
@@ -80,15 +99,15 @@ function find_missing_values(method::LearningMethod{Classifier},variables,traini
     return (missingvalues,nonmissingvalues)
 end
 
-function transform_nonmissing_columns_to_arrays(method::LearningMethod{Classifier},variables,trainingdata,missingvalues)
-    noclasses = length(trainingdata)
+function transform_nonmissing_columns_to_arrays(method::LearningMethod{Classifier},variables,trainintarr,trainfloarr,trainstrarr,missingvalues,vardict)
+    noclasses = length(trainintarr)
     newdata = Array(Array{Array,1},noclasses)
     for c = 1:noclasses
         newdata[c] = Array(Array,length(variables))
         for v = 1:length(variables)
             if isempty(missingvalues[c][v])
-                variableType = typeof(trainingdata[c][variables[v]]).parameters[1]
-                newdata[c][v] = convert(Array{variableType,1},trainingdata[c][variables[v]])
+                # variableType = typeof(trainingdata[c][variables[v]]).parameters[1]
+                newdata[c][v] = transform(get_array(variables[v],trainintarr[c],trainfloarr[c],trainstrarr[c]))
             # else
             #     newdata[c][v] = trainingdata[c][variables[v]]
             end
@@ -97,12 +116,12 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Classifie
     return newdata
 end
 
-function sample_replacements_for_missing_values!(method::LearningMethod{Classifier},newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
+function sample_replacements_for_missing_values!(method::LearningMethod{Classifier},newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues,trainintarr,trainfloarr,trainstrarr)
     noclasses = size(newtrainingdata,1)
     for c = 1:noclasses
         for v = 1:length(variables)
             if !isempty(missingvalues[c][v])
-                values = trainingdata[c][variables[v]]
+                values = get_array(variables[v],trainintarr[c],trainfloarr[c],trainstrarr[c])
                 variableType = typeof(values).parameters[1]
                 valuefrequencies = [length(nonmissingvalues[cl][v]) for cl = 1:noclasses]
                 if sum(valuefrequencies) > 0
@@ -121,7 +140,7 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Classifi
                         values[i] =  newvalue # NOTE: The variable (and type) should be removed
                     end
                 end
-                newtrainingdata[c][v] = convert(Array{variableType,1},values)
+                newtrainingdata[c][v] = transform(values)
             end
         end
     end

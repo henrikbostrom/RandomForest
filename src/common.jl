@@ -357,13 +357,14 @@ end
 transform(arr) = map(i -> get(i), arr)
 
 function remap(dict, strarr)
+  newstrarr = Array(Nullable{String}, size(strarr))
   for key in keys(dict)
     if dict[key][1] == :trainstrarr
-      indeces = strarr[:, dict[key][1]]
-      strarr[:, dict[key][1]] = dict[key][3][indeces]
+      indeces = transform(strarr[:, dict[key][2]])
+      newstrarr[:, dict[key][2]] = dict[key][3][indeces]
     end
   end
-  return strarr
+  return newstrarr
 end
 
 function update_global_dataset()

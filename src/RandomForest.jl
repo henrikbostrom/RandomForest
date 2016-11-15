@@ -408,10 +408,11 @@ function divide_data()
       # vardict[variables[i]] = (:trainstrarr, curIndStr)
       # strarr[:, curIndStr] = globaldata[variables[i]];
       # curIndStr += 1
-      uniqueValues = unique(globaldata[variables[i]])
-      vardict[variables[i]] = (:trainstrarr, curIndInt, uniqueValues)
-      newvar = indexin(globaldata[variables[i]], uniqueValues)
-      strarr[:, curIndInt] = convert(Array{Nullable{Int},1}, globaldata[variables[i]], Nullable{Int}());;
+      variable = convert(Array{Nullable{String},1}, globaldata[variables[i]], Nullable{Int}())
+      uniqueValues = unique(variable)
+      vardict[variables[i]] = (:trainstrarr, curIndStr, uniqueValues)
+      newvar = indexin(variable, uniqueValues)
+      strarr[:, curIndStr] = newvar #convert(Array{Nullable{Int},1}, newvar, Nullable{Int}());;
       curIndStr += 1
     end
   end
