@@ -115,8 +115,8 @@ function make_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,prediction,
         # varno, splittype, splitpoint, splitweight = node[1]
         examplevalue::Nullable{S} = testdata[node.varno][exampleno]
         if isnull(examplevalue)
-            prediction+=make_prediction(node.leftnode,testdata,exampleno,prediction,weight*node.leftweight)
-            prediction+=make_prediction(node.rightnode,testdata,exampleno,prediction,weight*(1-node.leftweight))
+            prediction = make_prediction(node.leftnode,testdata,exampleno,prediction,weight*node.leftweight)
+            prediction = make_prediction(node.rightnode,testdata,exampleno,prediction,weight*(1-node.leftweight))
             return prediction
         else
             if node.splittype == :NUMERIC

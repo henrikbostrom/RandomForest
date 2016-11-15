@@ -429,7 +429,11 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Classifier},Sym
     variables, types = get_variables_and_types(globaldata)
     if experimentype == :test
         model,oobpredictions,variableimportance, modelsize, noirregularleafs, randomclassoobs, oob = generate_trees((method,classes,notrees,randseed);curdata=globaldata[globaldata[:TEST] .== false,:], randomoobs=randomoobs, varimparg = false)
-        testData = groupby(globaldata[globaldata[:TEST] .== true,:], :CLASS)
+        globaltestdata = globaldata[globaldata[:TEST] .== true,:]
+        testdata = Array(DataFrame,noclasses)
+        for c = 1:noclasses
+            testdata[c] = globaltestdata[globaltestdata[:CLASS] .== classes[c],:]
+        end
         testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
         newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
         replacements_for_missing_values!(method,newtestdata,testdata,variables,types,testmissingvalues,testnonmissingvalues)
@@ -445,16 +449,16 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Classifier},Sym
         predictions = Array(Array{Float64,1},size(globaldata,1))
         oobpredictions = Array(Array,nofolds)
         modelsizes = Array(Int,nofolds)
-        classdata = groupby(globaldata, :CLASS)
         noirregularleafs = Array(Int,nofolds)
         testexamplecounter = 0
         foldno = 0
         for fold in folds
             foldno += 1
             trainingdata = globaldata[globaldata[:FOLD] .!= fold,:]
+            curFoldTestData = globaldata[globaldata[:FOLD] .== fold,:]
             testdata = Array(Any,noclasses)
             for c = 1:noclasses
-                testdata[c] = classdata[c][classdata[c][:FOLD] .== fold,:]
+                testdata[c] = curFoldTestData[curFoldTestData[:CLASS] .== classes[c],:]
             end
             model,oobpredictions[foldno],variableimportance, modelsizes[foldno], noirregularleafs[foldno], randomclassoobs, oob = generate_trees((method,classes,notrees,randseed);curdata=trainingdata, randomoobs=size(randomoobs,1) > 0 ? randomoobs[foldno] : [], varimparg = false)
             
