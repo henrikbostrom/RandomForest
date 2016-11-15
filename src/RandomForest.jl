@@ -398,11 +398,11 @@ function divide_data()
   for i in 1:length(variables)
     if types[i] == Int
       vardict[variables[i]] = (:trainintarr, curIndInt)
-      intarr[:, curIndInt] = globaldata[variables[i]];
+      intarr[:, curIndInt] = convert(Array{Nullable{Int},1}, globaldata[variables[i]], Nullable{Int}());
       curIndInt += 1
     elseif types[i] == Float64
       vardict[variables[i]] = (:trainfloarr, curIndFlo)
-      floarr[:, curIndFlo] = globaldata[variables[i]];
+      floarr[:, curIndFlo] = convert(Array{Nullable{Float64},1}, globaldata[variables[i]], Nullable{Int}());
       curIndFlo += 1
     else
       # vardict[variables[i]] = (:trainstrarr, curIndStr)
@@ -411,7 +411,7 @@ function divide_data()
       uniqueValues = unique(globaldata[variables[i]])
       vardict[variables[i]] = (:trainstrarr, curIndInt, uniqueValues)
       newvar = indexin(globaldata[variables[i]], uniqueValues)
-      strarr[:, curIndInt] = globaldata[variables[i]];
+      strarr[:, curIndInt] = convert(Array{Nullable{Int},1}, globaldata[variables[i]], Nullable{Int}());;
       curIndStr += 1
     end
   end

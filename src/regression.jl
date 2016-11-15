@@ -27,7 +27,8 @@ function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Array{Int,1},
     model = Array(TreeNode,notrees)
     variableimportance = zeros(size(variables,1))
     for treeno = 1:notrees
-        sample_replacements_for_missing_values!(method,newtrainingdata,vardict,variables,types,missingvalues,nonmissingvalues)
+        nonmissingvalues = Array(Array,length(variables))
+        sample_replacements_for_missing_values!(method,newtrainingdata,vardict,variables,types,missingvalues,nonmissingvalues,trainintarr,trainfloarr,trainstrarr)
         model[treeno], treevariableimportance, noleafs, noirregularleafs = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions,varimp = true)
         modelsize += noleafs
         variableimportance += treevariableimportance
@@ -68,10 +69,10 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Regressor
     return newdata
 end
 
-function sample_replacements_for_missing_values!(method::LearningMethod{Regressor},newtrainingdata,vardict,variables,types,missingvalues,nonmissingvalues)
+function sample_replacements_for_missing_values!(method::LearningMethod{Regressor},newtrainingdata,vardict,variables,types,missingvalues,nonmissingvalues,trainintarr,trainfloarr,trainstrarr)
     for v = 1:length(variables)
         if !isempty(missingvalues[v])
-            values = get_array(variables[v])
+            values = get_array(variables[v],trainintarr,trainfloarr,trainstrarr)
             if length(nonmissingvalues[v]) > 0
                 for i in missingvalues[v]
                     newvalue = nonmissingvalues[v][rand(1:length(nonmissingvalues[v]))]

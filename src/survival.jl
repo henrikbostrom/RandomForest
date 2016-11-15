@@ -1,26 +1,34 @@
 function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},Int,Int})
     method,classes,notrees,randseed = Arguments
-    s = size(globaldata,1)
+    s = size(intarr, 1)
     srand(randseed)
-    trainingdata = globaldata
-    trainingrefs = collect(1:size(trainingdata,1))
-    trainingweights = trainingdata[:WEIGHT].data
+
+    # trainingdata = globaldata
+    trainvardict = vardict
+    trainintarr = intarr
+    trainfloarr = floarr
+    trainstrarr = size(strarr,2) > 0 ? remap(vardict, strarr) : strarr
+
+    trainingrefs = collect(1:s)
+    trainingweights = transform(get_array(:WEIGHT,trainintarr,trainfloarr,trainstrarr))
     regressionvalues = []
-    timevalues = trainingdata[:TIME].data
-    eventvalues = trainingdata[:EVENT].data
-    oobpredictions = Array(Array{Float64},size(trainingdata,1))
-    for i = 1:size(trainingdata,1)
+    timevalues = transform(get_array(:TIME,trainintarr,trainfloarr,trainstrarr))
+    eventvalues = transform(get_array(:EVENT,trainintarr,trainfloarr,trainstrarr))
+    oobpredictions = Array(Array{Float64},s)
+    for i = 1:s
         oobpredictions[i] = zeros(3)
     end
     # starting from here till the end of the function is duplicated between here and the Classifier and Regressor dispatchers
-    variables, types = get_variables_and_types(globaldata)
+    # variables, types = get_variables_and_types(globaldata)
     modelsize = 0
-    missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
-    newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
+    types = get_types(vardict,trainintarr,trainfloarr,trainstrarr)
+    variables = get_variables(vardict)
+    missingvalues, nonmissingvalues = find_missing_values(method,variables,trainintarr,trainfloarr,trainstrarr,vardict)
+    newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainintarr,trainfloarr,trainstrarr,missingvalues,vardict)
     model = Array(TreeNode,notrees)
     variableimportance = zeros(size(variables,1))
     for treeno = 1:notrees
-        sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
+        sample_replacements_for_missing_values!(method,newtrainingdata,vardict,variables,types,missingvalues,nonmissingvalues,trainintarr,trainfloarr,trainstrarr)
         model[treeno], treevariableimportance, noleafs, noirregularleafs = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions,varimp = true)
         modelsize += noleafs
         variableimportance += treevariableimportance
@@ -28,20 +36,20 @@ function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},I
    return (model,oobpredictions,variableimportance)
 end
 
-function find_missing_values(method::LearningMethod{Survival},variables,trainingdata)
+function find_missing_values(method::LearningMethod{Survival},variables,trainintarr,trainfloarr,trainstrarr,vardict)
     #NOTE: could be further improved with function barrier in val loop. Also identical to the regression version
     missingvalues = Array(Array{Int,1},length(variables))
     nonmissingvalues = Array(Array,length(variables))
     for v = 1:length(variables)
         variable = variables[v]
         missingvalues[v] = Int[]
-        nonmissingvalues[v] = typeof(trainingdata[variable]).parameters[1][]
-        variable = variables[v]
+        # nonmissingvalues[v] = typeof(trainingdata[variable]).parameters[1][]
         if check_variable(variable)
-            values = trainingdata[variable]
+            values = get_array(variable,trainintarr,trainfloarr,trainstrarr)
+            nonmissingvalues[v] = typeof(values[1])[]
             for val = 1:length(values)
                 value = values[val]
-                if isna(value)
+                if isnull(value)
                     push!(missingvalues[v],val)
                 else
                     push!(nonmissingvalues[v],value)
@@ -52,22 +60,21 @@ function find_missing_values(method::LearningMethod{Survival},variables,training
     return (missingvalues,nonmissingvalues)
 end
 
-function transform_nonmissing_columns_to_arrays(method::LearningMethod{Survival},variables,trainingdata,missingvalues)
-    #NOTE: Identical to the regression version
+function transform_nonmissing_columns_to_arrays(method::LearningMethod{Survival},variables,trainintarr,trainfloarr,trainstrarr,missingvalues,vardict)
     newdata = Array(Array,length(variables))
     for v = 1:length(variables)
         if isempty(missingvalues[v])
-            newdata[v] = convert(Array,trainingdata[variables[v]])
+            newdata[v] =  transform(get_array(variables[v],trainintarr,trainfloarr,trainstrarr))
         end
     end
     return newdata
 end
 
-function sample_replacements_for_missing_values!(method::LearningMethod{Survival},newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
+function sample_replacements_for_missing_values!(method::LearningMethod{Survival},newtrainingdata,vardict,variables,types,missingvalues,nonmissingvalues,trainintarr,trainfloarr,trainstrarr)
     #NOTE: Identical to the regression version
     for v = 1:length(variables)
         if !isempty(missingvalues[v])
-            values = trainingdata[variables[v]]
+            values = get_array(variables[v],trainintarr,trainfloarr,trainstrarr)
             if length(nonmissingvalues[v]) > 0
                 for i in missingvalues[v]
                     newvalue = nonmissingvalues[v][rand(1:length(nonmissingvalues[v]))]
@@ -83,7 +90,10 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Survival
                     values[i] =  newvalue # NOTE: The variable (and type) should be removed
                 end
             end
-            newtrainingdata[v] = convert(Array,values)
+            #  variableType = typeof(values).parameters[1]
+            # varType = typeof(values).parameters[1].parameters[1]
+            # newtrainingdata[v] = convert(Array{Nullable{Int},1},values,Nullable{typeof(get(values[1]))}())
+            newtrainingdata[v] = transform(values)
         end
     end
 end
