@@ -12,7 +12,9 @@ function build_tree(method,alltrainingrefs,alltrainingweights,allregressionvalue
     variableimportance = zeros(length(variables))
     tree = get_tree_node(treeData , variableimportance, leafnodesstats, trainingdata,variables,types,method,[],varimp,PredictType)
     if varimp
-        variableimportance = variableimportance/sum(variableimportance)
+        if (sum(variableimportance) != 0)
+            variableimportance = variableimportance/sum(variableimportance)
+        end
     else
         variableimportance = :NONE
     end
