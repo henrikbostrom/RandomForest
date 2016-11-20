@@ -507,43 +507,25 @@ function make_split(method::LearningMethod{Survival},node,trainingdata,bestsplit
     values = trainingdata[varno][node.trainingrefs]
     sumleftweights = 0.0
     sumrightweights = 0.0
-    if splittype == :NUMERIC
-      for r = 1:length(node.trainingrefs)
-          ref = node.trainingrefs[r]
-          if values[r] <= splitpoint
-              push!(leftrefs,ref)
-              push!(leftweights,node.trainingweights[r])
-              sumleftweights += node.trainingweights[r]
-              push!(lefttimevalues,node.timevalues[r])
-              push!(lefteventvalues,node.eventvalues[r])
-          else
-              push!(rightrefs,ref)
-              push!(rightweights,node.trainingweights[r])
-              sumrightweights += node.trainingweights[r]
-              push!(righttimevalues,node.timevalues[r])
-              push!(righteventvalues,node.eventvalues[r])
-          end
-      end
-  else
-      for r = 1:length(node.trainingrefs)
-          ref = node.trainingrefs[r]
-          if values[r] == splitpoint
-              push!(leftrefs,ref)
-              push!(leftweights,node.trainingweights[r])
-              sumleftweights += node.trainingweights[r]
-              push!(lefttimevalues,node.timevalues[r])
-              push!(lefteventvalues,node.eventvalues[r])
-          else
-              push!(rightrefs,ref)
-              push!(rightweights,node.trainingweights[r])
-              sumrightweights += node.trainingweights[r]
-              push!(righttimevalues,node.timevalues[r])
-              push!(righteventvalues,node.eventvalues[r])
-          end
-      end
-  end
-  leftweight = sumleftweights/(sumleftweights+sumrightweights)
-  return leftrefs,leftweights,[],lefttimevalues,lefteventvalues,rightrefs,rightweights,[],righttimevalues,righteventvalues,leftweight
+    op = splittype == :NUMERIC ? (<=) : (==)
+    for r = 1:length(node.trainingrefs)
+        ref = node.trainingrefs[r]
+        if op(values[r], splitpoint)
+            push!(leftrefs,ref)
+            push!(leftweights,node.trainingweights[r])
+            sumleftweights += node.trainingweights[r]
+            push!(lefttimevalues,node.timevalues[r])
+            push!(lefteventvalues,node.eventvalues[r])
+        else
+            push!(rightrefs,ref)
+            push!(rightweights,node.trainingweights[r])
+            sumrightweights += node.trainingweights[r]
+            push!(righttimevalues,node.timevalues[r])
+            push!(righteventvalues,node.eventvalues[r])
+        end
+    end
+    leftweight = sumleftweights/(sumleftweights+sumrightweights)
+    return leftrefs,leftweights,[],lefttimevalues,lefteventvalues,rightrefs,rightweights,[],righttimevalues,righteventvalues,leftweight
 end
 
 function make_survival_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,time,prediction,weight=1.0)
