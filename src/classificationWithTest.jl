@@ -457,14 +457,14 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Classifier},Sym
                 testdata[c] = classdata[c][classdata[c][:FOLD] .== fold,:]
             end
             model,oobpredictions[foldno],variableimportance, modelsizes[foldno], noirregularleafs[foldno], randomclassoobs, oob = generate_trees((method,classes,notrees,randseed);curdata=trainingdata, randomoobs=size(randomoobs,1) > 0 ? randomoobs[foldno] : [], varimparg = false)
-            
+
             testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
             newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
             replacements_for_missing_values!(method,newtestdata,testdata,variables,types,testmissingvalues,testnonmissingvalues)
-        
+
             totalnotrees,correctclassificationcounter,squaredproberror = make_prediction_analysis(method, model, newtestdata, randomclassoobs, oob, predictions; predictionexamplecounter=testexamplecounter)
             testexamplecounter += sum([size(testdata[c],1) for c = 1:noclasses])
-            
+
             nocorrectclassifications[foldno] = [totalnotrees;correctclassificationcounter]
             squaredproberrors[foldno] = [totalnotrees;squaredproberror]
         end
