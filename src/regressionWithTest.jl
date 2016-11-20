@@ -553,68 +553,16 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Regressor},Symb
     srand(randseed)
     variables, types = get_variables_and_types(globaldata)
     if experimentype == :test
-        modelsize = 0
-        noirregularleafs = 0
+        model,oobpredictions,variableimportance, modelsize, noirregularleafs, randomclassoobs, oob = generate_trees((method,Int64[],notrees,randseed);curdata=globaldata[globaldata[:TEST] .== false,:], randomoobs=randomoobs, varimparg = false)
         testdata = globaldata[globaldata[:TEST] .== true,:]
-        trainingdata = globaldata[globaldata[:TEST] .== false,:]
-        trainingrefs = collect(1:size(trainingdata,1))
-        trainingweights = trainingdata[:WEIGHT]
-        regressionvalues = trainingdata[:REGRESSION]
-        timevalues = []
-        eventvalues = []
-        oobpredictions = Array(Any,size(trainingdata,1))
-        for i = 1:size(trainingdata,1)
-            oobpredictions[i] = [0,0,0]
-        end
-        missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
-        newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
         testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
         newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
         replacements_for_missing_values!(method,newtestdata,testdata,variables,types,testmissingvalues,testnonmissingvalues)
-        model = Array(Any,notrees)
-        oob = Array(Any,notrees)
-        for treeno = 1:notrees
-            sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
-            model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions)
-            modelsize += noleafs
-            noirregularleafs += treenoirregularleafs
-        end
+        correctvalues = testdata[:REGRESSION]
         nopredictions = size(testdata,1)
-        predictions = Array(Any,nopredictions)
+        predictions = Array(Array{Float64,1},nopredictions)
         squaredpredictions = Array(Any,nopredictions)
-        squarederror = 0.0
-        totalnotrees = 0
-        for i = 1:nopredictions
-            correctvalue = testdata[i,:REGRESSION]
-            prediction = 0.0
-            squaredprediction = 0.0
-            nosampledtrees = 0
-            for t = 1:length(model)
-                if method.modpred
-                    if oob[t][randomoobs[i]]
-                        leafstats = make_prediction(model[t],newtestdata,i,0)
-                        treeprediction = leafstats[2]/leafstats[1]
-                        prediction += treeprediction
-                        squaredprediction += treeprediction^2
-                        squarederror += (treeprediction-correctvalue)^2
-                        nosampledtrees += 1
-                    end
-                else
-                    leafstats = make_prediction(model[t],newtestdata,i,0)
-                    treeprediction = leafstats[2]/leafstats[1]
-                    prediction += treeprediction
-                    squaredprediction += treeprediction^2
-                    squarederror += (treeprediction-correctvalue)^2
-                end
-            end
-            if ~method.modpred
-                nosampledtrees = length(model)
-            end
-            totalnotrees += nosampledtrees
-            predictions[i] = [nosampledtrees;prediction]
-            squaredpredictions[i] = [nosampledtrees;squaredprediction]
-        end
-        squarederrors = [totalnotrees;squarederror]
+        totalnotrees,squarederror = make_prediction_analysis(method, model, newtestdata, randomclassoobs, oob, predictions, squaredpredictions, correctvalues)
         return (modelsize,predictions,squarederrors,oobpredictions,squaredpredictions,noirregularleafs)
     else # experimentype == :cv
         folds = sort(unique(globaldata[:FOLD]))
@@ -623,79 +571,62 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Regressor},Symb
         predictions = Array(Any,size(globaldata,1))
         squaredpredictions = Array(Any,size(globaldata,1))
         oobpredictions = Array(Any,nofolds)
-        modelsizes = Array(Int64,nofolds)
-        noirregularleafs = Array(Int64,nofolds)
+        modelsizes = Array(Int,nofolds)
+        noirregularleafs = Array(Int,nofolds)
         testexamplecounter = 0
         foldno = 0
         for fold in folds
             foldno += 1
             trainingdata = globaldata[globaldata[:FOLD] .!= fold,:]
             testdata = globaldata[globaldata[:FOLD] .== fold,:]
-            trainingrefs = collect(1:size(trainingdata,1))
-            trainingweights = trainingdata[:WEIGHT]
-            regressionvalues = trainingdata[:REGRESSION]
-            timevalues = []
-            eventvalues = []
-            oobpredictions[foldno] = Array(Any,size(trainingdata,1))
-            for i = 1:size(trainingdata,1)
-                oobpredictions[foldno][i] = [0,0,0]
-            end
-            missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
-            newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
+            model,oobpredictions[foldno],variableimportance, modelsizes[foldno], noirregularleafs[foldno], randomclassoobs, oob = generate_trees((method,Int64[],notrees,randseed);curdata=trainingdata, randomoobs=size(randomoobs,1) > 0 ? randomoobs[foldno] : [], varimparg = false)
             testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
             newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
             replacements_for_missing_values!(method,newtestdata,testdata,variables,types,testmissingvalues,testnonmissingvalues)
-            model = Array(Any,notrees)
-            modelsize = 0
-            totalnoirregularleafs = 0
-            oob = Array(Any,notrees)
-            for treeno = 1:notrees
-                sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
-                model[treeno], noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions[foldno])
-                modelsize += noleafs
-                totalnoirregularleafs += treenoirregularleafs
-            end
-            modelsizes[foldno] = modelsize
-            noirregularleafs[foldno] = totalnoirregularleafs
-                squarederror = 0.0
-            totalnotrees = 0
-            for i = 1:size(testdata,1)
-                correctvalue = testdata[i,:REGRESSION]
-                prediction = 0.0
-                nosampledtrees = 0
-                squaredprediction = 0.0
-                if method.modpred
-                    randomoob = randomoobs[foldno][i]
-                end
-                for t = 1:length(model)
-                    if method.modpred
-                        if oob[t][randomoob]
-                            leafstats = make_prediction(model[t],newtestdata,i,0)
-                            treeprediction = leafstats[2]/leafstats[1]
-                            prediction += treeprediction
-                            squaredprediction += treeprediction^2
-                            squarederror += (treeprediction-correctvalue)^2
-                            nosampledtrees += 1
-                        end
-                    else
-                        leafstats = make_prediction(model[t],newtestdata,i,0)
-                        treeprediction = leafstats[2]/leafstats[1]
-                        prediction += treeprediction
-                        squaredprediction += treeprediction^2
-                        squarederror += (treeprediction-correctvalue)^2
-                    end
-                end
-                if ~method.modpred
-                    nosampledtrees = length(model)
-                end
-                totalnotrees += nosampledtrees
-                testexamplecounter += 1
-                predictions[testexamplecounter] = [nosampledtrees;prediction]
-                squaredpredictions[testexamplecounter] = [nosampledtrees;squaredprediction]
-            end
+            correctvalues = testdata[:REGRESSION]
+            totalnotrees,squarederror = make_prediction_analysis(method, model, newtestdata, randomclassoobs, oob, predictions, squaredpredictions, correctvalues; predictionexamplecounter=testexamplecounter)
+            testexamplecounter += size(testdata,1)
+
             squarederrors[foldno] = [totalnotrees;squarederror]
-        end
-        return (modelsizes,predictions,squarederrors,oobpredictions,squaredpredictions,noirregularleafs)
+         end
+         return (modelsizes,predictions,squarederrors,oobpredictions,squaredpredictions,noirregularleafs)
     end
 end
 
+
+function make_prediction_analysis(method::LearningMethod{Regressor}, model, newtestdata, randomoobs, oob, predictions, squaredpredictions,correctvalues; predictionexamplecounter = 0)
+  squarederror = 0.0
+  totalnotrees = 0
+  for i = 1:size(newtestdata[1],1)
+      correctvalue = correctvalues[i]
+      prediction = 0.0
+      squaredprediction = 0.0
+      nosampledtrees = 0
+      for t = 1:length(model)
+          if method.modpred
+              if oob[t][randomoobs[i]]
+                  leafstats = make_prediction(model[t],newtestdata,i,0)
+                  treeprediction = leafstats[2]/leafstats[1]
+                  prediction += treeprediction
+                  squaredprediction += treeprediction^2
+                  squarederror += (treeprediction-correctvalue)^2
+                  nosampledtrees += 1
+              end
+          else
+              leafstats = make_prediction(model[t],newtestdata,i,0)
+              treeprediction = leafstats[2]/leafstats[1]
+              prediction += treeprediction
+              squaredprediction += treeprediction^2
+              squarederror += (treeprediction-correctvalue)^2
+          end
+      end
+      if ~method.modpred
+          nosampledtrees = length(model)
+      end
+      predictionexamplecounter += 1
+      totalnotrees += nosampledtrees
+      predictions[predictionexamplecounter] = [nosampledtrees;prediction]
+      squaredpredictions[predictionexamplecounter] = [nosampledtrees;squaredprediction]
+    end
+    return (totalnotrees,squarederror)
+end
