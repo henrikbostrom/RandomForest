@@ -2,15 +2,16 @@ function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Array{Int,1},
     method,classes,notrees,randseed = Arguments
     s = size(intarr, 1)
     srand(randseed)
+
     # trainingdata = globaldata
     trainvardict = vardict
-    trainintarr = transform(intarr)
-    trainfloarr = transform(floarr)
+    trainintarr = intarr
+    trainfloarr = floarr
     trainstrarr = size(strarr,2) > 0 ? remap(vardict, transform(strarr)) : strarr
 
     trainingrefs = collect(1:s)
-    trainingweights = convert(Array, get_array(:WEIGHT,trainintarr,trainfloarr,trainstrarr))
-    regressionvalues = convert(Array, get_array(:REGRESSION,trainintarr,trainfloarr,trainstrarr))
+    trainingweights = transform(get_array(:WEIGHT,trainintarr,trainfloarr,trainstrarr))
+    regressionvalues = transform(get_array(:REGRESSION,trainintarr,trainfloarr,trainstrarr))
     oobpredictions = Array(Array{Float64,1},s)
     for i = 1:s
         oobpredictions[i] = zeros(3)
@@ -63,7 +64,7 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Regressor
     newdata = Array(Array,length(variables))
     for v = 1:length(variables)
         if isempty(missingvalues[v])
-            newdata[v] = get_array(variables[v],trainintarr,trainfloarr,trainstrarr)
+            newdata[v] = transform(get_array(variables[v],trainintarr,trainfloarr,trainstrarr))
         end
     end
     return newdata
@@ -88,7 +89,7 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Regresso
                     values[i] =  newvalue # NOTE: The variable (and type) should be removed
                 end
             end
-            newtrainingdata[v] = convert(Array,values)
+            newtrainingdata[v] = transform(values)
         end
     end
 end
