@@ -402,7 +402,7 @@ function divide_data()
       curIndInt += 1
     elseif types[i] == Float64
       vardict[variables[i]] = (:trainfloarr, curIndFlo)
-      floarr[:, curIndFlo] = convert(Array{Nullable{Float64},1}, globaldata[variables[i]], Nullable{Int}());
+      floarr[:, curIndFlo] = convert(Array{Nullable{Float64},1}, globaldata[variables[i]], Nullable{Float64}());
       curIndFlo += 1
     else
       # vardict[variables[i]] = (:trainstrarr, curIndStr)

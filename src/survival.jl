@@ -1,14 +1,11 @@
-function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},Int,Int})
+function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},Int,Int};curdata=(intarr, floarr, strarr), randomoobs=[], varimparg = true)
     method,classes,notrees,randseed = Arguments
-    s = size(intarr, 1)
     srand(randseed)
 
-    # trainingdata = globaldata
-    trainvardict = vardict
-    trainintarr = intarr
-    trainfloarr = floarr
-    trainstrarr = size(strarr,2) > 0 ? remap(vardict, strarr) : strarr
-
+    trainintarr = curdata[1]
+    trainfloarr = curdata[2]
+    trainstrarr = size(strarr,2) > 0 ? remap(vardict, strarr) : curdata[3]
+    s = size(trainintarr, 1)
     trainingrefs = collect(1:s)
     trainingweights = transform(get_array(:WEIGHT,trainintarr,trainfloarr,trainstrarr))
     regressionvalues = []
@@ -18,22 +15,36 @@ function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},I
     for i = 1:s
         oobpredictions[i] = zeros(3)
     end
+    randomclassoobs = Array(Any,size(randomoobs,1))
+    for i = 1:size(randomclassoobs,1)
+        oobref = randomoobs[i]
+        c = 1
+        while oobref > size(trainingrefs[c],1)
+            oobref -= size(trainingrefs[c],1)
+            c += 1
+        end
+        randomclassoobs[i] = (c,oobref)
+    end
     # starting from here till the end of the function is duplicated between here and the Classifier and Regressor dispatchers
-    # variables, types = get_variables_and_types(globaldata)
     modelsize = 0
-    types = get_types(vardict,trainintarr,trainfloarr,trainstrarr)
+    noirregularleafs = 0
+    types = get_types(vardict)
     variables = get_variables(vardict)
     missingvalues, nonmissingvalues = find_missing_values(method,variables,trainintarr,trainfloarr,trainstrarr,vardict)
     newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainintarr,trainfloarr,trainstrarr,missingvalues,vardict)
     model = Array(TreeNode,notrees)
+    oob = Array(Array,notrees)
     variableimportance = zeros(size(variables,1))
     for treeno = 1:notrees
         sample_replacements_for_missing_values!(method,newtrainingdata,vardict,variables,types,missingvalues,nonmissingvalues,trainintarr,trainfloarr,trainstrarr)
-        model[treeno], treevariableimportance, noleafs, noirregularleafs = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions,varimp = true)
+        model[treeno], treevariableimportance, noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions,varimp = true)
         modelsize += noleafs
-        variableimportance += treevariableimportance
+        noirregularleafs += treenoirregularleafs
+        if (varimparg)
+            variableimportance += treevariableimportance
+        end
     end
-   return (model,oobpredictions,variableimportance)
+    return (model,oobpredictions,variableimportance,modelsize,noirregularleafs,randomclassoobs,oob)
 end
 
 function find_missing_values(method::LearningMethod{Survival},variables,trainintarr,trainfloarr,trainstrarr,vardict)
@@ -90,9 +101,6 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Survival
                     values[i] =  newvalue # NOTE: The variable (and type) should be removed
                 end
             end
-            #  variableType = typeof(values).parameters[1]
-            # varType = typeof(values).parameters[1].parameters[1]
-            # newtrainingdata[v] = convert(Array{Nullable{Int},1},values,Nullable{typeof(get(values[1]))}())
             newtrainingdata[v] = transform(values)
         end
     end
@@ -104,9 +112,6 @@ function replacements_for_missing_values!(method::LearningMethod{Survival},newte
         if !isempty(missingvalues[v])
             variableType = typeof(testdata[variables[v]]).parameters[1]
             values = convert(Array{Nullable{variableType},1},testdata[variables[v]],Nullable{variableType}())
-            for i in missingvalues[v]
-                values[i] =  Nullable{variableType}()
-            end
             newtestdata[v] = values
         end
     end
@@ -147,11 +152,12 @@ function generate_tree(method::LearningMethod{Survival},trainingrefs,trainingwei
             oobpredictions[trainingref] += [1,oobprediction,oobprediction^2]
         end
     end
-    if varimp
-        return model, variableimportance, noleafs, noirregularleafs, zeroweights
-    else
-        return model, noleafs, noirregularleafs, zeroweights
-    end
+    # if varimp
+    #     return model, variableimportance, noleafs, noirregularleafs, zeroweights
+    # else
+    #     return model, noleafs, noirregularleafs, zeroweights
+    # end
+    return model, variableimportance, noleafs, noirregularleafs, zeroweights
 end
 
 ## function make_loo_prediction(tree,testdata,exampleno,prediction)
@@ -257,7 +263,7 @@ function leaf_node(node,method::LearningMethod{Survival})
     end
 end
 
-function make_leaf(node,method::LearningMethod{Survival})
+function make_leaf(node,method::LearningMethod{Survival}, parenttrainingweights)
     return generate_cumulative_hazard_function(node.trainingweights,node.timevalues,node.eventvalues)
 end
 
@@ -501,43 +507,25 @@ function make_split(method::LearningMethod{Survival},node,trainingdata,bestsplit
     values = trainingdata[varno][node.trainingrefs]
     sumleftweights = 0.0
     sumrightweights = 0.0
-    if splittype == :NUMERIC
-      for r = 1:length(node.trainingrefs)
-          ref = node.trainingrefs[r]
-          if values[r] <= splitpoint
-              push!(leftrefs,ref)
-              push!(leftweights,node.trainingweights[r])
-              sumleftweights += node.trainingweights[r]
-              push!(lefttimevalues,node.timevalues[r])
-              push!(lefteventvalues,node.eventvalues[r])
-          else
-              push!(rightrefs,ref)
-              push!(rightweights,node.trainingweights[r])
-              sumrightweights += node.trainingweights[r]
-              push!(righttimevalues,node.timevalues[r])
-              push!(righteventvalues,node.eventvalues[r])
-          end
-      end
-  else
-      for r = 1:length(node.trainingrefs)
-          ref = node.trainingrefs[r]
-          if values[r] == splitpoint
-              push!(leftrefs,ref)
-              push!(leftweights,node.trainingweights[r])
-              sumleftweights += node.trainingweights[r]
-              push!(lefttimevalues,node.timevalues[r])
-              push!(lefteventvalues,node.eventvalues[r])
-          else
-              push!(rightrefs,ref)
-              push!(rightweights,node.trainingweights[r])
-              sumrightweights += node.trainingweights[r]
-              push!(righttimevalues,node.timevalues[r])
-              push!(righteventvalues,node.eventvalues[r])
-          end
-      end
-  end
-  leftweight = sumleftweights/(sumleftweights+sumrightweights)
-  return leftrefs,leftweights,[],lefttimevalues,lefteventvalues,rightrefs,rightweights,[],righttimevalues,righteventvalues,leftweight
+    op = splittype == :NUMERIC ? (<=) : (==)
+    for r = 1:length(node.trainingrefs)
+        ref = node.trainingrefs[r]
+        if op(values[r], splitpoint)
+            push!(leftrefs,ref)
+            push!(leftweights,node.trainingweights[r])
+            sumleftweights += node.trainingweights[r]
+            push!(lefttimevalues,node.timevalues[r])
+            push!(lefteventvalues,node.eventvalues[r])
+        else
+            push!(rightrefs,ref)
+            push!(rightweights,node.trainingweights[r])
+            sumrightweights += node.trainingweights[r]
+            push!(righttimevalues,node.timevalues[r])
+            push!(righteventvalues,node.eventvalues[r])
+        end
+    end
+    leftweight = sumleftweights/(sumleftweights+sumrightweights)
+    return leftrefs,leftweights,[],lefttimevalues,lefteventvalues,rightrefs,rightweights,[],righttimevalues,righteventvalues,leftweight
 end
 
 function make_survival_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,time,prediction,weight=1.0)
