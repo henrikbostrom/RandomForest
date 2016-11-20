@@ -1,13 +1,12 @@
 ## Type declarations
 
-immutable TreeData{T1, T2, T3}
+immutable TreeData{T1, T2}
     depth::Int
     trainingrefs::Array{T1,1}
     trainingweights::Array{T2,1}
     regressionvalues::Array{Float64,1} # regression
     timevalues::Array{Float64,1} # survival analysis
     eventvalues::Array{Float64,1} # survivial analysis
-    defaultprediction::Array{T3,1}
 end
 
 immutable TreeNode{T,ST}

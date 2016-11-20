@@ -4,8 +4,8 @@ function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Array{Int,1},
     srand(randseed)
     trainingdata = curdata
     trainingrefs = collect(1:size(curdata,1))
-    trainingweights = trainingdata[:WEIGHT]
-    regressionvalues = trainingdata[:REGRESSION]
+    trainingweights = trainingdata[:WEIGHT].data
+    regressionvalues = trainingdata[:REGRESSION].data
     oobpredictions = Array(Array{Float64,1},size(curdata,1))
     for i = 1:size(curdata,1)
         oobpredictions[i] = zeros(3)
@@ -72,7 +72,7 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Regressor
     newdata = Array(Array,length(variables))
     for v = 1:length(variables)
         if isempty(missingvalues[v])
-            newdata[v] = convert(Array,trainingdata[variables[v]])
+            newdata[v] = trainingdata[variables[v]].data
         end
     end
     return newdata
@@ -97,7 +97,7 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Regresso
                     values[i] =  newvalue # NOTE: The variable (and type) should be removed
                 end
             end
-            newtrainingdata[v] = convert(Array,values)
+            newtrainingdata[v] = values.data
         end
     end
 end
@@ -107,9 +107,6 @@ function replacements_for_missing_values!(method::LearningMethod{Regressor},newt
         if !isempty(missingvalues[v])
             variableType = typeof(testdata[variables[v]]).parameters[1]
             values = convert(Array{Nullable{variableType},1},testdata[variables[v]],Nullable{variableType}())
-            for i in missingvalues[v]
-                values[i] =  Nullable{variableType}()
-            end
             newtestdata[v] = values
         end
     end
@@ -244,7 +241,7 @@ function leaf_node(node,method::LearningMethod{Regressor})
     end
 end
 
-function make_leaf(node,method::LearningMethod{Regressor})
+function make_leaf(node,method::LearningMethod{Regressor}, parenttrainingweights)
     sumweights = sum(node.trainingweights)
     sumregressionvalues = sum(node.regressionvalues)
     return [sumweights,sumregressionvalues]
