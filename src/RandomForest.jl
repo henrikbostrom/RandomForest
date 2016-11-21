@@ -367,6 +367,7 @@ function load_data(source; separator = ',')
         else
             global globaldata = source # Made global to allow access from workers
         end
+        divide_data()
         initiate_workers()
         println("Data loaded")
     else

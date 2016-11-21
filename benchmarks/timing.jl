@@ -1,6 +1,6 @@
 include("benchhelpers.jl")
 
-funcs = [:test_exp, :test_gen];
+funcs = [:test_gen]; #[:test_exp, 
 
 files = ["glass.txt", "laser.txt", "plastic.txt", "pbc.csv", "pharynx.csv"];
 
