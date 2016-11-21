@@ -1,11 +1,9 @@
-function generate_trees(Arguments::Tuple{LearningMethod{Classifier},DataArray,Int,Int};curdata=globaldata, randomoobs=[], varimparg = true)
+function generate_trees(Arguments::Tuple{LearningMethod{Classifier},DataArray,Int,Int};curdata=(intarr, floarr, strarr), randomoobs=[], varimparg = true)
     method,classes,notrees,randseed = Arguments
     s = size(curdata,1)
     srand(randseed)
 
     noclasses = length(classes)
-    # trainingdata = Array(DataFrame, noclasses)
-    trainvardict = vardict
     trainintarr = Array(Array{Nullable{Int64},2}, noclasses)
     trainfloarr = Array(typeof(floarr), noclasses)
     tstrarr = (size(strarr,2) > 0) ? remap(vardict, strarr) : strarr
@@ -14,21 +12,23 @@ function generate_trees(Arguments::Tuple{LearningMethod{Classifier},DataArray,In
     trainingweights = Array(Array{Float64,1},noclasses)
     oobpredictions = Array(Array{Array{Float64,1},1},noclasses)
     emptyprediction = [0; zeros(noclasses)]
-
-    classArray = transform(get_array(:CLASS,intarr,floarr,strarr))
+    curintarr = curdata[1]
+    curfloarr = curdata[2]
+    curstrarr = curdata[3]
+    classArray = transform(get_array(:CLASS,curintarr,curfloarr,curstrarr))
     uniqueClasses = unique(classArray)
 
     for (i, c) in enumerate(uniqueClasses)
       indeces = find(x -> (x == c), classArray)
-      trainintarr[i] = intarr[indeces, :]
-      trainfloarr[i] = floarr[indeces, :]
-      trainstrarr[i] = strarr[indeces, :]
+      trainintarr[i] = curintarr[indeces, :]
+      trainfloarr[i] = curfloarr[indeces, :]
+      trainstrarr[i] = curstrarr[indeces, :]
 
       # trainingdata[c] = curdata[curdata[:] .== classes[c],:]
       # trainingdata[c][:WEIGHT]
 
       trainingrefs[i] = collect(1:length(indeces))
-      trainingweights[i] = transform(get_array(:WEIGHT,intarr,floarr,strarr))[indeces]
+      trainingweights[i] = transform(get_array(:WEIGHT,curintarr,curfloarr,curstrarr))[indeces]
       oobpredictions[i] = Array(Array{Float64,1},length(indeces))
       for j = 1:length(indeces)
           oobpredictions[i][j] = emptyprediction
@@ -52,7 +52,7 @@ function generate_trees(Arguments::Tuple{LearningMethod{Classifier},DataArray,In
     # need to be cleaned
     modelsize = 0
     noirregularleafs = 0
-    types = get_types(vardict,intarr,floarr,strarr)
+    types = get_types(vardict)
     variables = get_variables(vardict)
     missingvalues, nonmissingvalues = find_missing_values(method,variables,trainintarr,trainfloarr,trainstrarr,vardict)
     newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainintarr,trainfloarr,trainstrarr,missingvalues,vardict)
@@ -106,23 +106,19 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Classifie
         newdata[c] = Array(Array,length(variables))
         for v = 1:length(variables)
             if isempty(missingvalues[c][v])
-                # variableType = typeof(trainingdata[c][variables[v]]).parameters[1]
                 newdata[c][v] = transform(get_array(variables[v],trainintarr[c],trainfloarr[c],trainstrarr[c]))
-            # else
-            #     newdata[c][v] = trainingdata[c][variables[v]]
             end
         end
     end
     return newdata
 end
 
-function sample_replacements_for_missing_values!(method::LearningMethod{Classifier},newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues,trainintarr,trainfloarr,trainstrarr)
+function sample_replacements_for_missing_values!(method::LearningMethod{Classifier},newtrainingdata,vardict,variables,types,missingvalues,nonmissingvalues,trainintarr,trainfloarr,trainstrarr)
     noclasses = size(newtrainingdata,1)
     for c = 1:noclasses
         for v = 1:length(variables)
             if !isempty(missingvalues[c][v])
                 values = get_array(variables[v],trainintarr[c],trainfloarr[c],trainstrarr[c])
-                variableType = typeof(values).parameters[1]
                 valuefrequencies = [length(nonmissingvalues[cl][v]) for cl = 1:noclasses]
                 if sum(valuefrequencies) > 0
                     for i in missingvalues[c][v]
@@ -153,9 +149,6 @@ function replacements_for_missing_values!(method::LearningMethod{Classifier},new
             if !isempty(missingvalues[c][v])
                 variableType = typeof(testdata[c][variables[v]]).parameters[1]
                 values = convert(Array{Nullable{variableType},1},testdata[c][variables[v]],Nullable{variableType}())
-                for i in missingvalues[c][v]
-                    values[i] =  Nullable{variableType}()
-                end
                 newtestdata[c][v] = values
             end
         end
@@ -200,7 +193,7 @@ function generate_tree(method::LearningMethod{Classifier},trainingrefs,trainingw
     return model, variableimportance, noleafs, noirregularleafs, zeroweights
 end
 
-function default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,method::LearningMethod{Classifier})
+function default_prediction(trainingweights)
     noclasses = size(trainingweights,1)
     classcounts = map(sum,trainingweights)
     noinstances = sum(classcounts)
@@ -242,37 +235,31 @@ function leaf_node(node,method::LearningMethod{Classifier})
     end
 end
 
-function make_leaf(node,method::LearningMethod{Classifier})
+function make_leaf(node,method::LearningMethod{Classifier}, parenttrainingweights)
     noclasses = size(node.trainingweights,1)
-    classcounts = zeros(noclasses)
-    for i=1:noclasses
-        classcounts[i] = sum(node.trainingweights[i])
-    end
+    classcounts = [sum(node.trainingweights[i]) for i = 1:noclasses]
     noinstances = sum(classcounts)
-    prediction = node.defaultprediction
     if noinstances > 0
         if method.laplace
-            prediction = [(classcounts[i]+1)/(noinstances+noclasses) for i=1:noclasses]
+            return [(classcounts[i]+1)/(noinstances+noclasses) for i=1:noclasses]
         else
-            prediction = [classcounts[i]/noinstances for i=1:noclasses]
+            return [classcounts[i]/noinstances for i=1:noclasses]
         end
     end
-    return prediction
+    return default_prediction(parenttrainingweights)
 end
 
 function find_best_split(node,trainingdata,variables,types,method::LearningMethod{Classifier})
     if method.randsub == :all
         sampleselection = collect(1:length(variables))
-    elseif method.randsub == :default
-        sampleselection = sample(1:length(variables),convert(Int,floor(log(2,length(variables)))+1),replace=false)
-    elseif method.randsub == :log2
-        sampleselection = sample(1:length(variables),convert(Int,floor(log(2,length(variables)))+1),replace=false)
+    elseif method.randsub == :default || method.randsub == :log2
+        sampleselection = sample(1:length(variables),floor(Int,log(2,length(variables))+1),replace=false)
     elseif method.randsub == :sqrt
-        sampleselection = sample(1:length(variables),convert(Int,floor(sqrt(length(variables)))),replace=false)
+        sampleselection = sample(1:length(variables),floor(Int,sqrt(length(variables))),replace=false)
     else
         if typeof(method.randsub) == Int
             if method.randsub > length(variables)
-                [1:length(variables)]
+                sampleselection = collect(1:length(variables))
             else
                 sampleselection = sample(1:length(variables),method.randsub,replace=false)
             end
@@ -283,7 +270,6 @@ function find_best_split(node,trainingdata,variables,types,method::LearningMetho
     if method.splitsample > 0
         splitsamplesize = method.splitsample
         noclasses = size(node.trainingrefs,1)
-        sampleregressionvalues = node.regressionvalues
         sampletrainingweights = Array(Array{Float64,1},noclasses) #typeof(node).parameters[2]
         sampletrainingrefs = Array(Array{Int,1},noclasses) #typeof(node).parameters[1]
         for c = 1:noclasses
@@ -292,7 +278,7 @@ function find_best_split(node,trainingdata,variables,types,method::LearningMetho
                 sampletrainingrefs[c] = node.trainingrefs[c]
             else
                 sampletrainingweights[c] = Array(Float64,splitsamplesize)
-                sampletrainingrefs[c] = Array(Float64,splitsamplesize)
+                sampletrainingrefs[c] = Array(Int,splitsamplesize)
                 for i = 1:splitsamplesize
                     sampletrainingweights[c][i] = 1.0
                     sampletrainingrefs[c][i] = node.trainingrefs[c][rand(1:end)]
@@ -302,14 +288,10 @@ function find_best_split(node,trainingdata,variables,types,method::LearningMetho
     else
         sampletrainingrefs = node.trainingrefs
         sampletrainingweights = node.trainingweights
-        sampleregressionvalues = node.regressionvalues
     end
     bestsplit = (-Inf,0,:NA,:NA,0.0)
     noclasses = size(node.trainingrefs,1)
-    origclasscounts = Array(Float64,noclasses)
-    for c = 1:noclasses
-        origclasscounts[c] = sum(sampletrainingweights[c])
-    end
+    origclasscounts = map(sum,sampletrainingweights)
     for v = 1:length(sampleselection)
         bestsplit = evaluate_variable_classification(bestsplit,sampleselection[v],variables[sampleselection[v]],types[sampleselection[v]],sampletrainingrefs,sampletrainingweights,origclasscounts,noclasses,trainingdata,method)
     end
@@ -344,23 +326,7 @@ end
 
 function evaluate_classification_categoric_variable_randval(bestsplit,varno,variable,splittype,origclasscounts,noclasses,values,trainingweights,method)
     key = values[wsample(1:noclasses,origclasscounts)][rand(1:end)]
-    leftclasscounts = zeros(noclasses)
-    rightclasscounts = Array(Float64,noclasses)
-    for c = 1:noclasses
-        for i = 1:length(values[c])
-            if values[c][i] == key
-                leftclasscounts[c] += trainingweights[c][i]
-            end
-        end
-        rightclasscounts[c] = origclasscounts[c]-leftclasscounts[c]
-    end
-    if sum(leftclasscounts) >= method.minleaf && sum(rightclasscounts) >= method.minleaf
-        splitvalue = -information_content(leftclasscounts,rightclasscounts)
-        if splitvalue > bestsplit[1]
-            bestsplit = (splitvalue,varno,variable,splittype,key)
-        end
-    end
-    return bestsplit
+    return evaluate_classification_common(key, ==, bestsplit, varno,variable,splittype, values, noclasses, trainingweights, origclasscounts, method)
 end
 
 function evaluate_classification_categoric_variable_allvals(bestsplit,varno,variable,splittype,origclasscounts,noclasses,allvalues,trainingweights,method)
@@ -369,23 +335,8 @@ function evaluate_classification_categoric_variable_allvals(bestsplit,varno,vari
         allkeys = vcat(allkeys,allvalues[c])
     end
     keys = unique(allkeys)
-    rightclasscounts = Array(Float64,noclasses)
     for key in keys
-        leftclasscounts = zeros(noclasses)
-        for c = 1:noclasses
-            for i = 1:length(allvalues[c])
-                if allvalues[c][i] == key
-                    leftclasscounts[c] += trainingweights[c][i]
-                end
-            end
-            rightclasscounts[c] = origclasscounts[c]-leftclasscounts[c]
-        end
-        if sum(leftclasscounts) >= method.minleaf && sum(rightclasscounts) >= method.minleaf
-            splitvalue = -information_content(leftclasscounts,rightclasscounts)
-            if splitvalue > bestsplit[1]
-                bestsplit = (splitvalue,varno,variable,splittype,key)
-            end
-        end
+        bestsplit = evaluate_classification_common(key, ==, bestsplit, varno,variable,splittype, allvalues, noclasses, trainingweights, origclasscounts, method)
     end
     return bestsplit
 end
@@ -407,22 +358,7 @@ function evaluate_classification_numeric_variable_randval(bestsplit,varno,variab
     end
     if maxval > minval
         splitpoint = minval+rand()*(maxval-minval)
-        leftclasscounts = zeros(noclasses)
-        rightclasscounts = Array(Float64,noclasses)
-        for c = 1:noclasses
-            for i = 1:length(allvalues[c])
-                if allvalues[c][i] <= splitpoint
-                    leftclasscounts[c] += trainingweights[c][i]
-                end
-            end
-            rightclasscounts[c] = origclasscounts[c]-leftclasscounts[c]
-        end
-        if sum(leftclasscounts) >= method.minleaf && sum(rightclasscounts) >= method.minleaf
-            splitvalue = -information_content(leftclasscounts,rightclasscounts)
-            if splitvalue > bestsplit[1]
-                bestsplit = (splitvalue,varno,variable,splittype,splitpoint)
-            end
-        end
+        bestsplit = evaluate_classification_common(splitpoint, <=, bestsplit, varno,variable,splittype, allvalues, noclasses, trainingweights, origclasscounts, method)
     end
     return bestsplit
 end
@@ -443,11 +379,37 @@ function evaluate_classification_numeric_variable_allvals(bestsplit,varno,variab
     for s = 1:size(sortedkeys,1)-1
         leftclasscounts += numericvalues[sortedkeys[s]]
         rightclasscounts = origclasscounts-leftclasscounts
-        splitvalue = -information_content(leftclasscounts,rightclasscounts)
         if sum(leftclasscounts) >= method.minleaf && sum(rightclasscounts) >= method.minleaf
+            splitvalue = -information_content(leftclasscounts,rightclasscounts)
             if splitvalue > bestsplit[1]
                 bestsplit = (splitvalue,varno,variable,splittype,sortedkeys[s])
             end
+        end
+    end
+    return bestsplit
+end
+
+function calculateleftclasscount(values, trainingweights, key, op)
+    lcc = 0.0
+    for i = 1:length(values)
+        if op(values[i], key)
+            lcc += trainingweights[i]
+        end
+    end
+    return lcc
+end
+
+function evaluate_classification_common(key, op, bestsplit, varno,variable,splittype, values, noclasses, trainingweights, origclasscounts, method)
+    leftclasscounts = zeros(noclasses)
+    rightclasscounts = Array(Float64,noclasses)
+    for c = 1:noclasses
+        leftclasscounts[c] = calculateleftclasscount(values[c], trainingweights[c], key, op)
+        rightclasscounts[c] = origclasscounts[c]-leftclasscounts[c]
+    end
+    if sum(leftclasscounts) >= method.minleaf && sum(rightclasscounts) >= method.minleaf
+        splitvalue = -information_content(leftclasscounts,rightclasscounts)
+        if splitvalue > bestsplit[1]
+            bestsplit = (splitvalue,varno,variable,splittype,key)
         end
     end
     return bestsplit
@@ -479,49 +441,45 @@ function entropy(counts,total)
     return entropyval
 end
 
+# @iprofile begin
 function make_split(method::LearningMethod{Classifier},node,trainingdata,bestsplit)
     (varno, variable, splittype, splitpoint) = bestsplit
     noclasses = size(node.trainingrefs,1)
+    
     leftrefs = Array(Array,noclasses)
     leftweights = Array(Array,noclasses)
     rightrefs = Array(Array,noclasses)
     rightweights = Array(Array,noclasses)
-    values = Array(Array,noclasses)
     for c = 1:noclasses
+        values = trainingdata[c][varno][node.trainingrefs[c]]
         leftrefs[c] = Int[]
         leftweights[c] = Float64[]
         rightrefs[c] = Int[]
         rightweights[c] = Float64[]
-        values[c] = trainingdata[c][varno][node.trainingrefs[c]]
-        if splittype == :NUMERIC
-            for r = 1:length(node.trainingrefs[c])
-                ref = node.trainingrefs[c][r]
-                if values[c][r] <= splitpoint
-                    push!(leftrefs[c],ref)
-                    push!(leftweights[c],node.trainingweights[c][r])
-                else
-                    push!(rightrefs[c],ref)
-                    push!(rightweights[c],node.trainingweights[c][r])
-                end
-            end
-        else
-            for r = 1:length(node.trainingrefs[c])
-                ref = node.trainingrefs[c][r]
-                if values[c][r] == splitpoint
-                    push!(leftrefs[c],ref)
-                    push!(leftweights[c],node.trainingweights[c][r])
-                else
-                    push!(rightrefs[c],ref)
-                    push!(rightweights[c],node.trainingweights[c][r])
-                end
+        op = splittype == :NUMERIC ? (<=) : (==)
+        for r = 1:length(node.trainingrefs[c])
+            ref = node.trainingrefs[c][r]
+            if op(values[r], splitpoint)
+                push!(leftrefs[c],ref)
+                push!(leftweights[c],node.trainingweights[c][r])
+            else
+                push!(rightrefs[c],ref)
+                push!(rightweights[c],node.trainingweights[c][r])
             end
         end
+        # leftrefIds = splittype == :NUMERIC ? map(r->values[r] <= splitpoint, 1:length(node.trainingrefs[c])) : map(r->values[r] == splitpoint, 1:length(node.trainingrefs[c]))
+        # leftrefs[c] = node.trainingrefs[c][leftrefIds]
+        # leftweights[c] = node.trainingweights[c][leftrefIds]
+        # rightrefIds = !leftrefIds
+        # rightrefs[c] = node.trainingrefs[c][rightrefIds]
+        # rightweights[c] = node.trainingweights[c][rightrefIds]
     end
     noleftexamples = sum([sum(leftweights[i]) for i=1:noclasses])
     norightexamples = sum([sum(rightweights[i]) for i=1:noclasses])
     leftweight = noleftexamples/(noleftexamples+norightexamples)
     return leftrefs,leftweights,[],[],[],rightrefs,rightweights,[],[],[],leftweight
 end
+# end
 
 function generate_model_internal(method::LearningMethod{Classifier}, oobs, classes)
     if method.conformal == :default
