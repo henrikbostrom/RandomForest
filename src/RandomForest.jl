@@ -390,7 +390,7 @@ function divide_data()
 
   global intarr = SharedArray(Nullable{Int},size(globaldata,1),count(i-> i<:Int, types))
   global floarr = SharedArray(Nullable{Float64},size(globaldata,1),count(i-> i<:Float64, types))
-  global strarr = SharedArray(Nullable{Int},size(globaldata,1),count(i-> i<:String, types))
+  global strarr = SharedArray(Nullable{Int},size(globaldata,1),count(i-> (i<:String || i<:Bool), types))
 
   curIndInt = 1
   curIndFlo = 1
@@ -408,7 +408,12 @@ function divide_data()
       # vardict[variables[i]] = (:trainstrarr, curIndStr)
       # strarr[:, curIndStr] = globaldata[variables[i]];
       # curIndStr += 1
-      variable = convert(Array{Nullable{String},1}, globaldata[variables[i]], Nullable{Int}())
+      if types[i] == Bool
+        strvariavle = map(i-> (!isna(i) && i)? "true" : "false", globaldata[variables[i]])
+        variable = convert(Array{Nullable{String},1}, strvariavle, Nullable{Int}())
+      else
+        variable = convert(Array{Nullable{String},1}, globaldata[variables[i]], Nullable{Int}())
+      end
       uniqueValues = unique(variable)
       vardict[variables[i]] = (:trainstrarr, curIndStr, uniqueValues)
       newvar = indexin(variable, uniqueValues)
