@@ -143,16 +143,19 @@ function evaluate_method(;method = forest(),protocol = 10)
     present_results(sort(results[classificationresults]),[method],ignoredatasetlabel = true)
     present_results(sort(results[regressionresults]),[method],ignoredatasetlabel = true)
     println("Total time: $(round(totaltime,2)) s.")
+    return results[1][3][1]
 end
 
 function evaluate_methods(;methods = [forest()],protocol = 10)
     println("Running experiment")
+    methods = map(m->fix_method_type(m),methods)
     totaltime = @elapsed results = [run_single_experiment(protocol,methods)]
     classificationresults = [pt == :CLASS for (pt,f,r) in results]
     regressionresults = [pt == :REGRESSION for (pt,f,r) in results]
     present_results(sort(results[classificationresults]),methods,ignoredatasetlabel = true)
     present_results(sort(results[regressionresults]),methods,ignoredatasetlabel = true)
     println("Total time: $(round(totaltime,2)) s.")
+    return results[1][3]
 end
 
 function run_single_experiment(protocol, methods)
