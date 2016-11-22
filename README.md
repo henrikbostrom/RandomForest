@@ -46,7 +46,7 @@ Install a requested package:
 Try to load the RandomForest package (assuming that the current directory is in your load path,
 e.g., add "push!(LOAD_PATH, pwd())" to the file ".juliarc.jl" in your home directory):
 
-    julia> using RandomForests
+    julia> using RandomForest
 
 Then exit by:
 
