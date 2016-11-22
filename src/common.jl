@@ -164,10 +164,10 @@ function run_single_experiment(protocol, methods)
     else
         if typeof(protocol) == Float64 || protocol == :test
             results = run_split(protocol,methods)
-            result = ("",results)
+            result = (predictiontask, "",results)
         elseif typeof(protocol) == Int64 || protocol == :cv
             results = run_cross_validation(protocol,methods)
-            result = ("",results)
+            result = (predictiontask, "",results)
         else
             throw("Unknown experiment protocol")
         end
