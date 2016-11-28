@@ -1,31 +1,49 @@
-function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Array{Int,1},Int,Int})
+function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Array{Int,1},Int,Int};curdata=globaldata, randomoobs=[], varimparg = true)
     method,classes,notrees,randseed = Arguments
-    s = size(globaldata,1)
+    s = size(curdata,1)
     srand(randseed)
-    trainingdata = globaldata
-    trainingrefs = collect(1:size(trainingdata,1))
+    trainingdata = curdata
+    trainingrefs = collect(1:size(curdata,1))
     trainingweights = trainingdata[:WEIGHT].data
     regressionvalues = trainingdata[:REGRESSION].data
-    oobpredictions = Array(Array{Float64,1},size(trainingdata,1))
-    for i = 1:size(trainingdata,1)
+    oobpredictions = Array(Array{Float64,1},size(curdata,1))
+    for i = 1:size(curdata,1)
         oobpredictions[i] = zeros(3)
     end
     timevalues = []
     eventvalues = []
+
+    randomclassoobs = Array(Any,size(randomoobs,1))
+    for i = 1:size(randomclassoobs,1)
+        oobref = randomoobs[i]
+        c = 1
+        while oobref > size(trainingrefs[c],1)
+            oobref -= size(trainingrefs[c],1)
+            c += 1
+        end
+        randomclassoobs[i] = (c,oobref)
+    end
+
     # starting from here till the end of the function is duplicated between here and the Classifier and Survival dispatchers
-    variables, types = get_variables_and_types(globaldata)
+    variables, types = get_variables_and_types(curdata)
     modelsize = 0
+    noirregularleafs = 0
     missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
     newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
     model = Array(TreeNode,notrees)
+    oob = Array(Array,notrees)
     variableimportance = zeros(size(variables,1))
     for treeno = 1:notrees
         sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
-        model[treeno], treevariableimportance, noleafs, noirregularleafs = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions,varimp = true)
+        model[treeno], treevariableimportance, noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions,varimp = true)
         modelsize += noleafs
-        variableimportance += treevariableimportance
+        # variableimportance += treevariableimportance
+        noirregularleafs += treenoirregularleafs
+        if (varimparg)
+            variableimportance += treevariableimportance
+        end
     end
-   return (model,oobpredictions,variableimportance)
+   return (model,oobpredictions,variableimportance,modelsize,noirregularleafs,randomclassoobs,oob)
 end
 
 function find_missing_values(method::LearningMethod{Regressor},variables,trainingdata)
@@ -129,11 +147,12 @@ function generate_tree(method::LearningMethod{Regressor},trainingrefs,trainingwe
             oobpredictions[trainingref] += [1,oobprediction,oobprediction^2]
         end
     end
-    if varimp
-        return model, variableimportance, noleafs, noirregularleafs, zeroweights
-    else
-        return model, noleafs, noirregularleafs, zeroweights
-    end
+    # if varimp
+    #     return model, variableimportance, noleafs, noirregularleafs, zeroweights
+    # else
+    #     return model, noleafs, noirregularleafs, zeroweights
+    # end
+    return model, variableimportance, noleafs, noirregularleafs, zeroweights
 end
 
 function make_loo_prediction(tree,testdata,exampleno,prediction)
@@ -313,48 +332,13 @@ end
 
 function evaluate_regression_categoric_variable_randval(bestsplit,varno,variable,splittype,regressionvalues,origregressionsum,origweightsum,origmean,allvalues,trainingweights,method)
     key = allvalues[rand(1:end)]
-    leftregressionsum = 0.0
-    leftweightsum = 0.0
-    for i = 1:length(allvalues)
-        if allvalues[i] == key
-            leftweightsum += trainingweights[i]
-            leftregressionsum += trainingweights[i]*regressionvalues[i]
-        end
-    end
-    rightregressionsum = origregressionsum-leftregressionsum
-    rightweightsum = origweightsum-leftweightsum
-    if leftweightsum >= method.minleaf && rightweightsum >= method.minleaf
-        leftmean = leftregressionsum/leftweightsum
-        rightmean = rightregressionsum/rightweightsum
-        variancereduction = (origmean-leftmean)^2*leftweightsum+(origmean-rightmean)^2*rightweightsum
-        if variancereduction > bestsplit[1]
-            bestsplit = (variancereduction,varno,variable,splittype,key)
-        end
-    end
-    return bestsplit
+    return evaluate_regression_common(key, ==,bestsplit,varno,variable,splittype,regressionvalues,origregressionsum,origweightsum,origmean,allvalues,trainingweights,method)
 end
 
 function evaluate_regression_categoric_variable_allvals(bestsplit,varno,variable,splittype,regressionvalues,origregressionsum,origweightsum,origmean,allvalues,trainingweights,method)
     keys = unique(allvalues)
     for key in keys
-        leftregressionsum = 0.0
-        leftweightsum = 0.0
-        for i = 1:length(allvalues)
-            if allvalues[i] == key
-                leftweightsum += trainingweights[i]
-                leftregressionsum += trainingweights[i]*regressionvalues[i]
-            end
-        end
-        rightregressionsum = origregressionsum-leftregressionsum
-        rightweightsum = origweightsum-leftweightsum
-        if leftweightsum >= method.minleaf && rightweightsum >= method.minleaf
-            leftmean = leftregressionsum/leftweightsum
-            rightmean = rightregressionsum/rightweightsum
-            variancereduction = (origmean-leftmean)^2*leftweightsum+(origmean-rightmean)^2*rightweightsum
-            if variancereduction > bestsplit[1]
-                bestsplit = (variancereduction,varno,variable,splittype,key)
-            end
-        end
+      bestsplit = evaluate_regression_common(key, ==,bestsplit,varno,variable,splittype,regressionvalues,origregressionsum,origweightsum,origmean,allvalues,trainingweights,method)
     end
     return bestsplit
 end
@@ -363,24 +347,7 @@ function evaluate_regression_numeric_variable_randval(bestsplit,varno,variable,s
     minval = minimum(allvalues)
     maxval = maximum(allvalues)
     splitpoint = minval+rand()*(maxval-minval)
-    leftregressionsum = 0.0
-    leftweightsum = 0.0
-    for i = 1:length(allvalues)
-        if allvalues[i] <= splitpoint
-            leftweightsum += trainingweights[i]
-            leftregressionsum += trainingweights[i]*regressionvalues[i]
-        end
-    end
-    rightregressionsum = origregressionsum-leftregressionsum
-    rightweightsum = origweightsum-leftweightsum
-    if leftweightsum >= method.minleaf && rightweightsum >= method.minleaf
-        leftmean = leftregressionsum/leftweightsum
-        rightmean = rightregressionsum/rightweightsum
-        variancereduction = (origmean-leftmean)^2*leftweightsum+(origmean-rightmean)^2*rightweightsum
-        if variancereduction > bestsplit[1]
-            bestsplit = (variancereduction,varno,variable,splittype,splitpoint)
-        end
-    end
+    bestsplit = evaluate_regression_common(splitpoint, <=,bestsplit,varno,variable,splittype,regressionvalues,origregressionsum,origweightsum,origmean,allvalues,trainingweights,method)
     return bestsplit
 end
 
@@ -419,6 +386,29 @@ function evaluate_regression_numeric_variable_allvals(bestsplit,varno,variable,s
     return bestsplit
 end
 
+
+function evaluate_regression_common(key, op, bestsplit,varno,variable,splittype,regressionvalues,origregressionsum,origweightsum,origmean,allvalues,trainingweights,method)
+  leftregressionsum = 0.0
+  leftweightsum = 0.0
+  for i = 1:length(allvalues)
+      if op(allvalues[i], key)
+          leftweightsum += trainingweights[i]
+          leftregressionsum += trainingweights[i]*regressionvalues[i]
+      end
+  end
+  rightregressionsum = origregressionsum-leftregressionsum
+  rightweightsum = origweightsum-leftweightsum
+  if leftweightsum >= method.minleaf && rightweightsum >= method.minleaf
+      leftmean = leftregressionsum/leftweightsum
+      rightmean = rightregressionsum/rightweightsum
+      variancereduction = (origmean-leftmean)^2*leftweightsum+(origmean-rightmean)^2*rightweightsum
+      if variancereduction > bestsplit[1]
+          bestsplit = (variancereduction,varno,variable,splittype,key)
+      end
+  end
+  return bestsplit
+end
+
 function make_split(method::LearningMethod{Regressor},node,trainingdata,bestsplit)
   (varno, variable, splittype, splitpoint) = bestsplit
   leftrefs = Int[]
@@ -427,38 +417,22 @@ function make_split(method::LearningMethod{Regressor},node,trainingdata,bestspli
   rightrefs = Int[]
   rightweights = Float64[]
   rightregressionvalues = Float64[]
-  values = trainingdata[varno][node.trainingrefs]
+  allvalues = trainingdata[varno][node.trainingrefs]
   sumleftweights = 0.0
   sumrightweights = 0.0
-  if splittype == :NUMERIC
-      for r = 1:length(node.trainingrefs)
-          ref = node.trainingrefs[r]
-          if values[r] <= splitpoint
-              push!(leftrefs,ref)
-              push!(leftweights,node.trainingweights[r])
-              sumleftweights += node.trainingweights[r]
-              push!(leftregressionvalues,node.regressionvalues[r])
-          else
-              push!(rightrefs,ref)
-              push!(rightweights,node.trainingweights[r])
-              sumrightweights += node.trainingweights[r]
-              push!(rightregressionvalues,node.regressionvalues[r])
-          end
-      end
-  else
-      for r = 1:length(node.trainingrefs)
-          ref = node.trainingrefs[r]
-          if values[r] == splitpoint
-              push!(leftrefs,ref)
-              push!(leftweights,node.trainingweights[r])
-              sumleftweights += node.trainingweights[r]
-              push!(leftregressionvalues,node.regressionvalues[r])
-          else
-              push!(rightrefs,ref)
-              push!(rightweights,node.trainingweights[r])
-              sumrightweights += node.trainingweights[r]
-              push!(rightregressionvalues,node.regressionvalues[r])
-          end
+  op = splittype == :NUMERIC ? (<=) : (==)
+  for r = 1:length(node.trainingrefs)
+      ref = node.trainingrefs[r]
+      if op(allvalues[r], splitpoint)
+          push!(leftrefs,ref)
+          push!(leftweights,node.trainingweights[r])
+          sumleftweights += node.trainingweights[r]
+          push!(leftregressionvalues,node.regressionvalues[r])
+      else
+          push!(rightrefs,ref)
+          push!(rightweights,node.trainingweights[r])
+          sumrightweights += node.trainingweights[r]
+          push!(rightregressionvalues,node.regressionvalues[r])
       end
   end
   leftweight = sumleftweights/(sumleftweights+sumrightweights)
