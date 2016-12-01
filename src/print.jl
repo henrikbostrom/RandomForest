@@ -1,7 +1,6 @@
-
-##
-## Functions for outputting result summaries
-##
+@doc """
+       Functions for outputting result summaries
+       """ ->
 
 function present_results(results,methods;ignoredatasetlabel = false)
     if results != []
