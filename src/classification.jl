@@ -529,6 +529,18 @@ function generate_model_internal(method::LearningMethod{Classifier}, oobs, class
     return oobperformance, conformalfunction
 end
 
+doc"""
+To apply a model to loaded data:
+
+    julia> apply_model(<model>, confidence = <confidence>)
+
+The argument should be on the following format:
+
+    model : a generated or loaded model (see generate_model and load_model)
+    confidence : a float between 0 and 1 or :std (default = :std)
+                 - probability of including the correct label in the prediction region
+                 - :std means employing the same confidence level as used during training
+"""
 function apply_model(model::PredictionModel{Classifier}; confidence = :std)
     # AMG: still requires global data
     numThreads = Threads.nthreads()
