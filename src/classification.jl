@@ -529,7 +529,7 @@ function generate_model_internal(method::LearningMethod{Classifier}, oobs, class
     return oobperformance, conformalfunction
 end
 
-doc"""
+"""
 To apply a model to loaded data:
 
     julia> apply_model(<model>, confidence = <confidence>)

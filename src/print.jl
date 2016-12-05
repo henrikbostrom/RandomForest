@@ -198,7 +198,7 @@ function present_method(methodno,method;showmethodlabel = true)
         println("\t$(n) = $(getfield(method,n))")
     end
 end
-doc"""
+"""
 To get a description of a loaded dataset:
     describe_data(<dataframe>)    
 """
@@ -210,7 +210,7 @@ function describe_data()
     describe(globaldata)
 end
 
-doc"""
+"""
 To get a description of a model:
     julia> describe_model(<model>)   
 """
