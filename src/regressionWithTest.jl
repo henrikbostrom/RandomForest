@@ -11,6 +11,7 @@ function run_split_internal(method::LearningMethod{Regressor}, results, time)
     nopredictions = size(predictions,1)
 
     predictions = [predictions[i][2]/predictions[i][1] for i = 1:nopredictions]
+    prediction_results = Array(Tuple,size(predictions,1))
     if method.conformal == :default
         conformal = :normalized
     else
@@ -125,6 +126,7 @@ function run_split_internal(method::LearningMethod{Regressor}, results, time)
         else
             errorrange = largestrange
         end
+        prediction_results = [(p,[p-errorrange/2,p+errorrange/2]) for p in predictions]
     elseif conformal == :normalized
         if thresholdindex >= 1
             alpha = sort(alphas, rev=true)[thresholdindex]
@@ -236,6 +238,11 @@ function run_split_internal(method::LearningMethod{Regressor}, results, time)
         ##         end
         ## end
         end
+        
+        if conformal != :std
+            prediction_results[i] = (predictions[i],[predictions[i]-errorrange/2,predictions[i]+errorrange/2])
+        end
+        
         rangesum += errorrange
         if error <= errorrange/2
             validity += 1
@@ -252,7 +259,7 @@ function run_split_internal(method::LearningMethod{Regressor}, results, time)
     avmse = totalsquarederror/totalnotrees
     varmse = avmse-mse
     extratime = toq()
-    return RegressionResult(mse,corrcoeff,avmse,varmse,esterr,absesterr,validity,region,modelsize,noirregularleafs,time+extratime)
+    return RegressionResult(mse,corrcoeff,avmse,varmse,esterr,absesterr,validity,region,modelsize,noirregularleafs,time+extratime), prediction_results
 end
 
 
@@ -271,6 +278,7 @@ function run_cross_validation_internal(method::LearningMethod{Regressor}, result
     testexamplecounter = 0
 
     predictions = [predictions[i][2]/predictions[i][1] for i = 1:nopredictions]
+    prediction_results = Array(Tuple,size(predictions,1))
     mse = Array(Float64,nofolds)
     corrcoeff = Array(Float64,nofolds)
     avmse = Array(Float64,nofolds)
@@ -395,6 +403,7 @@ function run_cross_validation_internal(method::LearningMethod{Regressor}, result
             else
                 errorrange = largestrange
             end
+            prediction_results[testexamplecounter+1:testexamplecounter:length(correctvalues)] = [(p,[p-errorrange/2,p+errorrange/2]) for p in predictions[testexamplecounter+1:testexamplecounter:length(correctvalues)]]
         elseif conformal == :normalized
             if thresholdindex >= 1
                 alpha = sort(alphas,rev=true)[thresholdindex]
@@ -510,6 +519,11 @@ function run_cross_validation_internal(method::LearningMethod{Regressor}, result
             ##         end
             ##     end
             end
+            
+            if conformal != :std
+                prediction_results[testexamplecounter+i] = (predictions[testexamplecounter+i],[predictions[testexamplecounter+i]-errorrange/2,predictions[testexamplecounter+i]+errorrange/2])
+            end
+            
             rangesum += errorrange
             if error <= errorrange/2
                 noinregion += 1
@@ -540,7 +554,7 @@ function run_cross_validation_internal(method::LearningMethod{Regressor}, result
     end
     extratime = toq()
     return RegressionResult(mean(mse),mean(corrcoeff),mean(avmse),mean(varmse),mean(esterr),mean(absesterr),mean(validity),mean(region),mean(modelsizes),mean(noirregularleafs),
-                                            time+extratime)
+                                            time+extratime), prediction_results
 end
 
 
@@ -563,7 +577,7 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Regressor},Symb
         predictions = Array(Array{Float64,1},nopredictions)
         squaredpredictions = Array(Any,nopredictions)
         totalnotrees,squarederror = make_prediction_analysis(method, model, newtestdata, randomclassoobs, oob, predictions, squaredpredictions, correctvalues)
-        return (modelsize,predictions,squarederrors,oobpredictions,squaredpredictions,noirregularleafs)
+        return (modelsize,predictions,[totalnotrees;squarederror],oobpredictions,squaredpredictions,noirregularleafs)
     else # experimentype == :cv
         folds = sort(unique(globaldata[:FOLD]))
         nofolds = length(folds)

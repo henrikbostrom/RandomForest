@@ -46,6 +46,7 @@ function run_split_internal(method::LearningMethod{Classifier}, results, time)
         else
             alpha = -Inf
         end
+        classalpha = fill(alpha, noclasses)
     elseif conformal == :classcond
         randomclassoobs = Array(Any,size(randomoobs,1))
         for i = 1:size(randomclassoobs,1)
@@ -140,10 +141,10 @@ function run_split_internal(method::LearningMethod{Classifier}, results, time)
                             if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= alpha
                                 nolabels += 1
                             end
-                    else
-                        if predictions[i][j]-predictions[i][mostprobable] >= alpha # classalphas[j]
-                            nolabels += 1
-                        end
+                        else
+                            if predictions[i][j]-predictions[i][mostprobable] >= alpha # classalphas[j]
+                                nolabels += 1
+                            end
                         end
                     end
                 else # conformal == :classcond
@@ -152,10 +153,10 @@ function run_split_internal(method::LearningMethod{Classifier}, results, time)
                             if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= classalpha[j]
                                 nolabels += 1
                             end
-                    else
-                        if predictions[i][j]-predictions[i][mostprobable] >= classalpha[j]
-                            nolabels += 1
-                        end
+                        else
+                            if predictions[i][j]-predictions[i][mostprobable] >= classalpha[j]
+                                nolabels += 1
+                            end
                         end
                     end
                     if method.modpred
@@ -201,7 +202,7 @@ function run_split_internal(method::LearningMethod{Classifier}, results, time)
     avbrier = totalsquarederror/totalnotrees
     varbrier = avbrier-brierscore
     extratime = toq()
-    return ClassificationResult(accuracy,weightedauc,brierscore,avacc,esterr,absesterr,avbrier,varbrier,margin,prob,validity,avc,onec,modelsize,noirregularleafs,time+extratime)
+    return ClassificationResult(accuracy,weightedauc,brierscore,avacc,esterr,absesterr,avbrier,varbrier,margin,prob,validity,avc,onec,modelsize,noirregularleafs,time+extratime), get_predictions_classification(classes, predictions, classalpha)
 
 end
 
@@ -277,6 +278,7 @@ function run_cross_validation_internal(method::LearningMethod{Classifier}, resul
     noclasses = length(classes)
     foldauc = Array(Float64,noclasses)
     classdata = Array(Any,noclasses)
+    returning_prediction = []
     for c = 1:noclasses
         classdata[c] = globaldata[globaldata[:CLASS] .== classes[c],:]
     end
@@ -382,6 +384,7 @@ function run_cross_validation_internal(method::LearningMethod{Classifier}, resul
             end
         end
         foldpredictions = predictions[origtestexamplecounter+1:testexamplecounter]
+        append!(returning_prediction, get_predictions_classification(classes, foldpredictions, classalphas))
         tempexamplecounter = 0
         for c = 1:noclasses
             if size(testdata[c],1) > 0
@@ -414,7 +417,7 @@ function run_cross_validation_internal(method::LearningMethod{Classifier}, resul
     end
     extratime = toq()
     return ClassificationResult(mean(accuracy),mean(auc),mean(brierscore),mean(avacc),mean(esterr),mean(absesterr),mean(avbrier),mean(varbrier),mean(margin),mean(prob),
-                                                mean(validity),mean(avc),mean(onec),mean(modelsizes),mean(noirregularleafs),time+extratime)
+                                                mean(validity),mean(avc),mean(onec),mean(modelsizes),mean(noirregularleafs),time+extratime), returning_prediction
 end
 
 ##

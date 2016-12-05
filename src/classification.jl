@@ -549,7 +549,6 @@ function apply_model(model::PredictionModel{Classifier}; confidence = :std)
         predictions += apply_trees((model.method,model.classes,model.trees))
     end
     predictions = predictions/model.method.notrees
-    results = Array(Any,size(predictions,1))
     noclasses = length(model.classes)
     if model.conformal[1] == :std
         if confidence == :std
@@ -563,16 +562,7 @@ function apply_model(model::PredictionModel{Classifier}; confidence = :std)
                 alpha = -Inf
             end
         end
-        for i = 1:size(predictions,1)
-            class = model.classes[indmax(predictions[i])]
-            plausible = typeof(class)[]
-            for j=1:noclasses
-                if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= alpha
-                    push!(plausible,model.classes[j])
-                end
-            end
-            results[i] = (class,plausible,predictions[i])
-        end
+        classalpha = fill(alpha, noclasses)
     elseif model.conformal[1] == :classcond
         if confidence == :std
             classalpha = model.conformal[2]
@@ -588,16 +578,21 @@ function apply_model(model::PredictionModel{Classifier}; confidence = :std)
                 end
             end
         end
-        for i = 1:size(predictions,1)
-            class = model.classes[indmax(predictions[i])]
-            plausible = typeof(class)[]
-            for j=1:noclasses
-                if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= classalpha[j]
-                    push!(plausible,model.classes[j])
-                end
+    end
+    return get_predictions_classification(model.classes, predictions, classalpha)
+end
+
+function get_predictions_classification(classes, predictions, classalpha)
+    results = Array(Any,size(predictions,1))
+    for i = 1:size(predictions,1)
+        class = classes[indmax(predictions[i])]
+        plausible = typeof(class)[]
+        for j=1:length(classes)
+            if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= classalpha[j]
+                push!(plausible,classes[j])
             end
-            results[i] = (class,plausible,predictions[i])
         end
+        results[i] = (class,plausible,predictions[i])
     end
     return results
 end
