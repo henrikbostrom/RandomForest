@@ -11,7 +11,7 @@ function generate_trees(Arguments::Tuple{LearningMethod{Classifier},DataArray,In
     for c = 1:noclasses
         trainingdata[c] = curdata[curdata[:CLASS] .== classes[c],:]
         trainingrefs[c] = collect(1:size(trainingdata[c],1))
-        trainingweights[c] = trainingdata[c][:WEIGHT].data
+        trainingweights[c] = getDfArrayData(trainingdata[c][:WEIGHT])
         oobpredictions[c] = Array(Array{Float64,1},size(trainingdata[c],1))
         for i = 1:size(trainingdata[c],1)
             oobpredictions[c][i] = emptyprediction
@@ -87,7 +87,7 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Classifie
         newdata[c] = Array(Array,length(variables))
         for v = 1:length(variables)
             if isempty(missingvalues[c][v])
-                newdata[c][v] = trainingdata[c][variables[v]].data
+                newdata[c][v] = getDfArrayData(trainingdata[c][variables[v]])
             end
         end
     end
@@ -117,7 +117,7 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Classifi
                         values[i] =  newvalue # NOTE: The variable (and type) should be removed
                     end
                 end
-                newtrainingdata[c][v] = values.data
+                newtrainingdata[c][v] = getDfArrayData(values)
             end
         end
     end

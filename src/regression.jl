@@ -4,8 +4,8 @@ function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Array{Int,1},
     srand(randseed)
     trainingdata = curdata
     trainingrefs = collect(1:size(curdata,1))
-    trainingweights = trainingdata[:WEIGHT].data
-    regressionvalues = trainingdata[:REGRESSION].data
+    trainingweights = getDfArrayData(trainingdata[:WEIGHT])
+    regressionvalues = getDfArrayData(trainingdata[:REGRESSION])
     oobpredictions = Array(Array{Float64,1},size(curdata,1))
     for i = 1:size(curdata,1)
         oobpredictions[i] = zeros(3)
@@ -72,7 +72,7 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Regressor
     newdata = Array(Array,length(variables))
     for v = 1:length(variables)
         if isempty(missingvalues[v])
-            newdata[v] = trainingdata[variables[v]].data
+            newdata[v] = getDfArrayData(trainingdata[variables[v]])
         end
     end
     return newdata
@@ -97,7 +97,7 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Regresso
                     values[i] =  newvalue # NOTE: The variable (and type) should be removed
                 end
             end
-            newtrainingdata[v] = values.data
+            newtrainingdata[v] = getDfArrayData(values)
         end
     end
 end
