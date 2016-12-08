@@ -62,9 +62,12 @@ export
     describe_model,
     apply_model,
     runexp,
-    LearningMethod,
-    Classifier,
-    Regressor,
+    fit!,
+    predict,
+    predict_proba,
+    # LearningMethod,
+    # Classifier,
+    # Regressor,
     forestClassifier,
     treeClassifier,
     forestRegressor,
@@ -80,12 +83,8 @@ include("regression.jl")
 include("survival.jl")
 include("classificationWithTest.jl")
 include("regressionWithTest.jl")
+include("scikitlearnAPI.jl")
 include("survivalWithTest.jl")
-
-# MOH FIXME:should use Julia standardized versioning instead
-global majorversion = 0
-global minorversion = 0
-global patchversion = 10
 
 """`runexp` is used to test the performance of the library on a number of test sets"""
 function runexp()
@@ -102,8 +101,8 @@ end
 ## Functions for running experiments
 ##
 
-function experiment(;files = ".", separator = ',', protocol = 10, normalizetarget = false, normalizeinput = false, methods = [forest()], resultfile = :none)
-    println("RandomForest v. $(majorversion).$(minorversion).$(patchversion)")
+function experiment(;files = ".", separator = ',', protocol = 10, normalizetarget = false, normalizeinput = false, methods = [forest()], resultfile = :none, printable = true)
+    println("RandomForest v. $rf_ver")
     if typeof(files) == String
         if isdir(files)
             dirfiles = readdir(files)
@@ -119,10 +118,12 @@ function experiment(;files = ".", separator = ',', protocol = 10, normalizetarge
     classificationresults = [pt == :CLASS for (pt,f,r) in results]
     regressionresults = [pt == :REGRESSION for (pt,f,r) in results]
     survivalresults = [pt == :SURVIVAL for (pt,f,r) in results]
-    present_results(sort(results[classificationresults]),methods)
-    present_results(sort(results[regressionresults]),methods)
-    present_results(sort(results[survivalresults]),methods)
-    println("Total time: $(round(totaltime,2)) s.")
+    if printable
+      present_results(sort(results[classificationresults]),methods)
+      present_results(sort(results[regressionresults]),methods)
+      present_results(sort(results[survivalresults]),methods)
+      println("Total time: $(round(totaltime,2)) s.")
+    end
     if resultfile != :none
         origstdout = STDOUT
         resultfilestream = open(resultfile,"w+")
@@ -134,6 +135,7 @@ function experiment(;files = ".", separator = ',', protocol = 10, normalizetarge
         redirect_stdout(origstdout)
         close(resultfilestream)
     end
+    return results
 end
 
 function run_experiment(file, separator, protocol, normalizetarget, normalizeinput, methods)
@@ -149,7 +151,7 @@ function run_experiment(file, separator, protocol, normalizetarget, normalizeinp
             methods = map(x->LearningMethod(Classifier(), (getfield(x,i) for i in fieldnames(x)[2:end])...), methods)
         else # predictiontask == :SURVIVAL
             methods = map(x->LearningMethod(Survival(), (getfield(x,i) for i in fieldnames(x)[2:end])...), methods)
-        end        
+        end
         if predictiontask == :REGRESSION && normalizetarget
             regressionvalues = globaldata[:REGRESSION]
             minval = minimum(regressionvalues)
@@ -172,15 +174,15 @@ function run_experiment(file, separator, protocol, normalizetarget, normalizeinp
         end
         initiate_workers()
         if typeof(protocol) == Float64 || protocol == :test
-            results = run_split(protocol,predictiontask,methods)
+            results = run_split(protocol,methods)
             result = (predictiontask,file,results)
         elseif typeof(protocol) == Int64 || protocol == :cv
-            results = run_cross_validation(protocol,predictiontask,methods)
+            results = run_cross_validation(protocol,methods)
             result = (predictiontask,file,results)
         else
             throw("Unknown experiment protocol")
         end
-        println("Completed experiment with: $file")
+        typeof(file)==String && println("Completed experiment with: $file")
     end
     return result
 end
@@ -193,10 +195,10 @@ function read_data(file; separator = ',')
     return df
 end
 
-function run_split(testoption,predictiontask,methods)
+function run_split(testoption,methods)
     if typeof(testoption) == Float64
         noexamples = size(globaldata,1)
-        notestexamples = convert(Int,floor(testoption*noexamples))
+        notestexamples = floor(Int,testoption*noexamples)
         notrainingexamples = noexamples-notestexamples
         tests = shuffle([trues(notestexamples);falses(notrainingexamples)])
         if ~(:TEST in names(globaldata))
@@ -215,64 +217,43 @@ function run_split(testoption,predictiontask,methods)
     end
     update_workers()
     nocoworkers = nprocs()-1
-    # MOH FIXME: At this point you should know that method result to expect
+    numThreads = Threads.nthreads()
+    time = 0
     methodresults = Array(Any,length(methods))
-    origseed = rand(1:1000_000_000)
+    origseed = rand(1:1000_000_000) #FIXME: randomizing the random seed doesn't help
     for m = 1:length(methods)
+        results = Array{Any,1}()
         srand(origseed) #NOTE: To remove configuration order dependance
-        if nocoworkers > 0
-            notrees = [div(methods[m].notrees,nocoworkers) for i=1:nocoworkers]
-            for i = 1:mod(methods[m].notrees,nocoworkers)
-                notrees[i] += 1
-            end
-        else
-            notrees = [methods[m].notrees]
-        end
         if methods[m].modpred
             randomoobs = Array(Int64,notestexamples)
             for i = 1:notestexamples
                 randomoobs[i] = rand(1:notrainingexamples)
             end
         else
-            randomoobs = Array(Int64,0)
+            randomoobs = Array(Int,0)
         end
-        time = @elapsed results = pmap(generate_and_test_trees,[(methods[m],predictiontask,:test,n,rand(1:1000_000_000),randomoobs) for n in notrees])
+        if nocoworkers > 0
+            notrees = getnotrees(methods[m], nocoworkers)
+            time = @elapsed results = pmap(generate_and_test_trees,[(methods[m],:test,n,rand(1:1000_000_000),randomoobs) for n in notrees])
+        elseif numThreads > 1
+            notrees = getnotrees(methods[m], numThreads)
+            results = Array{Any,1}(length(notrees))
+            time = @elapsed Threads.@threads for n in notrees
+                results[Threads.threadid()] = generate_and_test_trees((methods[m],:test,n,rand(1:1000_000_000),randomoobs))
+            end
+        else
+            notrees = [methods[m].notrees]
+            time = @elapsed results = generate_and_test_trees.([(methods[m],:test,n,rand(1:1000_000_000),randomoobs) for n in notrees])
+        end
+
         tic()
-        methodresults[m] = run_split_internal(methods[m], results, time)
+        methodresult = run_split_internal(methods[m], results, time)
+        methodresults[m] = Dict("performance"=>methodresult[1], "predictions"=>methodresult[2])
     end
-    return methodresults
+    return Dict("results"=>methodresults, "testSplit"=>map(i->i ? 1 : 0, globaldata[:TEST]), "type"=>prediction_task(globaldata))
 end
 
-function initiate_workers()
-    pr = Array(Any,nprocs())
-    for i = 2:nprocs()
-        pr[i] = remotecall(load_global_dataset,i)
-    end
-    for i = 2:nprocs()
-        wait(pr[i])
-    end
-end
-
-function load_global_dataset()
-    global globaldata = @fetchfrom(1,globaldata)
-end
-
-function update_workers()
-    pr = Array(Any,nprocs())
-    for i = 2:nprocs()
-        pr[i] = remotecall(update_global_dataset,i)
-    end
-    for i = 2:nprocs()
-        wait(pr[i])
-    end
-end
-
-function update_global_dataset()
-    global globaltests = @fetchfrom(1,globaltests)
-    global globaldata = hcat(globaltests,globaldata)
-end
-
-function run_cross_validation(protocol,predictiontask,methods)
+function run_cross_validation(protocol,methods)
     if typeof(protocol) == Int64
         nofolds = protocol
         folds = collect(1:nofolds)
@@ -313,6 +294,8 @@ function run_cross_validation(protocol,predictiontask,methods)
     end
     update_workers()
     nocoworkers = nprocs()-1
+    numThreads = Threads.nthreads()
+    time = 0
     methodresults = Array(Any,length(methods))
     origseed = rand(1:1000_000_000)
     for m = 1:length(methods)
@@ -321,14 +304,6 @@ function run_cross_validation(protocol,predictiontask,methods)
             conformal = :normalized
         else
             conformal = methods[m].conformal
-        end
-        if nocoworkers > 0
-            notrees = [div(methods[m].notrees,nocoworkers) for i=1:nocoworkers]
-            for i = 1:mod(methods[m].notrees,nocoworkers)
-                notrees[i] += 1
-            end
-        else
-            notrees = [methods[m].notrees]
         end
         if methods[m].modpred
             randomoobs = Array(Any,nofolds)
@@ -341,7 +316,19 @@ function run_cross_validation(protocol,predictiontask,methods)
         else
             randomoobs = Array(Int64,0)
         end
-        time = @elapsed results = pmap(generate_and_test_trees,[(methods[m],predictiontask,:cv,n,rand(1:1000_000_000),randomoobs) for n in notrees])
+        if nocoworkers > 0
+            notrees = getnotrees(methods[m], nocoworkers)
+            time = @elapsed results = pmap(generate_and_test_trees,[(methods[m],:cv,n,rand(1:1000_000_000),randomoobs) for n in notrees])
+        elseif numThreads > 1
+            notrees = getnotrees(methods[m], numThreads)
+            results = Array{Any,1}(length(notrees))
+            time = @elapsed Threads.@threads for n in notrees
+                results[Threads.threadid()] = generate_and_test_trees((methods[m],:cv,n,rand(1:1000_000_000),randomoobs))
+            end
+        else
+            notrees = [methods[m].notrees]
+            time = @elapsed results = generate_and_test_trees.([(methods[m],:cv,n,rand(1:1000_000_000),randomoobs) for n in notrees])
+        end
         tic()
         allmodelsizes = try
             [result[1] for result in results]
@@ -359,37 +346,10 @@ function run_cross_validation(protocol,predictiontask,methods)
         for r = 2:length(allmodelsizes)
             modelsizes += allmodelsizes[r]
         end
-        methodresults[m] = run_cross_validation_internal(methods[m], results, modelsizes, nofolds, conformal, time)
+        methodresult = run_cross_validation_internal(methods[m], results, modelsizes, nofolds, conformal, time)
+        methodresults[m] = Dict("performance"=>methodresult[1], "predictions"=>methodresult[2])
     end
-    return methodresults
-end
-
-"""
-Infers the prediction task from the data
-"""
-function prediction_task(method::LearningMethod{Regressor})
-    return :REGRESSION
-end
-
-function prediction_task(method::LearningMethod{Classifier})
-    return :CLASS
-end
-
-function prediction_task(method::LearningMethod{Survival})
-    return :SURVIVAL
-end
-
-function prediction_task(data)
-    allnames = names(data)
-    if :CLASS in allnames
-        return :CLASS
-    elseif :REGRESSION in allnames
-        return :REGRESSION
-    elseif :TIME in allnames && :EVENT in allnames
-        return :SURVIVAL
-    else
-        return :NONE
-    end
+    return Dict("results"=>methodresults, "type"=>prediction_task(globaldata))
 end
 
 ##
@@ -399,7 +359,8 @@ function load_data(source; separator = ',')
     if typeof(source) == String
         global globaldata = read_data(source, separator=separator) # Made global to allow access from workers
         initiate_workers()
-        println("Data loaded")
+        # println("Data loaded")
+        println("Data: $(source)")
     elseif typeof(source) == DataFrame
         if ~(:WEIGHT in names(source))
             global globaldata = hcat(source,DataFrame(WEIGHT = ones(size(source,1))))
@@ -412,6 +373,5 @@ function load_data(source; separator = ',')
         println("Data can only be loaded from text files or DataFrames")
     end
 end
-
 
 end

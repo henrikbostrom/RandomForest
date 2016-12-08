@@ -1,72 +1,5 @@
-RandomForest v. 0.0.10
-======================
-
-Copyright 2016 Henrik Boström
-
-A <a href="http://julialang.org/">Julia</a> package that implements random forests for classification, regression and survival analysis with conformal prediction.
-[NOTE: survival analysis under development]
-
-There are two basic ways of working with the package:
-
-- running an experiment with multiple datasets, possibly comparing multiple methods,
-  i.e., random forests with different parameter settings, or
-
-- working with a single dataset, to evaluate, generate, store, load or
-  apply a random forest
-
-All named arguments below are optional, while the others are mandatory.
-
-The classification datasets included in uci.zip have been downloaded and adapted from:
-
-Lichman, M. (2013). UCI Machine Learning Repository [http://archive.ics.uci.edu/ml]. Irvine, CA: University of California, School of Information and Computer Science.
-
-The regression datasets included in regression.zip have been downloaded and adapted from the above source and from:
-
-Rasmussen,  C.E.,  Neal,  R.M.,  Hinton,  G.,  van  Camp,  D.,  Revow,  M.,  Ghahramani, Z., Kustra, R., and Tibshirani, R. (1996) Delve data for evaluating learning in valid experiments [http://www.cs.toronto.edu/~delve/data/datasets.html]
-
-The survival datasets included in survival.zip have been downloaded and adapted from:
-
-Statistical Software Information, University of Massachusetts Amherst, Index of Survival Analysis Datasets,
-[https://www.umass.edu/statdata/statdata/stat-survival.html]
-
-
-To install the package
-----------------------
-
-Clone or download the package to some suitable directory.
-
-From this directory, start Julia (which can be downloaded from http://julialang.org/) at a command prompt:
-
-    julia
-
-Install a requested package:
-
-    julia> Pkg.add("DataFrames")
-
-Try to load the RandomForest package (assuming that the current directory is in your load path,
-e.g., add "push!(LOAD_PATH, pwd())" to the file ".juliarc.jl" in your home directory):
-
-    julia> using RandomForest
-
-Then exit by:
-
-    julia> exit()
-
-To use the package
-------------------
-
-Start Julia at a command prompt:
-
-    julia -p <N>
-
-where \<N\> is the number of cores you would like the code to be executed on, e.g., 24.
-
-Load the package:
-
-    julia> using RandomForests
-
 To run an experiment
---------------------
+========
 
 An experiment is run by calling experiment(...) in the following way:
 
@@ -174,9 +107,10 @@ The arguments should be on the following format:
                    :normalized means that each region size is dependent on the spread
                     of predictions among the individual trees
 
-- - - - -
+-----
 
-    Examples:
+Examples
+---------
 
     The call experiment(files = "uci") is hence the same as
 
@@ -186,7 +120,7 @@ The arguments should be on the following format:
 
     julia> experiment(files = "uci", methods = [forest(), forest(notrees = 1000, maxdepth = 10)])
 
-- - - - -
+-----
 
 A dataset should have the following format:
 
@@ -231,7 +165,7 @@ Example:
     3,1.51618,13.53,3.55,1.54,72.99,0.39,7.78,0.00,0.00,1
     ...
 
-- - - - -
+-----
 
 For classification tasks the following measures are reported:
 
@@ -263,122 +197,3 @@ For regression tasks the following measures are reported:
         Region     - average size of prediction region
         Size       - the number of nodes in the forest
         Time       - the total time taken for both training and testing
-
-To work with a single dataset
------------------------------
-
-To load a dataset from a file or dataframe:
-
-    julia> load_data(<filename>, separator = <separator>)
-    julia> load_data(<dataframe>)
-
-The arguments should be on the following format:
-
-    filename : name of a file containing a dataset (see format requirements above)
-    separator : single character (default = ',')
-    dataframe : a dataframe where the column labels should be according to the format requirements above
-
-- - - - -
-
-To get a description of a loaded dataset:
-
-    julia> describe_data()
-
-- - - - -
-
-To evaluate a method or several methods for generating a random forest:
-
-    julia> evaluate_method(method = forest(...), protocol = <protocol>)
-    julia> evaluate_methods(methods = [forest(...), ...], protocol = <protocol>)
-
-The arguments should be on the following format:
-
-    method : a call to forest(...) as explained above (default = forest())
-    methods : a list of calls to forest(...) as explained above (default = [forest()])
-    protocol : integer, float, :cv or :test as explained above (default = 10)
-
-- - - - -
-
-To generate a model from the loaded dataset:
-
-    julia> m = generate_model(method = forest(...))                         
-
-The argument should be on the following format:
-
-    method : a call to forest(...) as explained above (default = forest())
-
-- - - - -
-
-To get a description of a model:
-
-    julia> describe_model(<model>)                                   
-
-The argument should be on the following format:
-
-    model : a generated or loaded model (see generate_model and load_model)
-
-- - - - -
-
-To store a model in a file:
-
-    julia> store_model(<model>, <file>)                              
-
-The arguments should be on the following format:
-
-    model : a generated or loaded model (see generate_model and load_model)
-    file : name of file to store model in
-
-- - - - -
-
-To load a model from file::
-
-    julia> rf = load_model(<file>)                                  
-
-The argument should be on the following format:
-
-    file : name of file in which a model has been stored
-
-- - - - -
-
-To apply a model to loaded data:
-
-    julia> apply_model(<model>, confidence = <confidence>)
-
-The argument should be on the following format:
-
-    model : a generated or loaded model (see generate_model and load_model)
-    confidence : a float between 0 and 1 or :std (default = :std)
-                 - probability of including the correct label in the prediction region
-                 - :std means employing the same confidence level as used during training
-
-Summary of all functions
-------------------------
-
-All named arguments are optional, while the others are mandatory.
-
-To run an experiment:
-
-        experiment(files = <files>, separator = <separator>, protocol = <protocol>,
-                   methods = [<method>, ...])
-
-To work with a single dataset:
-
-        load_data(<filename>, separator = <separator>)
-
-        load_data(<dataframe>)
-
-        describe_data(<dataframe>)
-
-        evaluate_method(method = forest(...), protocol = <protocol>)
-
-        evaluate_methods(methods = [forest(...), ...], protocol = <protocol>)
-
-        m = generate_model(method = forest(...))                
-
-        describe_model(<model>)                                   
-
-        store_model(<model>, <file>)                              
-
-        m = load_model(<file>)                                  
-
-        apply_model(<model>, confidence = <confidence>)
