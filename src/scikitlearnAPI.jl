@@ -17,7 +17,10 @@ function fit!(model::PredictionModel, data::DataFrame, features, labels)
     model.conformal = generated_model.conformal
 end
 
-# standard array. Note we should have the library use this by default and not dataframes
+function fit!(model::PredictionModel{Survival}, X::Matrix, time::Vector, event::Vector)
+    fit!(model, X, hcat(time, event))
+end
+
 function fit!(model::PredictionModel, X::Matrix, y::Vector)
     global globaldata = prepareDF(model, X, y)
     initiate_workers()
@@ -62,8 +65,11 @@ function prepareDF(model::PredictionModel, X::Matrix, y::Vector)
     #probably not required the class / regression column
     if (typeof(model.method.learningType) == Classifier)
         df[:CLASS] = y
-    else 
+    else if (typeof(model.method.learningType) == Regressor)
         df[:REGRESSION] = y
+    else
+        df[:TIME] = y[:,1]
+        df[:EVENT] = y[:,2]
     end
     return df
 end
