@@ -65,7 +65,7 @@ function prepareDF(model::PredictionModel, X::Matrix, y::Vector)
     #probably not required the class / regression column
     if (typeof(model.method.learningType) == Classifier)
         df[:CLASS] = y
-    else if (typeof(model.method.learningType) == Regressor)
+    elseif (typeof(model.method.learningType) == Regressor)
         df[:REGRESSION] = y
     else
         df[:TIME] = y[:,1]
