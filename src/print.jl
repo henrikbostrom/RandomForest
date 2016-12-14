@@ -14,7 +14,7 @@ function present_results(results,methods;ignoredatasetlabel = false)
         for datasetno = 1:length(results)
             for methodno = 1:length(methods)
                 for resultno = 1:length(resultlabels)
-                    methodresults[datasetno,methodno,resultno] = getfield(results[datasetno][3][methodno], resultlabels[resultno])
+                    methodresults[datasetno,methodno,resultno] = getfield(results[datasetno][3]["results"][methodno]["performance"], resultlabels[resultno])
                 end
             end
         end

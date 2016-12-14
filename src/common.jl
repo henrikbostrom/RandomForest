@@ -132,6 +132,10 @@ function make_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,prediction,
     end
 end
 
+function getDfArrayData(da)
+    return typeof(da) <: Array ? da : da.data
+end
+
 # AMG: this is for running a single file. Note: we should allow data to be passed as argument in the next
 # three functions !!!
 function evaluate_method(;method = forest(),protocol = 10)

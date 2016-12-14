@@ -4,8 +4,8 @@ function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Array{Int,1},
     srand(randseed)
     trainingdata = curdata
     trainingrefs = collect(1:size(curdata,1))
-    trainingweights = trainingdata[:WEIGHT].data
-    regressionvalues = trainingdata[:REGRESSION].data
+    trainingweights = getDfArrayData(trainingdata[:WEIGHT])
+    regressionvalues = getDfArrayData(trainingdata[:REGRESSION])
     oobpredictions = Array(Array{Float64,1},size(curdata,1))
     for i = 1:size(curdata,1)
         oobpredictions[i] = zeros(3)
@@ -72,7 +72,7 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Regressor
     newdata = Array(Array,length(variables))
     for v = 1:length(variables)
         if isempty(missingvalues[v])
-            newdata[v] = trainingdata[variables[v]].data
+            newdata[v] = getDfArrayData(trainingdata[variables[v]])
         end
     end
     return newdata
@@ -97,7 +97,7 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Regresso
                     values[i] =  newvalue # NOTE: The variable (and type) should be removed
                 end
             end
-            newtrainingdata[v] = values.data
+            newtrainingdata[v] = getDfArrayData(values)
         end
     end
 end
@@ -113,6 +113,7 @@ function replacements_for_missing_values!(method::LearningMethod{Regressor},newt
 end
 
 function generate_tree(method::LearningMethod{Regressor},trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,oobpredictions; varimp = false)
+    zeroweights = []
     if method.bagging
         newtrainingweights = zeros(length(trainingweights))
         if typeof(method.bagsize) == Int
@@ -155,58 +156,26 @@ function generate_tree(method::LearningMethod{Regressor},trainingrefs,trainingwe
     return model, variableimportance, noleafs, noirregularleafs, zeroweights
 end
 
-function make_loo_prediction(tree,testdata,exampleno,prediction)
-    nodeno = 1
-    nonterminal = true
-    emptyleaf = false
-    while nonterminal
-        node = tree[nodeno]
-        if node[1] == :LEAF
-            prediction = emptyleaf,node[2]
-            nonterminal = false
-        else
-            varno, splittype, splitpoint, splitweight = node[1]
-            examplevalue = testdata[varno][exampleno]
-            if splittype == :NUMERIC
-                if examplevalue <= splitpoint
-                    leftchild = tree[node[2]]
-                    if leftchild[1] == :LEAF && leftchild[2][1] < 2.0
-                        nodeno = node[3]
-                        emptyleaf = true
-                    else
-                        nodeno = node[2]
-                    end
-                else
-                    rightchild = tree[node[3]]
-                    if rightchild[1] == :LEAF && rightchild[2][1] < 2.0
-                        nodeno = node[2]
-                        emptyleaf = true
-                    else
-                        nodeno = node[3]
-                    end
-                end
-            else
-                if examplevalue == splitpoint
-                    leftchild = tree[node[2]]
-                    if leftchild[1] == :LEAF && leftchild[2][1] < 2.0
-                        nodeno = node[3]
-                        emptyleaf = true
-                    else
-                        nodeno = node[2]
-                    end
-                else
-                    rightchild = tree[node[3]]
-                    if rightchild[1] == :LEAF && rightchild[2][1] < 2.0
-                        nodeno = node[2]
-                        emptyleaf = true
-                    else
-                        nodeno = node[3]
-                    end
-                end
+function make_loo_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,prediction,emptyleaf=false)
+    if node.nodeType == :LEAF
+        return emptyleaf, node.prediction
+    else
+        examplevalue = testdata[node.varno][exampleno]
+        if node.splittype == :NUMERIC
+            nextnode=(examplevalue <= node.splitpoint) ? node.leftnode: node.rightnode
+            if (nextnode.nodeType == :LEAF && nextnode.prediction[1] < 2.0)
+                nextnode = (examplevalue > node.splitpoint) ? node.leftnode: node.rightnode
+                emptyleaf = true
+            end
+        else #Catagorical
+            nextnode=(get(examplevalue) == node.splitpoint) ? node.leftnode: node.rightnode
+            if (nextnode.nodeType == :LEAF && nextnode.prediction[1] < 2.0)
+                nextnode = (examplevalue != node.splitpoint) ? node.leftnode: node.rightnode
+                emptyleaf = true
             end
         end
+        return make_loo_prediction(nextnode,testdata,exampleno,prediction,emptyleaf)
     end
-    return prediction
 end
 
 function default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,method::LearningMethod{Regressor})
@@ -250,7 +219,7 @@ function make_leaf(node,method::LearningMethod{Regressor}, parenttrainingweights
     ## else
     ##     prediction = defaultprediction
     ## end
-    return prediction
+    # return prediction
 end
 
 function find_best_split(node,trainingdata,variables,types,method::LearningMethod{Regressor})
@@ -352,7 +321,7 @@ function evaluate_regression_numeric_variable_randval(bestsplit,varno,variable,s
 end
 
 function evaluate_regression_numeric_variable_allvals(bestsplit,varno,variable,splittype,regressionvalues,origregressionsum,origweightsum,origmean,allvalues,trainingweights,method)
-    numericvalues = Dict{typeof(allvalues[1]).parameters[1], Array{Float64,1}}()
+    numericvalues = Dict{typeof(allvalues[1]), Array{Float64,1}}()
     for i = 1:length(allvalues)
         numericvalues[allvalues[i]] = get(numericvalues,allvalues[i],[0,0]) .+ [trainingweights[i]*regressionvalues[i],trainingweights[i]]
     end

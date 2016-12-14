@@ -7,6 +7,7 @@ function run_split_internal(method::LearningMethod{Survival}, results, time)
     end
     nopredictions = size(predictions,1)
     predictions = [predictions[i][2]/predictions[i][1] for i = 1:nopredictions]
+    prediction_results = Array(Tuple,size(predictions,1))
     if method.conformal == :default
         conformal = :normalized
     else
@@ -123,6 +124,7 @@ function run_split_internal(method::LearningMethod{Survival}, results, time)
         else
             errorrange = largestrange
         end
+        prediction_results = [(p,[p-errorrange/2,p+errorrange/2]) for p in predictions]
     elseif conformal == :normalized
         if thresholdindex >= 1
             alpha = sort(alphas, rev=true)[thresholdindex]
@@ -234,6 +236,11 @@ function run_split_internal(method::LearningMethod{Survival}, results, time)
         ##         end
         ## end
         end
+        
+        if conformal != :std
+            prediction_results[i] = (predictions[i],[predictions[i]-errorrange/2,predictions[i]+errorrange/2])
+        end
+        
 #        println("correct: $(correctvalues[i]) predicted: $(predictions[i]) error: $(error) errorrange/2: $(errorrange/2)")
         rangesum += errorrange
         if error <= errorrange/2
@@ -251,7 +258,7 @@ function run_split_internal(method::LearningMethod{Survival}, results, time)
     avmse = totalsquarederror/totalnotrees
     varmse = avmse-mse
     extratime = toq()
-    return SurvivalResult(mse,corrcoeff,avmse,varmse,esterr,absesterr,validity,region,modelsize,noirregularleafs,time+extratime)
+    return SurvivalResult(mse,corrcoeff,avmse,varmse,esterr,absesterr,validity,region,modelsize,noirregularleafs,time+extratime), prediction_results
 end
 
 
@@ -269,6 +276,7 @@ function run_cross_validation_internal(method::LearningMethod{Survival}, results
     nopredictions = size(globaldata,1)
     testexamplecounter = 0
     predictions = [predictions[i][2]/predictions[i][1] for i = 1:nopredictions]
+    prediction_results = Array(Tuple,size(predictions,1))
     mse = Array(Float64,nofolds)
     corrcoeff = Array(Float64,nofolds)
     avmse = Array(Float64,nofolds)
@@ -395,6 +403,7 @@ function run_cross_validation_internal(method::LearningMethod{Survival}, results
             else
                 errorrange = largestrange
             end
+            prediction_results[testexamplecounter+1:testexamplecounter:length(correctvalues)] = [(p,[p-errorrange/2,p+errorrange/2]) for p in predictions[testexamplecounter+1:testexamplecounter:length(correctvalues)]]
         elseif conformal == :normalized
             if thresholdindex >= 1
                 alpha = sort(alphas,rev=true)[thresholdindex]
@@ -510,7 +519,11 @@ function run_cross_validation_internal(method::LearningMethod{Survival}, results
             ##         end
             ##     end
             end
-
+            
+            if conformal != :std
+                prediction_results[testexamplecounter+i] = (predictions[testexamplecounter+i],[predictions[testexamplecounter+i]-errorrange/2,predictions[testexamplecounter+i]+errorrange/2])
+            end
+            
             rangesum += errorrange
             if error <= errorrange/2
                 noinregion += 1
@@ -541,7 +554,7 @@ function run_cross_validation_internal(method::LearningMethod{Survival}, results
     end
     extratime = toq()
     return SurvivalResult(mean(mse),mean(corrcoeff),mean(avmse),mean(varmse),mean(esterr),mean(absesterr),mean(validity),mean(region),mean(modelsizes),mean(noirregularleafs),
-                          time+extratime)
+                          time+extratime), prediction_results
 end
 
 ##
@@ -555,16 +568,16 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Survival},Symbo
     if experimentype == :test
         model,oobpredictions,variableimportance, modelsize, noirregularleafs, randomclassoobs, oob = generate_trees((method,Int64[],notrees,randseed);curdata=globaldata[globaldata[:TEST] .== false,:], randomoobs=randomoobs, varimparg = false)
         testdata = globaldata[globaldata[:TEST] .== true,:]
-        testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,trainingdata)
-        newtestdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
+        testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
+        newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
         replacements_for_missing_values!(method,newtestdata,testdata,variables,types,testmissingvalues,testnonmissingvalues)
-        correctvalues = testdata[:EVENT]
-        timevalues = testdata[:TIME]
+        correctvalues = getDfArrayData(testdata[:EVENT])
+        timevalues = getDfArrayData(testdata[:TIME])
         nopredictions = size(testdata,1)
         predictions = Array(Array{Float64,1},nopredictions)
         squaredpredictions = Array(Any,nopredictions)
         totalnotrees,squarederror = make_prediction_analysis(method, model, newtestdata, randomclassoobs, oob, predictions, squaredpredictions, correctvalues,timevalues)
-        return (modelsize,predictions,squarederrors,oobpredictions,squaredpredictions,noirregularleafs)
+        return (modelsize,predictions,[totalnotrees;squarederror],oobpredictions,squaredpredictions,noirregularleafs)
     else # experimentype == :cv
         folds = sort(unique(globaldata[:FOLD]))
         nofolds = length(folds)
@@ -584,8 +597,8 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Survival},Symbo
             testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
             newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
             replacements_for_missing_values!(method,newtestdata,testdata,variables,types,testmissingvalues,testnonmissingvalues)
-            correctvalues = testdata[:EVENT]
-            timevalues = testdata[:TIME]
+            correctvalues = getDfArrayData(testdata[:EVENT])
+            timevalues = getDfArrayData(testdata[:TIME])
             totalnotrees,squarederror = make_prediction_analysis(method, model, newtestdata, randomclassoobs, oob, predictions, squaredpredictions, correctvalues,timevalues; predictionexamplecounter=testexamplecounter)
             testexamplecounter += size(testdata,1)
 
@@ -606,14 +619,14 @@ function make_prediction_analysis(method::LearningMethod{Survival}, model, newte
       for t = 1:length(model)
           if method.modpred
               if oob[t][randomoobs[i]]
-                  treeprediction = make_survival_prediction(model[t],newtestdata,i,timevalues,0)
+                  treeprediction = make_survival_prediction(model[t],newtestdata,i,timevalues[i],0)
                   prediction += treeprediction
                   squaredprediction += treeprediction^2
                   squarederror += (treeprediction-correctvalue)^2
                   nosampledtrees += 1
               end
           else
-              treeprediction = make_survival_prediction(model[t],newtestdata,i,timevalues,0)
+              treeprediction = make_survival_prediction(model[t],newtestdata,i,timevalues[i],0)
               prediction += treeprediction
               squaredprediction += treeprediction^2
               squarederror += (treeprediction-correctvalue)^2

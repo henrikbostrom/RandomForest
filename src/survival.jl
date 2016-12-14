@@ -4,10 +4,10 @@ function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},I
     srand(randseed)
     trainingdata = curdata
     trainingrefs = collect(1:size(trainingdata,1))
-    trainingweights = trainingdata[:WEIGHT]
+    trainingweights = getDfArrayData(trainingdata[:WEIGHT])
     regressionvalues = []
-    timevalues = trainingdata[:TIME]
-    eventvalues = trainingdata[:EVENT]
+    timevalues = getDfArrayData(trainingdata[:TIME])
+    eventvalues = getDfArrayData(trainingdata[:EVENT])
     oobpredictions = Array(Array{Float64,1},size(curdata,1))
     for i = 1:size(curdata,1)
         oobpredictions[i] = zeros(3)
@@ -72,7 +72,7 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Survival}
     newdata = Array(Array,length(variables))
     for v = 1:length(variables)
         if isempty(missingvalues[v])
-            newdata[v] = trainingdata[variables[v]].data
+            newdata[v] = getDfArrayData(trainingdata[variables[v]])
         end
     end
     return newdata
@@ -98,7 +98,7 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Survival
                     values[i] =  newvalue # NOTE: The variable (and type) should be removed
                 end
             end
-            newtrainingdata[v] = values.data
+            newtrainingdata[v] = getDfArrayData(values)
         end
     end
 end
@@ -115,6 +115,7 @@ function replacements_for_missing_values!(method::LearningMethod{Survival},newte
 end
 
 function generate_tree(method::LearningMethod{Survival},trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,oobpredictions; varimp = false)
+    zeroweights = []
     if method.bagging
         newtrainingweights = zeros(length(trainingweights))
         if typeof(method.bagsize) == Int
@@ -140,12 +141,13 @@ function generate_tree(method::LearningMethod{Survival},trainingrefs,trainingwei
         model, variableimportance, noleafs, noirregularleafs = build_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,varimp)
         for i = 1:size(trainingrefs,1)
             trainingref = trainingrefs[i]
-            emptyleaf, leafstats = make_loo_prediction(model,trainingdata,trainingref,0)
-            if emptyleaf
-                oobprediction = leafstats[2]/leafstats[1]
-            else
-                oobprediction = (leafstats[2]-regressionvalues[i])/(leafstats[1]-1)
-            end
+            # emptyleaf, leafstats = make_loo_prediction(model,trainingdata,trainingref,0;time=timevalues[i])
+            # if emptyleaf
+            #     oobprediction = leafstats[2]/leafstats[1]
+            # else
+            #     oobprediction = (leafstats[2]-eventvalues[i])/(leafstats[1]-1)
+            # end
+            oobprediction = make_survival_prediction(model,trainingdata,trainingref,timevalues[trainingref],0)
             oobpredictions[trainingref] += [1,oobprediction,oobprediction^2]
         end
     end
@@ -312,9 +314,11 @@ function find_best_split(node,trainingdata,variables,types,method::LearningMetho
     end
     bestsplit = (-Inf,0,:NA,:NA,0.0)
     origweightsum = sum(sampletrainingweights)
+    origeventsum = sum(sampleeventvalues .* sampletrainingweights)
+    origmean = origeventsum/origweightsum
     for v = 1:length(sampleselection)
         bestsplit = evaluate_variable_survival(bestsplit,sampleselection[v],variables[sampleselection[v]],types[sampleselection[v]],sampletrainingrefs,sampletrainingweights,
-                                               origweightsum,sampletimevalues,sampleeventvalues,trainingdata,method)
+                                               origweightsum,origeventsum,origmean,sampletimevalues,sampleeventvalues,trainingdata,method)
     end
     splitvalue, varno, variable, splittype, splitpoint = bestsplit
     if variable == :NA
@@ -324,19 +328,19 @@ function find_best_split(node,trainingdata,variables,types,method::LearningMetho
     end
 end
 
-function evaluate_variable_survival(bestsplit,varno,variable,splittype,trainingrefs,trainingweights,origweightsum,timevalues,eventvalues,trainingdata,method)
+function evaluate_variable_survival(bestsplit,varno,variable,splittype,trainingrefs,trainingweights,origweightsum,origeventsum,origmean,timevalues,eventvalues,trainingdata,method)
     allvalues = trainingdata[varno][trainingrefs]
     if splittype == :CATEGORIC
         if method.randval
             bestsplit = evaluate_survival_categoric_variable_randval(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,method)
         else
-            bestsplit = evaluate_survival_categoric_variable_allvals(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,method)
+            bestsplit = evaluate_survival_categoric_variable_allvals(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,origmean,method)
         end
     else # splittype == :NUMERIC
         if method.randval
             bestsplit = evaluate_survival_numeric_variable_randval(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,method)
         else
-            bestsplit = evaluate_survival_numeric_variable_allvals(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,method)
+            bestsplit = evaluate_survival_numeric_variable_allvals(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,origeventsum,origmean,method)
         end
 
     end
@@ -395,7 +399,7 @@ function get_cumulative_hazard(cumhazardfunction,timevalue)
     return cumhazard
 end
 
-function evaluate_survival_categoric_variable_allvals(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,method) # NOTE: to be fixed
+function evaluate_survival_categoric_variable_allvals(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,origmean,method) # NOTE: to be fixed
     keys = unique(allvalues)
     for key in keys
         leftregressionsum = 0.0
@@ -403,10 +407,10 @@ function evaluate_survival_categoric_variable_allvals(bestsplit,varno,variable,s
         for i = 1:length(allvalues)
             if allvalues[i] == key
                 leftweightsum += trainingweights[i]
-                leftregressionsum += trainingweights[i]*regressionvalues[i]
+                leftregressionsum += trainingweights[i]*eventvalues[i]
             end
         end
-        rightregressionsum = origregressionsum-leftregressionsum
+        rightregressionsum = origeventsum,-leftregressionsum
         rightweightsum = origweightsum-leftweightsum
         if leftweightsum >= method.minleaf && rightweightsum >= method.minleaf
             leftmean = leftregressionsum/leftweightsum
@@ -456,11 +460,11 @@ function evaluate_survival_numeric_variable_randval(bestsplit,varno,variable,spl
     return bestsplit
 end
 
-function evaluate_survival_numeric_variable_allvals(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,method) # NOTE: to be fixed!
+function evaluate_survival_numeric_variable_allvals(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,origeventsum,origmean,method) # NOTE: to be fixed!
     #NOTE: Identical to the regression version evaluate_regression_numeric_variable_allvals
-    numericvalues = Dict{typeof(allvalues).parameters[1], Array{Float64,1}}()
+    numericvalues = Dict{typeof(allvalues[1]), Array{Float64,1}}()
     for i = 1:length(allvalues)
-        numericvalues[allvalues[i]] = get(numericvalues,allvalues[i],[0,0]) .+ [trainingweights[i]*regressionvalues[i],trainingweights[i]]
+        numericvalues[allvalues[i]] = get(numericvalues,allvalues[i],[0,0]) .+ [trainingweights[i]*eventvalues[i],trainingweights[i]]
     end
     regressionsum = 0.0
     weightsum = 0.0
@@ -475,7 +479,7 @@ function evaluate_survival_numeric_variable_allvals(bestsplit,varno,variable,spl
         weightandregressionsum = numericvalues[sortedkeys[s]]
         leftregressionsum += weightandregressionsum[1]
         leftweightsum += weightandregressionsum[2]
-        rightregressionsum = origregressionsum-leftregressionsum
+        rightregressionsum = origeventsum-leftregressionsum
         rightweightsum = origweightsum-leftweightsum
         if leftweightsum >= method.minleaf && rightweightsum >= method.minleaf
             leftmean = leftregressionsum/leftweightsum
@@ -533,8 +537,8 @@ function make_survival_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,ti
         # varno, splittype, splitpoint, splitweight = node[1]
         examplevalue::Nullable{S} = testdata[node.varno][exampleno]
         if isnull(examplevalue)
-            prediction+=make_survival_prediction(node.leftnode,testdata,exampleno,prediction,weight*node.leftweight)
-            prediction+=make_survival_prediction(node.rightnode,testdata,exampleno,prediction,weight*(1-node.leftweight))
+            prediction =make_survival_prediction(node.leftnode,testdata,exampleno,time,prediction,weight*node.leftweight)
+            prediction =make_survival_prediction(node.rightnode,testdata,exampleno,time,prediction,weight*(1-node.leftweight))
             return prediction
         else
             if node.splittype == :NUMERIC
@@ -542,7 +546,7 @@ function make_survival_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,ti
             else #Catagorical
               nextnode=(get(examplevalue) == node.splitpoint)? node.leftnode: node.rightnode
             end
-            return make_survival_prediction(nextnode,testdata,exampleno,prediction,weight)
+            return make_survival_prediction(nextnode,testdata,exampleno,time,prediction,weight)
         end
     end
 end

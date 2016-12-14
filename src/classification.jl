@@ -11,7 +11,7 @@ function generate_trees(Arguments::Tuple{LearningMethod{Classifier},DataArray,In
     for c = 1:noclasses
         trainingdata[c] = curdata[curdata[:CLASS] .== classes[c],:]
         trainingrefs[c] = collect(1:size(trainingdata[c],1))
-        trainingweights[c] = trainingdata[c][:WEIGHT].data
+        trainingweights[c] = getDfArrayData(trainingdata[c][:WEIGHT])
         oobpredictions[c] = Array(Array{Float64,1},size(trainingdata[c],1))
         for i = 1:size(trainingdata[c],1)
             oobpredictions[c][i] = emptyprediction
@@ -87,7 +87,7 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Classifie
         newdata[c] = Array(Array,length(variables))
         for v = 1:length(variables)
             if isempty(missingvalues[c][v])
-                newdata[c][v] = trainingdata[c][variables[v]].data
+                newdata[c][v] = getDfArrayData(trainingdata[c][variables[v]])
             end
         end
     end
@@ -117,7 +117,7 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Classifi
                         values[i] =  newvalue # NOTE: The variable (and type) should be removed
                     end
                 end
-                newtrainingdata[c][v] = values.data
+                newtrainingdata[c][v] = getDfArrayData(values)
             end
         end
     end
@@ -561,7 +561,6 @@ function apply_model(model::PredictionModel{Classifier}; confidence = :std)
         predictions += apply_trees((model.method,model.classes,model.trees))
     end
     predictions = predictions/model.method.notrees
-    results = Array(Any,size(predictions,1))
     noclasses = length(model.classes)
     if model.conformal[1] == :std
         if confidence == :std
@@ -575,16 +574,7 @@ function apply_model(model::PredictionModel{Classifier}; confidence = :std)
                 alpha = -Inf
             end
         end
-        for i = 1:size(predictions,1)
-            class = model.classes[indmax(predictions[i])]
-            plausible = typeof(class)[]
-            for j=1:noclasses
-                if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= alpha
-                    push!(plausible,model.classes[j])
-                end
-            end
-            results[i] = (class,plausible,predictions[i])
-        end
+        classalpha = fill(alpha, noclasses)
     elseif model.conformal[1] == :classcond
         if confidence == :std
             classalpha = model.conformal[2]
@@ -600,16 +590,21 @@ function apply_model(model::PredictionModel{Classifier}; confidence = :std)
                 end
             end
         end
-        for i = 1:size(predictions,1)
-            class = model.classes[indmax(predictions[i])]
-            plausible = typeof(class)[]
-            for j=1:noclasses
-                if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= classalpha[j]
-                    push!(plausible,model.classes[j])
-                end
+    end
+    return get_predictions_classification(model.classes, predictions, classalpha)
+end
+
+function get_predictions_classification(classes, predictions, classalpha)
+    results = Array(Any,size(predictions,1))
+    for i = 1:size(predictions,1)
+        class = classes[indmax(predictions[i])]
+        plausible = typeof(class)[]
+        for j=1:length(classes)
+            if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= classalpha[j]
+                push!(plausible,classes[j])
             end
-            results[i] = (class,plausible,predictions[i])
         end
+        results[i] = (class,plausible,predictions[i])
     end
     return results
 end
