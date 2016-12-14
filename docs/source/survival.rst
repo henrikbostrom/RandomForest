@@ -1,10 +1,12 @@
 .. _survival.rst:
 
 survival.rst
-----------------------------------------------------
+=========================================
 
 .. DO NOT EDIT: this file is generated from Julia source.
 
+apply_model 
+^^^^^^^^^^^^
 To apply a model to loaded data:
 
 .. code-block:: julia
@@ -19,4 +21,7 @@ The argument should be on the following format:
     confidence : a float between 0 and 1 or :std (default = :std)
                  - probability of including the correct label in the prediction region
                  - :std means employing the same confidence level as used during training
+
+
+---------
 

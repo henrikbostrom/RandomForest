@@ -14,12 +14,12 @@ Contents:
    Introduction
    Installation
    Usage
-   runExperiment
-   singleDataset
-   Summary
    RandomForest
+   common
    survival
    print
+   Summary
+   
 
 
 Indices and tables

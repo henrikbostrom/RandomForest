@@ -329,7 +329,7 @@ function store_model(model::PredictionModel,file)
     println("Model stored")
 end
 """
-To load a model from file::
+To load a model from file:
 
     julia> rf = load_model(<file>)                                  
 
