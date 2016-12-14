@@ -572,7 +572,7 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Regressor},Symb
         testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
         newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
         replacements_for_missing_values!(method,newtestdata,testdata,variables,types,testmissingvalues,testnonmissingvalues)
-        correctvalues = testdata[:REGRESSION]
+        correctvalues = getDfArrayData(testdata[:REGRESSION])
         nopredictions = size(testdata,1)
         predictions = Array(Array{Float64,1},nopredictions)
         squaredpredictions = Array(Any,nopredictions)
@@ -597,7 +597,7 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Regressor},Symb
             testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
             newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
             replacements_for_missing_values!(method,newtestdata,testdata,variables,types,testmissingvalues,testnonmissingvalues)
-            correctvalues = testdata[:REGRESSION]
+            correctvalues = getDfArrayData(testdata[:REGRESSION])
             totalnotrees,squarederror = make_prediction_analysis(method, model, newtestdata, randomclassoobs, oob, predictions, squaredpredictions, correctvalues; predictionexamplecounter=testexamplecounter)
             testexamplecounter += size(testdata,1)
 

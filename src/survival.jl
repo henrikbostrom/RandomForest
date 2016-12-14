@@ -147,7 +147,7 @@ function generate_tree(method::LearningMethod{Survival},trainingrefs,trainingwei
             # else
             #     oobprediction = (leafstats[2]-eventvalues[i])/(leafstats[1]-1)
             # end
-            oobprediction = make_survival_prediction(model,trainingdata,trainingref,timevalues,0)
+            oobprediction = make_survival_prediction(model,trainingdata,trainingref,timevalues[trainingref],0)
             oobpredictions[trainingref] += [1,oobprediction,oobprediction^2]
         end
     end
@@ -537,8 +537,8 @@ function make_survival_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,ti
         # varno, splittype, splitpoint, splitweight = node[1]
         examplevalue::Nullable{S} = testdata[node.varno][exampleno]
         if isnull(examplevalue)
-            prediction+=make_survival_prediction(node.leftnode,testdata,exampleno,prediction,weight*node.leftweight)
-            prediction+=make_survival_prediction(node.rightnode,testdata,exampleno,prediction,weight*(1-node.leftweight))
+            prediction+=make_survival_prediction(node.leftnode,testdata,exampleno,time,prediction,weight*node.leftweight)
+            prediction+=make_survival_prediction(node.rightnode,testdata,exampleno,time,prediction,weight*(1-node.leftweight))
             return prediction
         else
             if node.splittype == :NUMERIC
@@ -546,7 +546,7 @@ function make_survival_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,ti
             else #Catagorical
               nextnode=(get(examplevalue) == node.splitpoint)? node.leftnode: node.rightnode
             end
-            return make_survival_prediction(nextnode,testdata,exampleno,prediction,weight)
+            return make_survival_prediction(nextnode,testdata,exampleno,time,prediction,weight)
         end
     end
 end

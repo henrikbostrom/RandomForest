@@ -571,8 +571,8 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Survival},Symbo
         testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
         newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
         replacements_for_missing_values!(method,newtestdata,testdata,variables,types,testmissingvalues,testnonmissingvalues)
-        correctvalues = testdata[:EVENT]
-        timevalues = testdata[:TIME]
+        correctvalues = getDfArrayData(testdata[:EVENT])
+        timevalues = getDfArrayData(testdata[:TIME])
         nopredictions = size(testdata,1)
         predictions = Array(Array{Float64,1},nopredictions)
         squaredpredictions = Array(Any,nopredictions)
@@ -597,8 +597,8 @@ function generate_and_test_trees(Arguments::Tuple{LearningMethod{Survival},Symbo
             testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
             newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
             replacements_for_missing_values!(method,newtestdata,testdata,variables,types,testmissingvalues,testnonmissingvalues)
-            correctvalues = testdata[:EVENT]
-            timevalues = testdata[:TIME]
+            correctvalues = getDfArrayData(testdata[:EVENT])
+            timevalues = getDfArrayData(testdata[:TIME])
             totalnotrees,squarederror = make_prediction_analysis(method, model, newtestdata, randomclassoobs, oob, predictions, squaredpredictions, correctvalues,timevalues; predictionexamplecounter=testexamplecounter)
             testexamplecounter += size(testdata,1)
 
@@ -619,14 +619,14 @@ function make_prediction_analysis(method::LearningMethod{Survival}, model, newte
       for t = 1:length(model)
           if method.modpred
               if oob[t][randomoobs[i]]
-                  treeprediction = make_survival_prediction(model[t],newtestdata,i,timevalues,0)
+                  treeprediction = make_survival_prediction(model[t],newtestdata,i,timevalues[i],0)
                   prediction += treeprediction
                   squaredprediction += treeprediction^2
                   squarederror += (treeprediction-correctvalue)^2
                   nosampledtrees += 1
               end
           else
-              treeprediction = make_survival_prediction(model[t],newtestdata,i,timevalues,0)
+              treeprediction = make_survival_prediction(model[t],newtestdata,i,timevalues[i],0)
               prediction += treeprediction
               squaredprediction += treeprediction^2
               squarederror += (treeprediction-correctvalue)^2
