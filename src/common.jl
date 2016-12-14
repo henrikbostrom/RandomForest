@@ -132,6 +132,10 @@ function make_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,prediction,
     end
 end
 
+function getDfArrayData(da)
+    return typeof(da) <: Array ? da : da.data
+end
+
 # AMG: this is for running a single file. Note: we should allow data to be passed as argument in the next
 # three functions !!!
 function evaluate_method(;method = forest(),protocol = 10)
@@ -143,16 +147,19 @@ function evaluate_method(;method = forest(),protocol = 10)
     present_results(sort(results[classificationresults]),[method],ignoredatasetlabel = true)
     present_results(sort(results[regressionresults]),[method],ignoredatasetlabel = true)
     println("Total time: $(round(totaltime,2)) s.")
+    return results[1][3][1]
 end
 
 function evaluate_methods(;methods = [forest()],protocol = 10)
     println("Running experiment")
+    methods = map(m->fix_method_type(m),methods)
     totaltime = @elapsed results = [run_single_experiment(protocol,methods)]
     classificationresults = [pt == :CLASS for (pt,f,r) in results]
     regressionresults = [pt == :REGRESSION for (pt,f,r) in results]
     present_results(sort(results[classificationresults]),methods,ignoredatasetlabel = true)
     present_results(sort(results[regressionresults]),methods,ignoredatasetlabel = true)
     println("Total time: $(round(totaltime,2)) s.")
+    return results[1][3]
 end
 
 function run_single_experiment(protocol, methods)
@@ -164,10 +171,10 @@ function run_single_experiment(protocol, methods)
     else
         if typeof(protocol) == Float64 || protocol == :test
             results = run_split(protocol,methods)
-            result = ("",results)
+            result = (predictiontask, "",results)
         elseif typeof(protocol) == Int64 || protocol == :cv
             results = run_cross_validation(protocol,methods)
-            result = ("",results)
+            result = (predictiontask, "",results)
         else
             throw("Unknown experiment protocol")
         end

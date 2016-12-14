@@ -248,9 +248,10 @@ function run_split(testoption,methods)
         end
 
         tic()
-        methodresults[m] = run_split_internal(methods[m], results, time)
+        methodresult = run_split_internal(methods[m], results, time)
+        methodresults[m] = Dict("performance"=>methodresult[1], "predictions"=>methodresult[2])
     end
-    return methodresults
+    return Dict("results"=>methodresults, "testSplit"=>map(i->i ? 1 : 0, globaldata[:TEST]), "type"=>prediction_task(globaldata))
 end
 
 function run_cross_validation(protocol,methods)
@@ -346,9 +347,10 @@ function run_cross_validation(protocol,methods)
         for r = 2:length(allmodelsizes)
             modelsizes += allmodelsizes[r]
         end
-        methodresults[m] = run_cross_validation_internal(methods[m], results, modelsizes, nofolds, conformal, time)
+        methodresult = run_cross_validation_internal(methods[m], results, modelsizes, nofolds, conformal, time)
+        methodresults[m] = Dict("performance"=>methodresult[1], "predictions"=>methodresult[2])
     end
-    return methodresults
+    return Dict("results"=>methodresults, "type"=>prediction_task(globaldata))
 end
 
 ##
