@@ -537,8 +537,8 @@ function make_survival_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,ti
         # varno, splittype, splitpoint, splitweight = node[1]
         examplevalue::Nullable{S} = testdata[node.varno][exampleno]
         if isnull(examplevalue)
-            prediction+=make_survival_prediction(node.leftnode,testdata,exampleno,time,prediction,weight*node.leftweight)
-            prediction+=make_survival_prediction(node.rightnode,testdata,exampleno,time,prediction,weight*(1-node.leftweight))
+            prediction =make_survival_prediction(node.leftnode,testdata,exampleno,time,prediction,weight*node.leftweight)
+            prediction =make_survival_prediction(node.rightnode,testdata,exampleno,time,prediction,weight*(1-node.leftweight))
             return prediction
         else
             if node.splittype == :NUMERIC
