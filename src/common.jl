@@ -1,5 +1,39 @@
 global const rf_ver=v"0.0.10"
 
+"""
+To load a dataset from a file or dataframe:
+
+    julia> load_data(<filename>, separator = <separator>)
+    julia> load_data(<dataframe>)
+
+The arguments should be on the following format:
+
+    filename : name of a file containing a dataset (see format requirements above)
+    separator : single character (default = ',')
+    dataframe : a dataframe where the column labels should be according to the format requirements above
+"""
+##
+## Functions for working with a single dataset. Amg: loading data should move outside as well
+##
+function load_data(source; separator = ',')
+    if typeof(source) == String
+        global globaldata = read_data(source, separator=separator) # Made global to allow access from workers
+        initiate_workers()
+        # println("Data loaded")
+        println("Data: $(source)")
+    elseif typeof(source) == DataFrame
+        if ~(:WEIGHT in names(source))
+            global globaldata = hcat(source,DataFrame(WEIGHT = ones(size(source,1))))
+        else
+            global globaldata = source # Made global to allow access from workers
+        end
+        initiate_workers()
+        println("Data loaded")
+    else
+        println("Data can only be loaded from text files or DataFrames")
+    end
+end
+
 ##
 ## Function for building a single tree.
 ##
@@ -135,7 +169,18 @@ end
 function getDfArrayData(da)
     return typeof(da) <: Array ? da : da.data
 end
+"""
+To evaluate a method or several methods for generating a random forest:
 
+    julia> evaluate_method(method = forest(...), protocol = <protocol>)
+    julia> evaluate_methods(methods = [forest(...), ...], protocol = <protocol>)
+
+The arguments should be on the following format:
+
+    method : a call to forest(...) as explained above (default = forest())
+    methods : a list of calls to forest(...) as explained above (default = [forest()])
+    protocol : integer, float, :cv or :test as explained above (default = 10)
+"""
 # AMG: this is for running a single file. Note: we should allow data to be passed as argument in the next
 # three functions !!!
 function evaluate_method(;method = forest(),protocol = 10)
@@ -218,7 +263,15 @@ function getworkertrees(model, nocoworkers)
     end
     return alltrees
 end
+"""
+To generate a model from the loaded dataset:
 
+    julia> m = generate_model(method = forest(...))                         
+
+The argument should be on the following format:
+
+    method : a call to forest(...) as explained above (default = forest())
+"""
 function generate_model(;method = forest())
     # Amg: assumes there is a data preloaded. need to be modified
     predictiontask = prediction_task(globaldata)
@@ -259,13 +312,31 @@ function generate_model(;method = forest())
     return result
 end
 
+"""
+To store a model in a file:
+
+    julia> store_model(<model>, <file>)                              
+
+The arguments should be on the following format:
+
+    model : a generated or loaded model (see generate_model and load_model)
+    file : name of file to store model in
+"""
 function store_model(model::PredictionModel,file)
     s = open(file,"w")
     serialize(s,model)
     close(s)
     println("Model stored")
 end
+"""
+To load a model from file::
 
+    julia> rf = load_model(<file>)                                  
+
+The argument should be on the following format:
+
+    file : name of file in which a model has been stored
+"""
 function load_model(file)
     s = open(file,"r")
     model = deserialize(s)

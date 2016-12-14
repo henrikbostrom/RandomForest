@@ -212,7 +212,12 @@ end
 
 """
 To get a description of a model:
-    julia> describe_model(<model>)   
+
+    julia> describe_model(<model>)                                   
+
+The argument should be on the following format:
+
+    model : a generated or loaded model (see generate_model and load_model)
 """
 function describe_model(model::PredictionModel)
     method = model.method
