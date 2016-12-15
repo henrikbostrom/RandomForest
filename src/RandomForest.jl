@@ -383,17 +383,10 @@ function divide_data()
   variables = names(globaldata)
   types = eltypes(globaldata)
 
-  # global intarr = Array{Int,2}(size(globaldata,1),count(i-> i<:Int, types))
-  # global floarr = Array{Float64,2}(size(globaldata,1),count(i-> i<:Float64,types))
-  # global strarr = Array{String,2}(size(globaldata,1),count(i-> i<:String, types))
-
-  # global intarr = NullableArray(Int,size(globaldata,1),count(i-> i<:Int, types))
-  # global floarr = NullableArray(Float64,size(globaldata,1),count(i-> i<:Float64, types))
-  # global strarr = NullableArray(String,size(globaldata,1),count(i-> i<:String, types))
-
-  global intarr = SharedArray(Nullable{Int},size(globaldata,1),count(i-> i<:Int, types))
-  global floarr = SharedArray(Nullable{Float64},size(globaldata,1),count(i-> i<:Float64, types))
-  global strarr = SharedArray(Nullable{Int},size(globaldata,1),count(i-> (i<:String || i<:Bool), types))
+  processes = [1:nprocs()...]
+  global intarr = SharedArray(Nullable{Int},size(globaldata,1),count(i-> i<:Int, types), pids=processes)
+  global floarr = SharedArray(Nullable{Float64},size(globaldata,1),count(i-> i<:Float64, types), pids=processes)
+  global strarr = SharedArray(Nullable{Int},size(globaldata,1),count(i-> (i<:String || i<:Bool), types), pids=processes)
 
   curIndInt = 1
   curIndFlo = 1
