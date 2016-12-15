@@ -219,6 +219,32 @@ function getworkertrees(model, nocoworkers)
     return alltrees
 end
 
+function custompmap(f, lst)
+    np = nprocs()  # determine the number of processes available
+    n = length(lst)
+    results = Vector{Any}(n)
+    i = 1
+    # function to produce the next work item from the queue.
+    # in this case it's just an index.
+    nextidx() = (idx=i; i+=1; idx)
+    @sync begin
+        for p=1:np
+            if p != myid() || np == 1
+                @async begin
+                    while true
+                        idx = nextidx()
+                        if idx > n
+                            break
+                        end
+                        results[idx] = remotecall_fetch(f, p, lst[idx]; curdata=(intarr, floarr, strarr))
+                    end
+                end
+            end
+        end
+    end
+    results
+end
+
 function generate_model(;method = forest())
     # Amg: assumes there is a data preloaded. need to be modified
     predictiontask = prediction_task(globaldata)
@@ -233,7 +259,7 @@ function generate_model(;method = forest())
         numThreads = Threads.nthreads()
         if nocoworkers > 0
             notrees = getnotrees(method, nocoworkers)
-            treesandoobs = pmap(generate_trees, [(method,classes,n,rand(1:1000_000_000)) for n in notrees])
+            treesandoobs = custompmap(generate_trees, [(method,classes,n,rand(1:1000_000_000)) for n in notrees])
         elseif numThreads > 1
             notrees = getnotrees(method, numThreads)
             treesandoobs = Array{Any,1}(length(notrees))
@@ -317,9 +343,6 @@ end
 # end
 function load_global_dataset()
   global vardict = @fetchfrom(1,vardict)#, @fetchfrom(1,Intarr)
-  global intarr = @fetchfrom(1,intarr)
-  global floarr = @fetchfrom(1,floarr)
-  global strarr = @fetchfrom(1,strarr)
 end
 
 function get_array(sym,trainintarr,trainfloarr,trainstrarr)
