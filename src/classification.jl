@@ -3,18 +3,19 @@ function generate_trees(Arguments::Tuple{LearningMethod{Classifier},DataArray,In
     s = size(curdata,1)
     srand(randseed)
 
+    curintarr = curdata[1]
+    curfloarr = curdata[2]
+    curstrarr = size(curdata[3],2) > 0 ? remap(vardict, curdata[3]) : curdata[3]
+
     noclasses = length(classes)
-    trainintarr = Array(Array{Nullable{Int64},2}, noclasses)
-    trainfloarr = Array(typeof(floarr), noclasses)
-    tstrarr = (size(strarr,2) > 0) ? remap(vardict, strarr) : strarr
-    trainstrarr = Array(typeof(strarr), noclasses)
+    trainintarr = Array(typeof(curintarr), noclasses)
+    trainfloarr = Array(typeof(curfloarr), noclasses)
+    trainstrarr = Array(typeof(curstrarr), noclasses)
     trainingrefs = Array(Array{Int,1},noclasses)
     trainingweights = Array(Array{Float64,1},noclasses)
     oobpredictions = Array(Array{Array{Float64,1},1},noclasses)
     emptyprediction = [0; zeros(noclasses)]
-    curintarr = curdata[1]
-    curfloarr = curdata[2]
-    curstrarr = curdata[3]
+
     classArray = transform(get_array(:CLASS,curintarr,curfloarr,curstrarr))
     uniqueClasses = unique(classArray)
     

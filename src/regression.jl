@@ -4,7 +4,7 @@ function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Array{Int,1},
 
     trainintarr = curdata[1]
     trainfloarr = curdata[2]
-    trainstrarr = curdata[3]
+    trainstrarr = size(curdata[3],2) > 0 ? remap(vardict, curdata[3]) : curdata[3]
     s = size(trainintarr, 1)
     trainingrefs = collect(1:s)
     trainingweights = transform(get_array(:WEIGHT,trainintarr,trainfloarr,trainstrarr))
