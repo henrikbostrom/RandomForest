@@ -499,7 +499,7 @@ function generate_model_internal(method::LearningMethod{Regressor}, oobs, classe
     return oobperformance, conformalfunction
 end
 
-function apply_model(model::PredictionModel{Regressor}; confidence = :std)
+function apply_model_internal(model::PredictionModel{Regressor}; confidence = :std)
     numThreads = Threads.nthreads()
     nocoworkers = nprocs()-1
     predictions = zeros(size(globaldata,1))

@@ -316,6 +316,10 @@ function load_global_dataset()
     global globaldata = @fetchfrom(1,globaldata)
 end
 
+function apply_model(model::PredictionModel; confidence = :std)
+    apply_model_internal(model, confidence=confidence)
+end
+
 function update_workers()
     pr = Array(Future,nprocs())
     for i = 2:nprocs()
