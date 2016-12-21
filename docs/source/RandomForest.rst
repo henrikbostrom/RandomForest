@@ -117,18 +117,21 @@ The arguments should be on the following format:
                    :normalized means that each region size is dependent on the spread
                     of predictions among the individual trees
 
-* * * * *
+–––––
+
+.. code-block:: julia
 
     Examples:
-
+    
     The call experiment(files = "uci") is hence the same as
-
+    
     experiment(files = "uci", separator = ´,´, protocol = 10, methods = [forest()])
-
+    
     The following compares the default random forest to one with 1000 trees and a maxdepth of 10:
-
+    
     julia> experiment(files = "uci", methods = [forest(), forest(notrees = 1000, maxdepth = 10)])
-* * * * *
+
+–––––
 
 A dataset should have the following format:
 
@@ -186,7 +189,7 @@ Example:
     3,1.51618,13.53,3.55,1.54,72.99,0.39,7.78,0.00,0.00,1
     ...
 
-* * * * *
+–––––
 
 For classification tasks the following measures are reported:
 
