@@ -1,19 +1,19 @@
-.. _print.rst:
+.. _Print:
 
-print.rst
+Print
 =========================================
 
 .. DO NOT EDIT: this file is generated from Julia source.
 
 describe_data 
-^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 To get a description of a loaded dataset:     describe_data(<dataframe>)    
 
 
 ---------
 
 describe_model 
-^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 To get a description of a model:
 
 .. code-block:: julia

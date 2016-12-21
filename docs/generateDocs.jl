@@ -5,8 +5,13 @@ myFunctions = names(RandomForest)
 
 # not ordered. but still not in the exported order
 # myFunctions = ccall(:jl_module_names, Array{Symbol,1}, (Any,Cint,Cint), RandomForest, false, false)
+dict_headings =  Dict()
+dict_headings["RandomForest.rst"] = "To run an experiment"
+dict_headings["common.rst"] = "To work with a single dataset"
+dict_headings["print.rst"] = "Print"
 
 dict =  Dict()
+
 
 for myFunc in myFunctions
     try
@@ -39,6 +44,12 @@ cd(joinpath(dirname(@__FILE__),"source")) do
         f = open(fname,"w")
         list = dict[fileName]
 
+        if (haskey(dict_headings,fname)) 
+            fname = dict_headings[fname]
+        else 
+            fname = replace(fileName, ".rst", "")
+        end
+
         println(f,".. _$fname:")
         println(f)
         println(f,"$fname")
@@ -54,7 +65,7 @@ cd(joinpath(dirname(@__FILE__),"source")) do
 
                 if (!isa(md.content[1],Markdown.Paragraph))
                     # println(f,".. function:: $myFunc \n")
-                    println(f,"$myFunc \n^^^^^^^^^^^^")
+                    println(f,"$myFunc \n^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
                     println(f,Markdown.rst(md.content[1]))
                     println(f,"\n---------\n")
                 end

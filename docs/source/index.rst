@@ -16,7 +16,6 @@ Contents:
    Usage
    RandomForest
    common
-   survival
    print
    Summary
    

@@ -1,12 +1,12 @@
-.. _RandomForest.rst:
+.. _To run an experiment:
 
-RandomForest.rst
+To run an experiment
 =========================================
 
 .. DO NOT EDIT: this file is generated from Julia source.
 
 experiment 
-^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 An experiment is run by calling experiment(...) in the following way:
 
 .. code-block:: julia
@@ -227,7 +227,7 @@ For regression tasks the following measures are reported:
 ---------
 
 runexp 
-^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ``runexp`` is used to test the performance of the library on a number of test sets
 
 

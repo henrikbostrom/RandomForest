@@ -1,6 +1,6 @@
-.. _types.rst:
+.. _types.jl:
 
-types.rst
+types.jl
 =========================================
 
 .. DO NOT EDIT: this file is generated from Julia source.

@@ -1,6 +1,6 @@
-.. _scikitlearnAPI.rst:
+.. _scikitlearnAPI.jl:
 
-scikitlearnAPI.rst
+scikitlearnAPI.jl
 =========================================
 
 .. DO NOT EDIT: this file is generated from Julia source.
