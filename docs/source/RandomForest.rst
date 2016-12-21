@@ -116,11 +116,8 @@ The arguments should be on the following format:
                    :std results in the same region size for all predictions
                    :normalized means that each region size is dependent on the spread
                     of predictions among the individual trees
-
-–––––
-
-.. code-block:: julia
-
+    
+    
     Examples:
     
     The call experiment(files = "uci") is hence the same as
@@ -130,8 +127,6 @@ The arguments should be on the following format:
     The following compares the default random forest to one with 1000 trees and a maxdepth of 10:
     
     julia> experiment(files = "uci", methods = [forest(), forest(notrees = 1000, maxdepth = 10)])
-
-–––––
 
 A dataset should have the following format:
 
@@ -188,8 +183,6 @@ Example:
     2,1.51761,13.89,NA,1.36,72.73,0.48,7.83,0.00,0.00,1
     3,1.51618,13.53,3.55,1.54,72.99,0.39,7.78,0.00,0.00,1
     ...
-
-–––––
 
 For classification tasks the following measures are reported:
 
