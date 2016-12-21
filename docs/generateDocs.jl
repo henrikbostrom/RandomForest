@@ -53,7 +53,7 @@ cd(joinpath(dirname(@__FILE__),"source")) do
         println(f,".. _$fname:")
         println(f)
         println(f,"$fname")
-        println(f,"=========================================")
+        println(f,"==============================================================")
         println(f)
         println(f, ".. DO NOT EDIT: this file is generated from Julia source.")
         println(f)

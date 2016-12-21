@@ -1,7 +1,7 @@
 .. _To work with a single dataset:
 
 To work with a single dataset
-=========================================
+==============================================================
 
 .. DO NOT EDIT: this file is generated from Julia source.
 
