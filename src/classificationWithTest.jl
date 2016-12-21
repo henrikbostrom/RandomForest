@@ -202,7 +202,7 @@ function run_split_internal(method::LearningMethod{Classifier}, results, time)
     avbrier = totalsquarederror/totalnotrees
     varbrier = avbrier-brierscore
     extratime = toq()
-    return ClassificationResult(accuracy,weightedauc,brierscore,avacc,esterr,absesterr,avbrier,varbrier,margin,prob,validity,avc,onec,modelsize,noirregularleafs,time+extratime), get_predictions_classification(classes, predictions, classalpha)
+    return ClassificationResult(accuracy,weightedauc,brierscore,avacc,esterr,absesterr,avbrier,varbrier,margin,prob,validity,avc,onec,modelsize,noirregularleafs,time+extratime), get_predictions_classification(classes, predictions, classalpha), classes
 
 end
 
@@ -417,7 +417,7 @@ function run_cross_validation_internal(method::LearningMethod{Classifier}, resul
     end
     extratime = toq()
     return ClassificationResult(mean(accuracy),mean(auc),mean(brierscore),mean(avacc),mean(esterr),mean(absesterr),mean(avbrier),mean(varbrier),mean(margin),mean(prob),
-                                                mean(validity),mean(avc),mean(onec),mean(modelsizes),mean(noirregularleafs),time+extratime), returning_prediction
+                                                mean(validity),mean(avc),mean(onec),mean(modelsizes),mean(noirregularleafs),time+extratime), returning_prediction, classes
 end
 
 ##
