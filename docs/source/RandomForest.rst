@@ -189,7 +189,7 @@ Example:
     3,1.51618,13.53,3.55,1.54,72.99,0.39,7.78,0.00,0.00,1
     ...
 
-–––––
+*****
 
 For classification tasks the following measures are reported:
 
