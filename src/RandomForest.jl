@@ -53,6 +53,7 @@ export
     doc,
     read_data,
     load_data,
+    load_sparse_data,
     describe_data,
     evaluate_method,
     evaluate_methods,
@@ -85,6 +86,8 @@ include("classificationWithTest.jl")
 include("regressionWithTest.jl")
 include("scikitlearnAPI.jl")
 include("survivalWithTest.jl")
+include("sparseData.jl")
+global useSparseData = false
 
 """`runexp` is used to test the performance of the library on a number of test sets"""
 function runexp()
@@ -358,14 +361,36 @@ function run_cross_validation(protocol,methods)
     return Dict("results"=>methodresults, "type"=>prediction_task(globaldata))
 end
 
+## 
+function load_sparse_data(source, target, n; predictionType=:CLASS, separator = ' ')
+    global useSparseData = true
+    df = readdlm(source, separator)
+    sparseMatrix = spzeros(size(df,1), n)
+    for r = 1:size(df,1)
+        d = filter(i->length(i) != 0, df[r,:])
+        spd = Dict(parse(split(i,":")[1])=>parse(split(i,":")[2]) for i in d)
+        sparseMatrix[r, :] = sparsevec(spd, n)
+    end
+    labels = readdlm(target, separator)[:,1]
+    names = Any[1:n...]
+    push!(names,predictionType)
+    push!(names,:WEIGHT)
+    # equivDataFrame = DataFrame(full(sparseMatrix))
+    # equivDataFrame[predictionType] = labels
+    # equivDataFrame = hcat(equivDataFrame,DataFrame(WEIGHT = ones(size(equivDataFrame,1))))
+    # global globaldata = equivDataFrame
+    global globaldata = SparseData(names,[sparseMatrix[:,i] for i = 1:n], labels, ones(length(labels)))
+    println("Data: $(source)")
+end
+
 ##
 ## Functions for working with a single dataset. Amg: loading data should move outside as well
 ##
-function load_data(source; separator = ',')
+function load_data(source; separator = ',', sparse=false)
+    global useSparseData = sparse
     if typeof(source) == String
         global globaldata = read_data(source, separator=separator) # Made global to allow access from workers
         initiate_workers()
-        # println("Data loaded")
         println("Data: $(source)")
     elseif typeof(source) == DataFrame
         if ~(:WEIGHT in names(source))

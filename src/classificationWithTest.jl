@@ -8,7 +8,7 @@ function run_split_internal(method::LearningMethod{Classifier}, results, time)
     nopredictions = size(predictions,1)
 
     predictions = [predictions[i][2:end]/predictions[i][1] for i = 1:nopredictions]
-    classes = unique(globaldata[:CLASS])
+    classes = getDfArrayData(unique(globaldata[:CLASS]))
     noclasses = length(classes)
     classdata = Array(Any,noclasses)
     for c = 1:noclasses
@@ -274,7 +274,7 @@ function run_cross_validation_internal(method::LearningMethod{Classifier}, resul
     validity = Array(Float64,nofolds)
     avc = Array(Float64,nofolds)
     onec = Array(Float64,nofolds)
-    classes = unique(globaldata[:CLASS])
+    classes = getDfArrayData(unique(globaldata[:CLASS]))
     noclasses = length(classes)
     foldauc = Array(Float64,noclasses)
     classdata = Array(Any,noclasses)
@@ -425,7 +425,7 @@ end
 ##
 function generate_and_test_trees(Arguments::Tuple{LearningMethod{Classifier},Symbol,Int64,Int64,Array{Int64,1}})
     method,experimentype,notrees,randseed,randomoobs = Arguments
-    classes = unique(globaldata[:CLASS])
+    classes = getDfArrayData(unique(globaldata[:CLASS]))
     s = size(globaldata,1)
     srand(randseed)
     noclasses = length(classes)

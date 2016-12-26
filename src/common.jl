@@ -133,7 +133,7 @@ function make_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,prediction,
 end
 
 function getDfArrayData(da)
-    return typeof(da) <: Array ? da : da.data
+    return typeof(da) <: Array || typeof(da) <: SparseVector ? da : useSparseData ? sparsevec(da.data) : da.data
 end
 
 # AMG: this is for running a single file. Note: we should allow data to be passed as argument in the next
@@ -228,7 +228,7 @@ function generate_model(;method = forest())
         result = :NONE
     else
         method = fix_method_type(method)
-        classes = typeof(method.learningType) == Classifier ? unique(globaldata[:CLASS]) : Int[]
+        classes = typeof(method.learningType) == Classifier ? getDfArrayData(unique(globaldata[:CLASS])) : Int[]
         nocoworkers = nprocs()-1
         numThreads = Threads.nthreads()
         if nocoworkers > 0

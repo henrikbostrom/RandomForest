@@ -3,11 +3,11 @@ function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Array{Int,1},
     s = size(curdata,1)
     srand(randseed)
     trainingdata = curdata
-    trainingrefs = collect(1:size(curdata,1))
+    trainingrefs = collect(1:s)
     trainingweights = getDfArrayData(trainingdata[:WEIGHT])
     regressionvalues = getDfArrayData(trainingdata[:REGRESSION])
-    oobpredictions = Array(Array{Float64,1},size(curdata,1))
-    for i = 1:size(curdata,1)
+    oobpredictions = Array(Array{Float64,1},s)
+    for i = 1:s
         oobpredictions[i] = zeros(3)
     end
     timevalues = []

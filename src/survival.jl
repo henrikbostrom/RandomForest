@@ -8,8 +8,8 @@ function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},I
     regressionvalues = []
     timevalues = getDfArrayData(trainingdata[:TIME])
     eventvalues = getDfArrayData(trainingdata[:EVENT])
-    oobpredictions = Array(Array{Float64,1},size(curdata,1))
-    for i = 1:size(curdata,1)
+    oobpredictions = Array(Array{Float64,1},s)
+    for i = 1:s
         oobpredictions[i] = zeros(3)
     end
     randomclassoobs = Array(Any,size(randomoobs,1))
