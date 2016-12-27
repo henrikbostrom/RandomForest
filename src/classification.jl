@@ -284,9 +284,9 @@ function find_best_split(node,trainingdata,variables,types,method::LearningMetho
 end
 
 function evaluate_variable_classification(bestsplit,varno,variable,splittype,trainingrefs,trainingweights,origclasscounts,noclasses,trainingdata,method)
-    values = Array(Array,noclasses)
+    values = Array(SubArray,noclasses)
     for c = 1:noclasses
-        values[c] = trainingdata[c][varno][trainingrefs[c]]
+        values[c] = view(trainingdata[c][varno],trainingrefs[c])
     end
     if splittype == :CATEGORIC
         if method.randval
@@ -380,7 +380,7 @@ function calculateleftclasscount(values, trainingweights, key, op)
 end
 
 function evaluate_classification_common(key, op, bestsplit, varno,variable,splittype, values, noclasses, trainingweights, origclasscounts, method)
-    leftclasscounts = zeros(noclasses)
+    leftclasscounts = Array(Float64,noclasses)
     rightclasscounts = Array(Float64,noclasses)
     for c = 1:noclasses
         leftclasscounts[c] = calculateleftclasscount(values[c], trainingweights[c], key, op)
@@ -430,13 +430,13 @@ function make_split(method::LearningMethod{Classifier},node,trainingdata,bestspl
     leftweights = Array(Array,noclasses)
     rightrefs = Array(Array,noclasses)
     rightweights = Array(Array,noclasses)
+    op = splittype == :NUMERIC ? (<=) : (==)
     for c = 1:noclasses
-        values = trainingdata[c][varno][node.trainingrefs[c]]
+        values = view(trainingdata[c][varno],node.trainingrefs[c])
         leftrefs[c] = Int[]
         leftweights[c] = Float64[]
         rightrefs[c] = Int[]
         rightweights[c] = Float64[]
-        op = splittype == :NUMERIC ? (<=) : (==)
         for r = 1:length(node.trainingrefs[c])
             ref = node.trainingrefs[c][r]
             if op(values[r], splitpoint)
@@ -447,7 +447,7 @@ function make_split(method::LearningMethod{Classifier},node,trainingdata,bestspl
                 push!(rightweights[c],node.trainingweights[c][r])
             end
         end
-        # leftrefIds = splittype == :NUMERIC ? map(r->values[r] <= splitpoint, 1:length(node.trainingrefs[c])) : map(r->values[r] == splitpoint, 1:length(node.trainingrefs[c]))
+        # leftrefIds = map(r->op(values[r], splitpoint), 1:length(node.trainingrefs[c]))
         # leftrefs[c] = node.trainingrefs[c][leftrefIds]
         # leftweights[c] = node.trainingweights[c][leftrefIds]
         # rightrefIds = !leftrefIds
@@ -459,7 +459,6 @@ function make_split(method::LearningMethod{Classifier},node,trainingdata,bestspl
     leftweight = noleftexamples/(noleftexamples+norightexamples)
     return leftrefs,leftweights,[],[],[],rightrefs,rightweights,[],[],[],leftweight
 end
-# end
 
 function generate_model_internal(method::LearningMethod{Classifier}, oobs, classes)
     if method.conformal == :default
