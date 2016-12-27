@@ -548,7 +548,7 @@ function generate_model_internal(method::LearningMethod{Classifier}, oobs, class
     return oobperformance, conformalfunction
 end
 
-function apply_model(model::PredictionModel{Classifier}; confidence = :std)
+function apply_model_internal(model::PredictionModel{Classifier}; confidence = :std)
     # AMG: still requires global data
     numThreads = Threads.nthreads()
     nocoworkers = nprocs()-1

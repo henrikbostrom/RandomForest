@@ -646,7 +646,7 @@ function generate_model_internal(method::LearningMethod{Survival},oobs,classes)
     return oobperformance, conformalfunction
 end
 
-function apply_model(model::PredictionModel{Survival}; confidence = :std)
+function apply_model_internal(model::PredictionModel{Survival}; confidence = :std)
     #NOTE: Identical to the regression version
     numThreads = Threads.nthreads()
     nocoworkers = nprocs()-1
