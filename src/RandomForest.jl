@@ -244,6 +244,7 @@ function run_split(testoption,methods)
             time = @elapsed Threads.@threads for n in notrees
                 results[Threads.threadid()] = generate_and_test_trees((methods[m],:test,n,rand(1:1000_000_000),randomoobs))
             end
+            waitfor(results)
         else
             notrees = [methods[m].notrees]
             time = @elapsed results = generate_and_test_trees.([(methods[m],:test,n,rand(1:1000_000_000),randomoobs) for n in notrees])
@@ -331,6 +332,7 @@ function run_cross_validation(protocol,methods)
             time = @elapsed Threads.@threads for n in notrees
                 results[Threads.threadid()] = generate_and_test_trees((methods[m],:cv,n,rand(1:1000_000_000),randomoobs))
             end
+            waitfor(results)
         else
             notrees = [methods[m].notrees]
             time = @elapsed results = generate_and_test_trees.([(methods[m],:cv,n,rand(1:1000_000_000),randomoobs) for n in notrees])

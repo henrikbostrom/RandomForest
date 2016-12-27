@@ -219,6 +219,12 @@ function getworkertrees(model, nocoworkers)
     return alltrees
 end
 
+function waitfor(var)
+    while !all(i->isdefined(var,i), 1:length(var))
+        sleep(0.005)
+    end
+end
+
 function generate_model(;method = forest())
     # Amg: assumes there is a data preloaded. need to be modified
     predictiontask = prediction_task(globaldata)
@@ -240,6 +246,7 @@ function generate_model(;method = forest())
             Threads.@threads for n in notrees
                 treesandoobs[Threads.threadid()] = generate_trees((method,classes,n,rand(1:1000_000_000)))
             end
+            waitfor(treesandoobs)
         else
             notrees = [method.notrees]
             treesandoobs = generate_trees.([(method,classes,n,rand(1:1000_000_000)) for n in notrees])
