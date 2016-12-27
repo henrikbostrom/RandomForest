@@ -551,20 +551,20 @@ function apply_model_internal(model::PredictionModel{Classifier}; confidence = :
     # AMG: still requires global data
     numThreads = Threads.nthreads()
     nocoworkers = nprocs()-1
-    predictions = zeros(size(globaldata,1))
     if nocoworkers > 0
         alltrees = getworkertrees(model, nocoworkers)
         results = pmap(apply_trees,[(model.method,model.classes,subtrees) for subtrees in alltrees])
-        for r = 1:length(results)
-            predictions += results[r]
-        end
+        predictions = sum(results)
     elseif numThreads > 1
         alltrees = getworkertrees(model, numThreads)
+        results = Array{Array,1}(length(alltrees))
         Threads.@threads for subtrees in alltrees
-            predictions += apply_trees((model.method,model.classes,subtrees))
+            results[Threads.threadid()] = apply_trees((model.method,model.classes,subtrees))
         end
+        waitfor(results)
+        predictions = sum(results)
     else
-        predictions += apply_trees((model.method,model.classes,model.trees))
+        predictions = apply_trees((model.method,model.classes,model.trees))
     end
     predictions = predictions/model.method.notrees
     noclasses = length(model.classes)
@@ -632,6 +632,5 @@ function apply_trees(Arguments::Tuple{LearningMethod{Classifier},Any,Any})
             predictions[i] += treeprediction
         end
     end
-    results = predictions
-    return results
+    return predictions
 end
