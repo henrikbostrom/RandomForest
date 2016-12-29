@@ -403,7 +403,7 @@ function run_cross_validation_internal(method::LearningMethod{Survival}, results
             else
                 errorrange = largestrange
             end
-            prediction_results[testexamplecounter+1:testexamplecounter:length(correctvalues)] = [(p,[p-errorrange/2,p+errorrange/2]) for p in predictions[testexamplecounter+1:testexamplecounter:length(correctvalues)]]
+            prediction_results[testexamplecounter+1:testexamplecounter+length(correctvalues)] = [(p,[p-errorrange/2,p+errorrange/2]) for p in predictions[testexamplecounter+1:testexamplecounter+length(correctvalues)]]
         elseif conformal == :normalized
             if thresholdindex >= 1
                 alpha = sort(alphas,rev=true)[thresholdindex]
