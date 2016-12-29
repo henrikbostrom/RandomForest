@@ -365,9 +365,12 @@ function run_cross_validation(protocol,methods)
 end
 
 ## 
-function load_sparse_data(source, target, n; predictionType=:CLASS, separator = ' ')
+function load_sparse_data(source, target; predictionType=:CLASS, separator = ' ', n = -1)
     global useSparseData = true
     df = readdlm(source, separator)
+    if n == -1
+        n = maximum([parse(split(filter(i->length(i) != 0, df[r,:])[end], ":")[1]) for r in 1:size(df,1)])
+    end
     sparseMatrix = spzeros(size(df,1), n)
     for r = 1:size(df,1)
         d = filter(i->length(i) != 0, df[r,:])
