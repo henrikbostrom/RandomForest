@@ -278,7 +278,7 @@ function run_cross_validation_internal(method::LearningMethod{Classifier}, resul
     noclasses = length(classes)
     foldauc = Array(Float64,noclasses)
     classdata = Array(Any,noclasses)
-    returning_prediction = []
+    returning_prediction = Array(Any,size(predictions,1))
     for c = 1:noclasses
         classdata[c] = globaldata[globaldata[:CLASS] .== classes[c],:]
     end
@@ -286,6 +286,7 @@ function run_cross_validation_internal(method::LearningMethod{Classifier}, resul
     foldno = 0
     for fold in folds
         foldno += 1
+        foldIndeces = globaldata[:FOLD] .== fold
         oobpredictions = results[1][4][foldno]
         for c = 1:noclasses
             for r = 2:length(results)
@@ -384,7 +385,7 @@ function run_cross_validation_internal(method::LearningMethod{Classifier}, resul
             end
         end
         foldpredictions = predictions[origtestexamplecounter+1:testexamplecounter]
-        append!(returning_prediction, get_predictions_classification(classes, foldpredictions, classalphas))
+        returning_prediction[foldIndeces] =  get_predictions_classification(classes, foldpredictions, classalphas)
         tempexamplecounter = 0
         for c = 1:noclasses
             if size(testdata[c],1) > 0
