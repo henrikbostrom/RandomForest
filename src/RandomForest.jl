@@ -104,7 +104,8 @@ end
 ## Functions for running experiments
 ##
 
-function experiment(;files = ".", separator = ',', protocol = 10, normalizetarget = false, normalizeinput = false, methods = [forest()], resultfile = :none, printable = true)
+function experiment(;files = ".", separator = ',', protocol = 10, normalizetarget = false, normalizeinput = false, methods = [forest()], resultfile = :none, printable = true, sparse = false)
+    global useSparseData = sparse
     println("RandomForest v. $rf_ver")
     if typeof(files) == String
         if isdir(files)
