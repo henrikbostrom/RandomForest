@@ -386,6 +386,7 @@ function load_sparse_data(source, target; predictionType=:CLASS, separator = ' '
     # equivDataFrame = hcat(equivDataFrame,DataFrame(WEIGHT = ones(size(equivDataFrame,1))))
     # global globaldata = equivDataFrame
     global globaldata = SparseData(names,[sparseMatrix[:,i] for i = 1:n], labels, ones(length(labels)))
+    initiate_workers()
     println("Data: $(source)")
 end
 
