@@ -112,7 +112,7 @@ end
 
 type PredictionModel{T}
     method::LearningMethod{T}
-    classes::Any
+    classes::Array
     version::VersionNumber
     oobperformance::Any
     variableimportance::Any

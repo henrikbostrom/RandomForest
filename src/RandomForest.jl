@@ -53,6 +53,7 @@ export
     doc,
     read_data,
     load_data,
+    load_sparse_data,
     describe_data,
     evaluate_method,
     evaluate_methods,
@@ -85,6 +86,8 @@ include("classificationWithTest.jl")
 include("regressionWithTest.jl")
 include("scikitlearnAPI.jl")
 include("survivalWithTest.jl")
+include("sparseData.jl")
+global useSparseData = false
 
 """`runexp` is used to test the performance of the library on a number of test sets"""
 function runexp()
@@ -101,7 +104,8 @@ end
 ## Functions for running experiments
 ##
 
-function experiment(;files = ".", separator = ',', protocol = 10, normalizetarget = false, normalizeinput = false, methods = [forest()], resultfile = :none, printable = true)
+function experiment(;files = ".", separator = ',', protocol = 10, normalizetarget = false, normalizeinput = false, methods = [forest()], resultfile = :none, printable = true, sparse = false)
+    global useSparseData = sparse
     println("RandomForest v. $rf_ver")
     if typeof(files) == String
         if isdir(files)
@@ -241,6 +245,7 @@ function run_split(testoption,methods)
             time = @elapsed Threads.@threads for n in notrees
                 results[Threads.threadid()] = generate_and_test_trees((methods[m],:test,n,rand(1:1000_000_000),randomoobs))
             end
+            waitfor(results)
         else
             notrees = [methods[m].notrees]
             time = @elapsed results = generate_and_test_trees.([(methods[m],:test,n,rand(1:1000_000_000),randomoobs) for n in notrees])
@@ -249,6 +254,9 @@ function run_split(testoption,methods)
         tic()
         methodresult = run_split_internal(methods[m], results, time)
         methodresults[m] = Dict("performance"=>methodresult[1], "predictions"=>methodresult[2])
+        if length(methodresult) > 2
+            methodresults[m]["classLabels"] = methodresult[3]
+        end
     end
     return Dict("results"=>methodresults, "testSplit"=>map(i->i ? 1 : 0, globaldata[:TEST]), "type"=>prediction_task(globaldata))
 end
@@ -325,6 +333,7 @@ function run_cross_validation(protocol,methods)
             time = @elapsed Threads.@threads for n in notrees
                 results[Threads.threadid()] = generate_and_test_trees((methods[m],:cv,n,rand(1:1000_000_000),randomoobs))
             end
+            waitfor(results)
         else
             notrees = [methods[m].notrees]
             time = @elapsed results = generate_and_test_trees.([(methods[m],:cv,n,rand(1:1000_000_000),randomoobs) for n in notrees])
@@ -348,18 +357,47 @@ function run_cross_validation(protocol,methods)
         end
         methodresult = run_cross_validation_internal(methods[m], results, modelsizes, nofolds, conformal, time)
         methodresults[m] = Dict("performance"=>methodresult[1], "predictions"=>methodresult[2])
+        if length(methodresult) > 2
+            methodresults[m]["classLabels"] = methodresult[3]
+        end
     end
     return Dict("results"=>methodresults, "type"=>prediction_task(globaldata))
+end
+
+## 
+function load_sparse_data(source, target; predictionType=:CLASS, separator = ' ', n = -1)
+    global useSparseData = true
+    df = readdlm(source, separator)
+    if n == -1
+        n = maximum([parse(split(filter(i->length(i) != 0, df[r,:])[end], ":")[1]) for r in 1:size(df,1)])
+    end
+    sparseMatrix = spzeros(size(df,1), n)
+    for r = 1:size(df,1)
+        d = filter(i->length(i) != 0, df[r,:])
+        spd = Dict(parse(split(i,":")[1])=>parse(split(i,":")[2]) for i in d)
+        sparseMatrix[r, :] = sparsevec(spd, n)
+    end
+    labels = readdlm(target, separator)[:,1]
+    names = Any[1:n...]
+    push!(names,predictionType)
+    push!(names,:WEIGHT)
+    # equivDataFrame = DataFrame(full(sparseMatrix))
+    # equivDataFrame[predictionType] = labels
+    # equivDataFrame = hcat(equivDataFrame,DataFrame(WEIGHT = ones(size(equivDataFrame,1))))
+    # global globaldata = equivDataFrame
+    global globaldata = SparseData(names,[sparseMatrix[:,i] for i = 1:n], labels, ones(length(labels)))
+    initiate_workers()
+    println("Data: $(source)")
 end
 
 ##
 ## Functions for working with a single dataset. Amg: loading data should move outside as well
 ##
-function load_data(source; separator = ',')
+function load_data(source; separator = ',', sparse=false)
+    global useSparseData = sparse
     if typeof(source) == String
         global globaldata = read_data(source, separator=separator) # Made global to allow access from workers
         initiate_workers()
-        # println("Data loaded")
         println("Data: $(source)")
     elseif typeof(source) == DataFrame
         if ~(:WEIGHT in names(source))

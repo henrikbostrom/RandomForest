@@ -3,11 +3,11 @@ function generate_trees(Arguments::Tuple{LearningMethod{Regressor},Array{Int,1},
     s = size(curdata,1)
     srand(randseed)
     trainingdata = curdata
-    trainingrefs = collect(1:size(curdata,1))
+    trainingrefs = collect(1:s)
     trainingweights = getDfArrayData(trainingdata[:WEIGHT])
     regressionvalues = getDfArrayData(trainingdata[:REGRESSION])
-    oobpredictions = Array(Array{Float64,1},size(curdata,1))
-    for i = 1:size(curdata,1)
+    oobpredictions = Array(Array{Float64,1},s)
+    for i = 1:s
         oobpredictions[i] = zeros(3)
     end
     timevalues = []
@@ -499,7 +499,7 @@ function generate_model_internal(method::LearningMethod{Regressor}, oobs, classe
     return oobperformance, conformalfunction
 end
 
-function apply_model(model::PredictionModel{Regressor}; confidence = :std)
+function apply_model_internal(model::PredictionModel{Regressor}; confidence = :std)
     numThreads = Threads.nthreads()
     nocoworkers = nprocs()-1
     predictions = zeros(size(globaldata,1))
@@ -513,11 +513,17 @@ function apply_model(model::PredictionModel{Regressor}; confidence = :std)
         end
     elseif numThreads > 1
         alltrees = getworkertrees(model, numThreads)
-        Threads.@threads for subtrees in notrees
+        predictionResults = Array{Array,1}(length(alltrees))
+        squaredpredictionResults = Array{Array,1}(length(alltrees))
+        Threads.@threads for subtrees in alltrees
             results = apply_trees((model.method,[],subtrees))
-            predictions += results[1]
-            squaredpredictions += results[2]
+            predictionResults[Threads.threadid()] = results[1]
+            squaredpredictionResults[Threads.threadid()] = results[2]
         end
+        waitfor(predictionResults)
+        waitfor(squaredpredictionResults)
+        predictions = sum(predictionResults)
+        squaredpredictions = sum(squaredpredictionResults)
     else
         results = apply_trees((model.method,[],model.trees))
         predictions += results[1]

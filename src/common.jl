@@ -133,7 +133,7 @@ function make_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,prediction,
 end
 
 function getDfArrayData(da)
-    return typeof(da) <: Array ? da : da.data
+    return typeof(da) <: Array || typeof(da) <: SparseVector ? da : useSparseData ? sparsevec(da.data) : da.data
 end
 
 # AMG: this is for running a single file. Note: we should allow data to be passed as argument in the next
@@ -219,6 +219,12 @@ function getworkertrees(model, nocoworkers)
     return alltrees
 end
 
+function waitfor(var)
+    while !all(i->isdefined(var,i), 1:length(var))
+        sleep(0.005)
+    end
+end
+
 function generate_model(;method = forest())
     # Amg: assumes there is a data preloaded. need to be modified
     predictiontask = prediction_task(globaldata)
@@ -228,7 +234,7 @@ function generate_model(;method = forest())
         result = :NONE
     else
         method = fix_method_type(method)
-        classes = typeof(method.learningType) == Classifier ? unique(globaldata[:CLASS]) : Int[]
+        classes = typeof(method.learningType) == Classifier ? getDfArrayData(unique(globaldata[:CLASS])) : Int[]
         nocoworkers = nprocs()-1
         numThreads = Threads.nthreads()
         if nocoworkers > 0
@@ -240,6 +246,7 @@ function generate_model(;method = forest())
             Threads.@threads for n in notrees
                 treesandoobs[Threads.threadid()] = generate_trees((method,classes,n,rand(1:1000_000_000)))
             end
+            waitfor(treesandoobs)
         else
             notrees = [method.notrees]
             treesandoobs = generate_trees.([(method,classes,n,rand(1:1000_000_000)) for n in notrees])
@@ -314,6 +321,10 @@ end
 
 function load_global_dataset()
     global globaldata = @fetchfrom(1,globaldata)
+end
+
+function apply_model(model::PredictionModel; confidence = :std)
+    apply_model_internal(model, confidence=confidence)
 end
 
 function update_workers()

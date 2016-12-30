@@ -8,8 +8,8 @@ function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},I
     regressionvalues = []
     timevalues = getDfArrayData(trainingdata[:TIME])
     eventvalues = getDfArrayData(trainingdata[:EVENT])
-    oobpredictions = Array(Array{Float64,1},size(curdata,1))
-    for i = 1:size(curdata,1)
+    oobpredictions = Array(Array{Float64,1},s)
+    for i = 1:s
         oobpredictions[i] = zeros(3)
     end
     randomclassoobs = Array(Any,size(randomoobs,1))
@@ -147,7 +147,7 @@ function generate_tree(method::LearningMethod{Survival},trainingrefs,trainingwei
             # else
             #     oobprediction = (leafstats[2]-eventvalues[i])/(leafstats[1]-1)
             # end
-            oobprediction = make_survival_prediction(model,trainingdata,trainingref,timevalues,0)
+            oobprediction = make_survival_prediction(model,trainingdata,trainingref,timevalues[trainingref],0)
             oobpredictions[trainingref] += [1,oobprediction,oobprediction^2]
         end
     end
@@ -537,8 +537,8 @@ function make_survival_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,ti
         # varno, splittype, splitpoint, splitweight = node[1]
         examplevalue::Nullable{S} = testdata[node.varno][exampleno]
         if isnull(examplevalue)
-            prediction+=make_survival_prediction(node.leftnode,testdata,exampleno,prediction,weight*node.leftweight)
-            prediction+=make_survival_prediction(node.rightnode,testdata,exampleno,prediction,weight*(1-node.leftweight))
+            prediction =make_survival_prediction(node.leftnode,testdata,exampleno,time,prediction,weight*node.leftweight)
+            prediction =make_survival_prediction(node.rightnode,testdata,exampleno,time,prediction,weight*(1-node.leftweight))
             return prediction
         else
             if node.splittype == :NUMERIC
@@ -546,7 +546,7 @@ function make_survival_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,ti
             else #Catagorical
               nextnode=(get(examplevalue) == node.splitpoint)? node.leftnode: node.rightnode
             end
-            return make_survival_prediction(nextnode,testdata,exampleno,prediction,weight)
+            return make_survival_prediction(nextnode,testdata,exampleno,time,prediction,weight)
         end
     end
 end
@@ -643,7 +643,7 @@ function generate_model_internal(method::LearningMethod{Survival},oobs,classes)
     return oobperformance, conformalfunction
 end
 
-function apply_model(model::PredictionModel{Survival}; confidence = :std)
+function apply_model_internal(model::PredictionModel{Survival}; confidence = :std)
     #NOTE: Identical to the regression version
     numThreads = Threads.nthreads()
     nocoworkers = nprocs()-1
@@ -658,11 +658,17 @@ function apply_model(model::PredictionModel{Survival}; confidence = :std)
         end
     elseif numThreads > 1
         alltrees = getworkertrees(model, numThreads)
-        Threads.@threads for subtrees in notrees
+        predictionResults = Array{Array,1}(length(alltrees))
+        squaredpredictionResults = Array{Array,1}(length(alltrees))
+        Threads.@threads for subtrees in alltrees
             results = apply_trees((model.method,[],subtrees))
-            predictions += results[1]
-            squaredpredictions += results[2]
+            predictionResults[Threads.threadid()] = results[1]
+            squaredpredictionResults[Threads.threadid()] = results[2]
         end
+        waitfor(predictionResults)
+        waitfor(squaredpredictionResults)
+        predictions = sum(predictionResults)
+        squaredpredictions = sum(squaredpredictionResults)
     else
         results = apply_trees((model.method,[],model.trees))
         predictions += results[1]

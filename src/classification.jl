@@ -1,9 +1,8 @@
-function generate_trees(Arguments::Tuple{LearningMethod{Classifier},DataArray,Int,Int};curdata=globaldata, randomoobs=[], varimparg = true)
+function generate_trees(Arguments::Tuple{LearningMethod{Classifier},AbstractArray,Int,Int};curdata=globaldata, randomoobs=[], varimparg = true)
     method,classes,notrees,randseed = Arguments
-    s = size(curdata,1)
     srand(randseed)
     noclasses = length(classes)
-    trainingdata = Array(DataFrame, noclasses)
+    trainingdata = Array(typeof(curdata), noclasses)
     trainingrefs = Array(Array{Int,1},noclasses)
     trainingweights = Array(Array{Float64,1},noclasses)
     oobpredictions = Array(Array{Array{Float64,1},1},noclasses)
@@ -42,7 +41,7 @@ function generate_trees(Arguments::Tuple{LearningMethod{Classifier},DataArray,In
     oob = Array(Array,notrees)
     variableimportance = zeros(size(variables,1))
     for treeno = 1:notrees
-        sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
+       sample_replacements_for_missing_values!(method, newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
         model[treeno], treevariableimportance, noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions;varimp = varimparg)
         modelsize += noleafs
         noirregularleafs += treenoirregularleafs
@@ -285,9 +284,9 @@ function find_best_split(node,trainingdata,variables,types,method::LearningMetho
 end
 
 function evaluate_variable_classification(bestsplit,varno,variable,splittype,trainingrefs,trainingweights,origclasscounts,noclasses,trainingdata,method)
-    values = Array(Array,noclasses)
+    values = Array(SubArray,noclasses)
     for c = 1:noclasses
-        values[c] = trainingdata[c][varno][trainingrefs[c]]
+        values[c] = view(trainingdata[c][varno],trainingrefs[c])
     end
     if splittype == :CATEGORIC
         if method.randval
@@ -381,7 +380,7 @@ function calculateleftclasscount(values, trainingweights, key, op)
 end
 
 function evaluate_classification_common(key, op, bestsplit, varno,variable,splittype, values, noclasses, trainingweights, origclasscounts, method)
-    leftclasscounts = zeros(noclasses)
+    leftclasscounts = Array(Float64,noclasses)
     rightclasscounts = Array(Float64,noclasses)
     for c = 1:noclasses
         leftclasscounts[c] = calculateleftclasscount(values[c], trainingweights[c], key, op)
@@ -431,13 +430,13 @@ function make_split(method::LearningMethod{Classifier},node,trainingdata,bestspl
     leftweights = Array(Array,noclasses)
     rightrefs = Array(Array,noclasses)
     rightweights = Array(Array,noclasses)
+    op = splittype == :NUMERIC ? (<=) : (==)
     for c = 1:noclasses
-        values = trainingdata[c][varno][node.trainingrefs[c]]
+        values = view(trainingdata[c][varno],node.trainingrefs[c])
         leftrefs[c] = Int[]
         leftweights[c] = Float64[]
         rightrefs[c] = Int[]
         rightweights[c] = Float64[]
-        op = splittype == :NUMERIC ? (<=) : (==)
         for r = 1:length(node.trainingrefs[c])
             ref = node.trainingrefs[c][r]
             if op(values[r], splitpoint)
@@ -448,7 +447,7 @@ function make_split(method::LearningMethod{Classifier},node,trainingdata,bestspl
                 push!(rightweights[c],node.trainingweights[c][r])
             end
         end
-        # leftrefIds = splittype == :NUMERIC ? map(r->values[r] <= splitpoint, 1:length(node.trainingrefs[c])) : map(r->values[r] == splitpoint, 1:length(node.trainingrefs[c]))
+        # leftrefIds = map(r->op(values[r], splitpoint), 1:length(node.trainingrefs[c]))
         # leftrefs[c] = node.trainingrefs[c][leftrefIds]
         # leftweights[c] = node.trainingweights[c][leftrefIds]
         # rightrefIds = !leftrefIds
@@ -460,7 +459,6 @@ function make_split(method::LearningMethod{Classifier},node,trainingdata,bestspl
     leftweight = noleftexamples/(noleftexamples+norightexamples)
     return leftrefs,leftweights,[],[],[],rightrefs,rightweights,[],[],[],leftweight
 end
-# end
 
 function generate_model_internal(method::LearningMethod{Classifier}, oobs, classes)
     if method.conformal == :default
@@ -529,24 +527,24 @@ function generate_model_internal(method::LearningMethod{Classifier}, oobs, class
     return oobperformance, conformalfunction
 end
 
-function apply_model(model::PredictionModel{Classifier}; confidence = :std)
+function apply_model_internal(model::PredictionModel{Classifier}; confidence = :std)
     # AMG: still requires global data
     numThreads = Threads.nthreads()
     nocoworkers = nprocs()-1
-    predictions = zeros(size(globaldata,1))
     if nocoworkers > 0
         alltrees = getworkertrees(model, nocoworkers)
         results = pmap(apply_trees,[(model.method,model.classes,subtrees) for subtrees in alltrees])
-        for r = 1:length(results)
-            predictions += results[r]
-        end
+        predictions = sum(results)
     elseif numThreads > 1
         alltrees = getworkertrees(model, numThreads)
+        results = Array{Array,1}(length(alltrees))
         Threads.@threads for subtrees in alltrees
-            predictions += apply_trees((model.method,model.classes,subtrees))
+            results[Threads.threadid()] = apply_trees((model.method,model.classes,subtrees))
         end
+        waitfor(results)
+        predictions = sum(results)
     else
-        predictions += apply_trees((model.method,model.classes,model.trees))
+        predictions = apply_trees((model.method,model.classes,model.trees))
     end
     predictions = predictions/model.method.notrees
     noclasses = length(model.classes)
@@ -614,6 +612,5 @@ function apply_trees(Arguments::Tuple{LearningMethod{Classifier},Any,Any})
             predictions[i] += treeprediction
         end
     end
-    results = predictions
-    return results
+    return predictions
 end

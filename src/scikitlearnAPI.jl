@@ -17,7 +17,19 @@ function fit!(model::PredictionModel, data::DataFrame, features, labels)
     model.conformal = generated_model.conformal
 end
 
-# standard array. Note we should have the library use this by default and not dataframes
+function fit!(model::PredictionModel{Survival}, X::Matrix, time::Vector, event::Vector)
+    global globaldata = prepareDF(model, X, hcat(time, event))
+    initiate_workers()
+    generated_model = generate_model(method=model.method)
+    model.method = generated_model.method
+    model.classes = generated_model.classes
+    model.version = generated_model.version
+    model.oobperformance = generated_model.oobperformance
+    model.variableimportance = generated_model.variableimportance
+    model.trees = generated_model.trees
+    model.conformal = generated_model.conformal
+end
+
 function fit!(model::PredictionModel, X::Matrix, y::Vector)
     global globaldata = prepareDF(model, X, y)
     initiate_workers()
@@ -54,7 +66,7 @@ function predict(model::PredictionModel, X::Matrix)
     return map( i -> i[1], res)
 end
 
-function prepareDF(model::PredictionModel, X::Matrix, y::Vector)
+function prepareDF(model::PredictionModel, X::Matrix, y)
     df = DataFrame(X)
     if ~(:WEIGHT in names(df))
         df = hcat(df,DataFrame(WEIGHT = ones(size(df,1))))
@@ -62,8 +74,11 @@ function prepareDF(model::PredictionModel, X::Matrix, y::Vector)
     #probably not required the class / regression column
     if (typeof(model.method.learningType) == Classifier)
         df[:CLASS] = y
-    else 
+    elseif (typeof(model.method.learningType) == Regressor)
         df[:REGRESSION] = y
+    else
+        df[:TIME] = y[:,1]
+        df[:EVENT] = y[:,2]
     end
     return df
 end
