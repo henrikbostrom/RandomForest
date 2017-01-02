@@ -63,7 +63,7 @@ end
 function predict(model::PredictionModel, X::Matrix)
     df = DataFrame(X)
     if (typeof(model.method.learningType) == Survival && length(names(df)) == 1)
-        rename!(df, names(x)[1], :TIME)
+        rename!(df, names(df)[1], :TIME)
     end
     predict(model, df)
 end
