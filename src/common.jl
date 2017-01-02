@@ -1,9 +1,12 @@
 global const rf_ver=v"0.0.10"
 
 """
-To load a sparse dataset from a file:
+To load a dataset from a file:
+
     julia> load_sparse_data(<filename>, <labels_filename>, predictionType = <predictionType>, separator = <separator>, n=<numberOfFeatures>)
+
 The arguments should be on the following format:
+
     filename : name of a file containing a sparse dataset (see format requirements above)
     labels_filename:  name of a file containing a vector of labels
     separator : single character (default = ' ')

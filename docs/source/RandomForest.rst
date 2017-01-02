@@ -184,6 +184,24 @@ Example:
     3,1.51618,13.53,3.55,1.54,72.99,0.39,7.78,0.00,0.00,1
     ...
 
+A sparse dataset should have the following format:
+
+.. code-block:: julia
+
+    <data-row>
+    ...
+    <data-row>
+
+where     <data-row> = <column number>:<value><separator><column number>:<value><separator> ... <column number>:<value><separator>
+
+An example for a sparse dataset: https://archive.ics.uci.edu/ml/machine-learning-databases/dexter/DEXTER/dexter_test.data
+
+<column number> an integer number representing column index
+
+<value> can be integer, float, NA or string (as specified above)
+
+<separator> is a single character (as specified above)
+
 For classification tasks the following measures are reported:
 
 .. code-block:: julia
