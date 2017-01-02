@@ -34,8 +34,13 @@ function fit!(model::PredictionModel, data::DataFrame)
     model.conformal = generated_model.conformal
 end
 
-function fit!(model::PredictionModel{Survival}, X::Array, time::Vector, event::Vector)
+function fit!(model::PredictionModel{Survival}, X::Matrix, time::Vector, event::Vector)
     data = prepareDF(model, X, hcat(time, event))
+    fit!(model, data)
+end
+
+function fit!(model::PredictionModel{Survival}, time::Vector, event::Vector)
+    data = prepareDF(model, [], hcat(time, event))
     fit!(model, data)
 end
 
@@ -69,10 +74,10 @@ function predict(model::PredictionModel{Survival}, X::Matrix, time::Vector)
     predict(model, df)
 end
 
-function prepareDF(model::PredictionModel, X::Matrix, y)
+function prepareDF(model::PredictionModel, X, y)
     df = DataFrame(X)
     if ~(:WEIGHT in names(df))
-        df = hcat(df,DataFrame(WEIGHT = ones(size(df,1))))
+        df = hcat(df,DataFrame(WEIGHT = ones(size(y,1))))
     end
     df = addTarget(model, df, y)
     return df
