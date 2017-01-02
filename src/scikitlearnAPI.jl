@@ -48,6 +48,7 @@ function predict(model::PredictionModel, data::DataFrame; features=:)
     data = data[features]
     if ~(:WEIGHT in names(data))
         data = hcat(data,DataFrame(WEIGHT = ones(size(source,1))))
+    end
     global globaldata = data
     initiate_workers()
     res = apply_model(model)
