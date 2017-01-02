@@ -4,7 +4,7 @@ function fit!(model::PredictionModel, data::DataFrame, labels; features=:)
     y = (typeof(labels) == Symbol || typeof(labels) <: Array{Symbol}) ? data[labels] : labels
     data = data[features]
     if ~(:WEIGHT in names(data))
-        data = hcat(data,DataFrame(WEIGHT = ones(size(source,1))))
+        data = hcat(data,DataFrame(WEIGHT = ones(size(data,1))))
     end
     if (typeof(labels) == Symbol || typeof(labels) <: Array{Symbol})
         if (typeof(model.method.learningType) == Classifier)
@@ -52,7 +52,7 @@ end
 function predict(model::PredictionModel, data::DataFrame; features=:)
     data = data[features]
     if ~(:WEIGHT in names(data))
-        data = hcat(data,DataFrame(WEIGHT = ones(size(source,1))))
+        data = hcat(data,DataFrame(WEIGHT = ones(size(data,1))))
     end
     global globaldata = data
     initiate_workers()
@@ -98,7 +98,7 @@ end
 # classification only methods
 function predict_proba(model::PredictionModel{Classifier}, data::DataFrame, features)
     if ~(:WEIGHT in names(data))
-        global globaldata = hcat(data,DataFrame(WEIGHT = ones(size(source,1))))
+        global globaldata = hcat(data,DataFrame(WEIGHT = ones(size(data,1))))
     else
         global globaldata = data 
     end
