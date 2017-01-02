@@ -8,8 +8,8 @@ function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},I
     regressionvalues = []
     timevalues = getDfArrayData(trainingdata[:TIME])
     eventvalues = getDfArrayData(trainingdata[:EVENT])
-    oobpredictions = Array(Array{Float64,1},size(curdata,1))
-    for i = 1:size(curdata,1)
+    oobpredictions = Array(Array{Float64,1},s)
+    for i = 1:s
         oobpredictions[i] = zeros(3)
     end
     randomclassoobs = Array(Any,size(randomoobs,1))
@@ -658,11 +658,17 @@ function apply_model_internal(model::PredictionModel{Survival}; confidence = :st
         end
     elseif numThreads > 1
         alltrees = getworkertrees(model, numThreads)
-        Threads.@threads for subtrees in notrees
+        predictionResults = Array{Array,1}(length(alltrees))
+        squaredpredictionResults = Array{Array,1}(length(alltrees))
+        Threads.@threads for subtrees in alltrees
             results = apply_trees((model.method,[],subtrees))
-            predictions += results[1]
-            squaredpredictions += results[2]
+            predictionResults[Threads.threadid()] = results[1]
+            squaredpredictionResults[Threads.threadid()] = results[2]
         end
+        waitfor(predictionResults)
+        waitfor(squaredpredictionResults)
+        predictions = sum(predictionResults)
+        squaredpredictions = sum(squaredpredictionResults)
     else
         results = apply_trees((model.method,[],model.trees))
         predictions += results[1]

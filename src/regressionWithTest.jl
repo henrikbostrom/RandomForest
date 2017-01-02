@@ -300,7 +300,8 @@ function run_cross_validation_internal(method::LearningMethod{Regressor}, result
     end
     for fold in folds
         foldno += 1
-        testdata = globaldata[globaldata[:FOLD] .== fold,:]
+        foldIndeces = globaldata[:FOLD] .== fold
+        testdata = globaldata[foldIndeces,:]
         correctvalues = testdata[:REGRESSION]
         correcttrainingvalues = globaldata[globaldata[:FOLD] .!= fold,:REGRESSION]
         oobpredictions = results[1][4][foldno]
@@ -403,7 +404,7 @@ function run_cross_validation_internal(method::LearningMethod{Regressor}, result
             else
                 errorrange = largestrange
             end
-            prediction_results[testexamplecounter+1:testexamplecounter:length(correctvalues)] = [(p,[p-errorrange/2,p+errorrange/2]) for p in predictions[testexamplecounter+1:testexamplecounter:length(correctvalues)]]
+            prediction_results[foldIndeces] = [(p,[p-errorrange/2,p+errorrange/2]) for p in predictions[testexamplecounter+1:testexamplecounter+length(correctvalues)]]
         elseif conformal == :normalized
             if thresholdindex >= 1
                 alpha = sort(alphas,rev=true)[thresholdindex]
@@ -521,7 +522,9 @@ function run_cross_validation_internal(method::LearningMethod{Regressor}, result
             end
             
             if conformal != :std
-                prediction_results[testexamplecounter+i] = (predictions[testexamplecounter+i],[predictions[testexamplecounter+i]-errorrange/2,predictions[testexamplecounter+i]+errorrange/2])
+                curIndeces = find(foldIndeces)
+                curIndex = curIndeces[i]
+                prediction_results[curIndex] = (predictions[testexamplecounter+i],[predictions[testexamplecounter+i]-errorrange/2,predictions[testexamplecounter+i]+errorrange/2])
             end
             
             rangesum += errorrange

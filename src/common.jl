@@ -1,6 +1,41 @@
 global const rf_ver=v"0.0.10"
 
 """
+To load a sparse dataset from a file:
+    julia> load_sparse_data(<filename>, <labels_filename>, predictionType = <predictionType>, separator = <separator>, n=<numberOfFeatures>)
+The arguments should be on the following format:
+    filename : name of a file containing a sparse dataset (see format requirements above)
+    labels_filename:  name of a file containing a vector of labels
+    separator : single character (default = ' ')
+    predictionType : one of :CLASS, :REGRESSION, or :SURVIVAL
+    n: Number of features in the dataset (auto detected if not provided)
+"""
+function load_sparse_data(source, target; predictionType=:CLASS, separator = ' ', n = -1)
+    global useSparseData = true
+    df = readdlm(source, separator)
+    if n == -1
+        n = maximum([parse(split(filter(i->length(i) != 0, df[r,:])[end], ":")[1]) for r in 1:size(df,1)])
+    end
+    sparseMatrix = spzeros(size(df,1), n)
+    for r = 1:size(df,1)
+        d = filter(i->length(i) != 0, df[r,:])
+        spd = Dict(parse(split(i,":")[1])=>parse(split(i,":")[2]) for i in d)
+        sparseMatrix[r, :] = sparsevec(spd, n)
+    end
+    labels = readdlm(target, separator)[:,1]
+    names = Any[1:n...]
+    push!(names,predictionType)
+    push!(names,:WEIGHT)
+    # equivDataFrame = DataFrame(full(sparseMatrix))
+    # equivDataFrame[predictionType] = labels
+    # equivDataFrame = hcat(equivDataFrame,DataFrame(WEIGHT = ones(size(equivDataFrame,1))))
+    # global globaldata = equivDataFrame
+    global globaldata = SparseData(names,[sparseMatrix[:,i] for i = 1:n], labels, ones(length(labels)))
+    initiate_workers()
+    println("Data: $(source)")
+end
+
+"""
 To load a dataset from a file or dataframe:
 
     julia> load_data(<filename>, separator = <separator>)
@@ -15,11 +50,11 @@ The arguments should be on the following format:
 ##
 ## Functions for working with a single dataset. Amg: loading data should move outside as well
 ##
-function load_data(source; separator = ',')
+function load_data(source; separator = ',', sparse=false)
+    global useSparseData = sparse
     if typeof(source) == String
         global globaldata = read_data(source, separator=separator) # Made global to allow access from workers
         initiate_workers()
-        # println("Data loaded")
         println("Data: $(source)")
     elseif typeof(source) == DataFrame
         if ~(:WEIGHT in names(source))
@@ -167,7 +202,7 @@ function make_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,prediction,
 end
 
 function getDfArrayData(da)
-    return typeof(da) <: Array ? da : da.data
+    return typeof(da) <: Array || typeof(da) <: SparseVector ? da : useSparseData ? sparsevec(da.data) : da.data
 end
 """
 To evaluate a method or several methods for generating a random forest:
@@ -263,6 +298,13 @@ function getworkertrees(model, nocoworkers)
     end
     return alltrees
 end
+
+function waitfor(var)
+    while !all(i->isdefined(var,i), 1:length(var))
+        sleep(0.005)
+    end
+end
+
 """
 To generate a model from the loaded dataset:
 
@@ -281,7 +323,7 @@ function generate_model(;method = forest())
         result = :NONE
     else
         method = fix_method_type(method)
-        classes = typeof(method.learningType) == Classifier ? unique(globaldata[:CLASS]) : Int[]
+        classes = typeof(method.learningType) == Classifier ? getDfArrayData(unique(globaldata[:CLASS])) : Int[]
         nocoworkers = nprocs()-1
         numThreads = Threads.nthreads()
         if nocoworkers > 0
@@ -293,6 +335,7 @@ function generate_model(;method = forest())
             Threads.@threads for n in notrees
                 treesandoobs[Threads.threadid()] = generate_trees((method,classes,n,rand(1:1000_000_000)))
             end
+            waitfor(treesandoobs)
         else
             notrees = [method.notrees]
             treesandoobs = generate_trees.([(method,classes,n,rand(1:1000_000_000)) for n in notrees])

@@ -53,6 +53,7 @@ export
     doc,
     read_data,
     load_data,
+    load_sparse_data,
     describe_data,
     evaluate_method,
     evaluate_methods,
@@ -85,6 +86,8 @@ include("classificationWithTest.jl")
 include("regressionWithTest.jl")
 include("scikitlearnAPI.jl")
 include("survivalWithTest.jl")
+include("sparseData.jl")
+global useSparseData = false
 
 """`runexp` is used to test the performance of the library on a number of test sets"""
 function runexp()
@@ -259,6 +262,24 @@ Example:
     ...
 
 
+A sparse dataset should have the following format:
+
+    <data-row>
+    ...
+    <data-row>
+
+where
+    <data-row> = <column number>:<value><separator><column number>:<value><separator> ... <column number>:<value><separator>
+
+An example for a sparse dataset: https://archive.ics.uci.edu/ml/machine-learning-databases/dexter/DEXTER/dexter_test.data
+
+\<column number\> an integer number representing column index
+
+\<value\> can be integer, float, NA or string (as specified above)
+
+\<separator\> is a single character (as specified above)
+
+
 For classification tasks the following measures are reported:
 
         Acc        - accuracy, i.e., fraction of examples correctly predicted
@@ -294,7 +315,8 @@ For regression tasks the following measures are reported:
 ## Functions for running experiments
 ##
 
-function experiment(;files = ".", separator = ',', protocol = 10, normalizetarget = false, normalizeinput = false, methods = [forest()], resultfile = :none, printable = true)
+function experiment(;files = ".", separator = ',', protocol = 10, normalizetarget = false, normalizeinput = false, methods = [forest()], resultfile = :none, printable = true, sparse = false)
+    global useSparseData = sparse
     println("RandomForest v. $rf_ver")
     if typeof(files) == String
         if isdir(files)
@@ -434,6 +456,7 @@ function run_split(testoption,methods)
             time = @elapsed Threads.@threads for n in notrees
                 results[Threads.threadid()] = generate_and_test_trees((methods[m],:test,n,rand(1:1000_000_000),randomoobs))
             end
+            waitfor(results)
         else
             notrees = [methods[m].notrees]
             time = @elapsed results = generate_and_test_trees.([(methods[m],:test,n,rand(1:1000_000_000),randomoobs) for n in notrees])
@@ -521,6 +544,7 @@ function run_cross_validation(protocol,methods)
             time = @elapsed Threads.@threads for n in notrees
                 results[Threads.threadid()] = generate_and_test_trees((methods[m],:cv,n,rand(1:1000_000_000),randomoobs))
             end
+            waitfor(results)
         else
             notrees = [methods[m].notrees]
             time = @elapsed results = generate_and_test_trees.([(methods[m],:cv,n,rand(1:1000_000_000),randomoobs) for n in notrees])

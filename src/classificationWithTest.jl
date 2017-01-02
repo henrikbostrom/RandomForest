@@ -8,7 +8,7 @@ function run_split_internal(method::LearningMethod{Classifier}, results, time)
     nopredictions = size(predictions,1)
 
     predictions = [predictions[i][2:end]/predictions[i][1] for i = 1:nopredictions]
-    classes = unique(globaldata[:CLASS])
+    classes = getDfArrayData(unique(globaldata[:CLASS]))
     noclasses = length(classes)
     classdata = Array(Any,noclasses)
     for c = 1:noclasses
@@ -274,11 +274,11 @@ function run_cross_validation_internal(method::LearningMethod{Classifier}, resul
     validity = Array(Float64,nofolds)
     avc = Array(Float64,nofolds)
     onec = Array(Float64,nofolds)
-    classes = unique(globaldata[:CLASS])
+    classes = getDfArrayData(unique(globaldata[:CLASS]))
     noclasses = length(classes)
     foldauc = Array(Float64,noclasses)
     classdata = Array(Any,noclasses)
-    returning_prediction = []
+    returning_prediction = Array(Any,size(predictions,1))
     for c = 1:noclasses
         classdata[c] = globaldata[globaldata[:CLASS] .== classes[c],:]
     end
@@ -286,6 +286,7 @@ function run_cross_validation_internal(method::LearningMethod{Classifier}, resul
     foldno = 0
     for fold in folds
         foldno += 1
+        foldIndeces = globaldata[:FOLD] .== fold
         oobpredictions = results[1][4][foldno]
         for c = 1:noclasses
             for r = 2:length(results)
@@ -384,7 +385,7 @@ function run_cross_validation_internal(method::LearningMethod{Classifier}, resul
             end
         end
         foldpredictions = predictions[origtestexamplecounter+1:testexamplecounter]
-        append!(returning_prediction, get_predictions_classification(classes, foldpredictions, classalphas))
+        returning_prediction[foldIndeces] =  get_predictions_classification(classes, foldpredictions, classalphas)
         tempexamplecounter = 0
         for c = 1:noclasses
             if size(testdata[c],1) > 0
@@ -425,7 +426,7 @@ end
 ##
 function generate_and_test_trees(Arguments::Tuple{LearningMethod{Classifier},Symbol,Int64,Int64,Array{Int64,1}})
     method,experimentype,notrees,randseed,randomoobs = Arguments
-    classes = unique(globaldata[:CLASS])
+    classes = getDfArrayData(unique(globaldata[:CLASS]))
     s = size(globaldata,1)
     srand(randseed)
     noclasses = length(classes)
