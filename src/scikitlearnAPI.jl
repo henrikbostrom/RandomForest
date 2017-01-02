@@ -21,7 +21,7 @@ function fit!(model::PredictionModel, data::DataFrame, labels; features=:)
     fit!(model, data)
 end
 
-function fit!(mode::PredictionModel, data::DataFrame)
+function fit!(model::PredictionModel, data::DataFrame)
     global globaldata = data 
     initiate_workers()
     generated_model = generate_model(method=model.method)
@@ -34,7 +34,7 @@ function fit!(mode::PredictionModel, data::DataFrame)
     model.conformal = generated_model.conformal
 end
 
-function fit!(model::PredictionModel{Survival}, X::Matrix, time::Vector, event::Vector)
+function fit!(model::PredictionModel{Survival}, X::Array, time::Vector, event::Vector)
     data = prepareDF(model, X, hcat(time, event))
     fit!(model, data)
 end
