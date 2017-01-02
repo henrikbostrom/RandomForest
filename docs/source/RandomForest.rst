@@ -192,7 +192,11 @@ A sparse dataset should have the following format:
     ...
     <data-row>
 
-where     <data-row> = <column number>:<value><separator><column number>:<value><separator> ... <column number>:<value><separator>
+where
+
+.. code-block:: julia
+
+    <data-row> = <column number>:<value><separator><column number>:<value><separator> ... <column number>:<value><separator>
 
 An example for a sparse dataset: https://archive.ics.uci.edu/ml/machine-learning-databases/dexter/DEXTER/dexter_test.data
 
