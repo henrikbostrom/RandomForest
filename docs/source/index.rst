@@ -14,16 +14,10 @@ Contents:
    Introduction
    Installation
    Usage
-   runExperiment
-   singleDataset
+   RandomForest
+   common
+   print
    Summary
+   
 
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
 

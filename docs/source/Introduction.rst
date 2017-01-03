@@ -18,13 +18,13 @@ All named arguments below are optional, while the others are mandatory.
 
 The classification datasets included in uci.zip have been downloaded and adapted from:
 
-Lichman, M. (2013). UCI Machine Learning Repository [http://archive.ics.uci.edu/ml]. Irvine, CA: University of California, School of Information and Computer Science.
+Lichman, M. (2013). UCI Machine Learning Repository http://archive.ics.uci.edu/ml. Irvine, CA: University of California, School of Information and Computer Science.
 
 The regression datasets included in regression.zip have been downloaded and adapted from the above source and from:
 
-Rasmussen,  C.E.,  Neal,  R.M.,  Hinton,  G.,  van  Camp,  D.,  Revow,  M.,  Ghahramani, Z., Kustra, R., and Tibshirani, R. (1996) Delve data for evaluating learning in valid experiments [http://www.cs.toronto.edu/~delve/data/datasets.html]
+Rasmussen,  C.E.,  Neal,  R.M.,  Hinton,  G.,  van  Camp,  D.,  Revow,  M.,  Ghahramani, Z., Kustra, R., and Tibshirani, R. (1996) Delve data for evaluating learning in valid experiments http://www.cs.toronto.edu/~delve/data/datasets.html
 
 The survival datasets included in survival.zip have been downloaded and adapted from:
 
 Statistical Software Information, University of Massachusetts Amherst, Index of Survival Analysis Datasets,
-[https://www.umass.edu/statdata/statdata/stat-survival.html]
+https://www.umass.edu/statdata/statdata/stat-survival.html
