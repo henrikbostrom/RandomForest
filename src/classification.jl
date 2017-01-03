@@ -230,7 +230,7 @@ function make_leaf(node,method::LearningMethod{Classifier}, parenttrainingweight
 end
 
 function find_best_split(node,trainingdata,variables,types,method::LearningMethod{Classifier})
-    if method.randsub == :all || length(variables) < 3
+    if method.randsub == :all
         sampleselection = collect(1:length(variables))
     elseif method.randsub == :default || method.randsub == :log2
         sampleselection = sample(1:length(variables),floor(Int,log(2,length(variables))+1),replace=false)

@@ -223,7 +223,7 @@ function make_leaf(node,method::LearningMethod{Regressor}, parenttrainingweights
 end
 
 function find_best_split(node,trainingdata,variables,types,method::LearningMethod{Regressor})
-    if method.randsub == :all || length(variables) < 3
+    if method.randsub == :all
         sampleselection = collect(1:length(variables))
     elseif method.randsub == :default
         sampleselection = sample(1:length(variables),convert(Int,floor(1/3*length(variables))+1),replace=false)

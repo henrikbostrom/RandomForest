@@ -614,7 +614,7 @@ end
 function make_prediction_analysis(method::LearningMethod{Survival}, model, newtestdata, randomoobs, oob, predictions, squaredpredictions,correctvalues,timevalues; predictionexamplecounter = 0)
   squarederror = 0.0
   totalnotrees = 0
-  for i = 1:size(newtestdata[1],1)
+  for i = 1:length(correctvalues)
       correctvalue = correctvalues[i]
       prediction = 0.0
       squaredprediction = 0.0
