@@ -202,7 +202,7 @@ An example for a sparse dataset: https://archive.ics.uci.edu/ml/machine-learning
 
 <column number> an integer number representing column index
 
-<value> can be integer, float, NA or string (as specified above)
+<value> can be integer, or float
 
 <separator> is a single character (as specified above)
 
