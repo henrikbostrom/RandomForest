@@ -37,38 +37,42 @@ end
 
 
 
-for fileName in  keys(dict)
-    fname = replace(fileName, ".jl", ".rst")
-    f = open(fname,"w")
-    list = dict[fileName]
+cd(joinpath(dirname(@__FILE__),"source")) do
 
-    if (haskey(dict_headings,fname)) 
-        fname = dict_headings[fname]
-    else 
-        fname = replace(fileName, ".rst", "")
-    end
+    for fileName in  keys(dict)
+        fname = replace(fileName, ".jl", ".rst")
+        f = open(fname,"w")
+        list = dict[fileName]
 
-    println(f,".. _$fname:")
-    println(f)
-    println(f,"$fname")
-    println(f,"==============================================================")
-    println(f)
-    println(f, ".. DO NOT EDIT: this file is generated from Julia source.")
-    println(f)
-        
-    for x in list
-        md = x[1]
-        myFunc = x[2]
-        if (isa(md,Markdown.MD))
+        if (haskey(dict_headings,fname)) 
+            fname = dict_headings[fname]
+        else 
+            fname = replace(fileName, ".rst", "")
+        end
 
-            if (!isa(md.content[1],Markdown.Paragraph))
-                # println(f,".. function:: $myFunc \n")
-                println(f,"$myFunc \n^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
-                println(f,Markdown.rst(md.content[1]))
-                println(f,"\n---------\n")
-            end
-        end    
+        println(f,".. _$fname:")
+        println(f)
+        println(f,"$fname")
+        println(f,"==============================================================")
+        println(f)
+        println(f, ".. DO NOT EDIT: this file is generated from Julia source.")
+        println(f)
+            
+        for x in list
+            md = x[1]
+            myFunc = x[2]
+            if (isa(md,Markdown.MD))
 
-    end
-    close(f)
-end 
+                if (!isa(md.content[1],Markdown.Paragraph))
+                    # println(f,".. function:: $myFunc \n")
+                    println(f,"$myFunc \n^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
+                    println(f,Markdown.rst(md.content[1]))
+                    println(f,"\n---------\n")
+                end
+            end    
+
+        end
+        close(f)
+    end 
+
+end
