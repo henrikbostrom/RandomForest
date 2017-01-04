@@ -244,7 +244,7 @@ function evaluate_methods(;methods = [forest()],protocol = 10)
     survivalresults = [pt == :SURVIVAL for (pt,f,r) in results]
     present_results(sort(results[classificationresults]),methods,ignoredatasetlabel = true)
     present_results(sort(results[regressionresults]),methods,ignoredatasetlabel = true)
-    present_results(sort(results[survivalresults]),[method],ignoredatasetlabel = true)
+    present_results(sort(results[survivalresults]),methods,ignoredatasetlabel = true)
     println("Total time: $(round(totaltime,2)) s.")
     return results[1][3]
 end
