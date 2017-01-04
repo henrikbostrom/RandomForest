@@ -4,7 +4,7 @@ RandomForest.jl
 [![codecov.io](https://codecov.io/github/henrikbostrom/RandomForest/coverage.svg?branch=master)](https://codecov.io/github/henrikbostrom/RandomForest?branch=master)
 [![Build Status](https://travis-ci.org/henrikbostrom/RandomForest.svg?branch=master)](https://travis-ci.org/henrikbostrom/RandomForest)
 
-Copyright 2016 Henrik Boström
+Copyright 2017 Henrik Boström
 
 A <a href="http://julialang.org/">Julia</a> package that implements random forests for classification, regression and survival analysis with conformal prediction.
 
