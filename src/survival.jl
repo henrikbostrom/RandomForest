@@ -267,6 +267,9 @@ function make_leaf(node,method::LearningMethod{Survival}, parenttrainingweights)
 end
 
 function find_best_split(node,trainingdata,variables,types,method::LearningMethod{Survival})
+    if (length(variables) == 0)
+        method.randsub = :all
+    end
     if method.randsub == :all
         sampleselection = collect(1:length(variables))
     elseif method.randsub == :default
