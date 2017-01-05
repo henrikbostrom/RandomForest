@@ -6,9 +6,9 @@ myFunctions = names(RandomForest)
 # not ordered. but still not in the exported order
 # myFunctions = ccall(:jl_module_names, Array{Symbol,1}, (Any,Cint,Cint), RandomForest, false, false)
 dict_headings =  Dict()
-dict_headings["RandomForest.rst"] = "To run an experiment"
-dict_headings["common.rst"] = "To work with a single dataset"
-dict_headings["print.rst"] = "Print"
+dict_headings["RandomForest.rst"] = "Functions for running experiments"
+dict_headings["common.rst"] = "Functions for working with a single dataset"
+dict_headings["print.rst"] = "Functions for printing"
 
 dict =  Dict()
 
