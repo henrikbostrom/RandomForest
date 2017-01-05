@@ -13,7 +13,3 @@ Load the RandomForest package:
 
     julia> using RandomForest
 
-Then exit by:
-
-    julia> exit()
-    
