@@ -50,7 +50,6 @@ export
     experiment,
     tree,
     forest,
-    doc,
     read_data,
     load_data,
     load_sparse_data,
