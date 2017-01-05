@@ -1,6 +1,6 @@
-.. _To run an experiment:
+.. _Functions for running experiments:
 
-To run an experiment
+Functions for running experiments
 ==============================================================
 
 .. DO NOT EDIT: this file is generated from Julia source.
