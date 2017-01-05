@@ -5,7 +5,8 @@ All named arguments are optional, while the others are mandatory.
 
 To run an experiment:
 
-        experiment(files = <files>, separator = <separator>, protocol = <protocol>, methods = [<method>, ...])
+        experiment(files = <files>, separator = <separator>, protocol = <protocol>, 
+                   methods = [<method>, ...])
 
 To work with a single dataset:
 
