@@ -1,6 +1,6 @@
-.. _Print:
+.. _Functions for printing:
 
-Print
+Functions for printing
 ==============================================================
 
 .. DO NOT EDIT: this file is generated from Julia source.

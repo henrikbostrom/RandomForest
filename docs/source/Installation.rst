@@ -1,21 +1,15 @@
 To install the package
 ========
 
-Clone or download the package to some suitable directory.
-
-From this directory, start Julia (which can be downloaded from http://julialang.org/) at a command prompt:
+Start Julia (which can be downloaded from http://julialang.org/) at a command prompt:
 
     julia
 
-Install a requested package:
+at the Julia REPL, give the following command to clone the package from GitHub:
 
-    julia> Pkg.add("DataFrames")
-
-Try to load the RandomForest package (assuming that the current directory is in your load path,
-e.g., add "push!(LOAD_PATH, pwd())" to the file ".juliarc.jl" in your home directory):
+    julia> Pkg.clone("https://github.com/henrikbostrom/RandomForest.git")
+    
+Load the RandomForest package:
 
     julia> using RandomForest
 
-Then exit by:
-
-    julia> exit()
