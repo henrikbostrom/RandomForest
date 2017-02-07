@@ -6,7 +6,7 @@
 ##
 ## Developed for Julia 0.5 (http://julialang.org/)
 ##
-## Copyright Henrik Boström 2016
+## Copyright Henrik Boström 2017
 ## Email: henrik.bostrom@dsv.su.se
 ##
 ## TODO for version 1.0:
