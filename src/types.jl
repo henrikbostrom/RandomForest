@@ -157,3 +157,10 @@ function forestSurvival(;minleaf = 1, maxdepth = 0, randsub = :default, randval 
     return LearningMethod(Survival(), :forest,notrees,minleaf,maxdepth,randsub,randval,splitsample,bagging,bagsize,modpred,laplace,confidence,conformal)
     return PredictionModel{Survival}(method)
 end
+
+type SparseData
+    header::Array{Any, 1}
+    data::Array{SparseVector}
+    labels::Array
+    weights::Array
+end
