@@ -86,11 +86,12 @@ global const rf_ver=v"0.0.11"
 """`runexp` is used to test the performance of the library on a number of test sets"""
 function runexp()
     experiment(files = ["uci/glass.txt"]) # Warmup
-    experiment(files="uci",methods=[forest(),forest(notrees=500)],resultfile="uci-results.txt")
+    experiment(files="uci",methods=[forest(),forest(notrees=500)])
     experiment(files = ["regression/cooling.txt"]) # Warmup
-    experiment(files="regression",methods=[forest(),forest(notrees=500)],resultfile="regression-results.txt")
+    experiment(files="regression",methods=[forest(),forest(notrees=500)])
     experiment(files = ["survival/pharynx.csv"]) # Warmup
-    experiment(files="survival",methods=[forest(notrees=500,minleaf=10),forest(notrees=1000,minleaf=10)],resultfile="survival-results.txt")
+    experiment(files="survival",methods=[forest(notrees=500,minleaf=10),forest(notrees=1000,minleaf=10)])
+    true
 end
 
 """
