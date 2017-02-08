@@ -805,49 +805,9 @@ function collect_results_split(method::LearningMethod{Survival}, results, time)
     end
     testdata = globaldata[globaldata[:TEST] .== true,:]
     correctvalues = testdata[:EVENT]
-    times = testdata[:TIME]
-    hcisum = 0.0
-    hcicount = 0
-    for i = 1:nopredictions-1
-        for j = i+1:nopredictions
-            if times[i] < times[j]
-                if correctvalues[i] == 1
-                    hcicount += 1
-                    if predictions[i] > predictions[j]
-                        hcisum += 1
-                    elseif predictions[i] == predictions[j]
-                        hcisum += 0.5
-                    end
-                end
-            elseif times[j] < times[i]
-                if correctvalues[j] == 1
-                    hcicount += 1
-                    if predictions[j] > predictions[i]
-                        hcisum += 1
-                    elseif predictions[i] == predictions[j]
-                        hcisum += 0.5
-                    end
-                end
-            else # times[i] == times[j]
-                if correctvalues[i] == 1
-                    hcicount += 1
-                    if correctvalues[j] == 1 && predictions[i] == predictions[j]
-                        hcisum += 1
-                    end
-                elseif correctvalues[j] == 1
-                    hcicount += 1
-                    if predictions[i] == predictions[j]
-                        hcisum += 1
-                    end
-                end
-            end
-        end
-    end
-    if hcicount > 0
-        hci = hcisum/hcicount
-    else
-        hci = :NA
-    end
+    eventprobs = predictions[correctvalues .== 1]
+    noeventprobs = predictions[correctvalues .!= 1]
+    auc = calculate_auc(eventprobs,noeventprobs)
     mse = 0.0
     validity = 0.0
     rangesum = 0.0
@@ -898,7 +858,7 @@ function collect_results_split(method::LearningMethod{Survival}, results, time)
     avmse = totalsquarederror/totalnotrees
     varmse = avmse-mse
     extratime = toq()
-    return SurvivalResult(hci,mse,corrcoeff,avmse,varmse,esterr,absesterr,validity,region,modelsize,noirregularleafs,time+extratime), prediction_results
+    return SurvivalResult(auc,mse,corrcoeff,avmse,varmse,esterr,absesterr,validity,region,modelsize,noirregularleafs,time+extratime), prediction_results
 end
 
 function collect_results_cross_validation(method::LearningMethod{Survival}, results, modelsizes, nofolds, conformal, time)
@@ -916,7 +876,7 @@ function collect_results_cross_validation(method::LearningMethod{Survival}, resu
     testexamplecounter = 0
     predictions = [predictions[i][2]/predictions[i][1] for i = 1:nopredictions]
     prediction_results = Array(Tuple,size(predictions,1))
-    hci = Array(Float64,nofolds)
+    auc = Array(Float64,nofolds)
     mse = Array(Float64,nofolds)
     corrcoeff = Array(Float64,nofolds)
     avmse = Array(Float64,nofolds)
@@ -990,44 +950,11 @@ function collect_results_cross_validation(method::LearningMethod{Survival}, resu
         msesum = 0.0
         noinregion = 0.0
         rangesum = 0.0
-        hcisum = 0.0
-        hcicount = 0
-        for i = 1:length(correctvalues)-1
-            for j = i+1:length(correctvalues)
-                if times[i] < times[j]
-                    if correctvalues[i] == 1
-                        hcicount += 1
-                        if predictions[testexamplecounter+i] > predictions[testexamplecounter+j]
-                            hcisum += 1
-                        elseif predictions[testexamplecounter+i] == predictions[testexamplecounter+j]
-                            hcisum += 0.5
-                        end
-                    end
-                elseif times[j] < times[i]
-                    if correctvalues[j] == 1
-                        hcicount += 1
-                        if predictions[testexamplecounter+j] > predictions[testexamplecounter+i]
-                            hcisum += 1
-                        elseif predictions[testexamplecounter+i] == predictions[testexamplecounter+j]
-                            hcisum += 0.5
-                        end
-                    end
-                else # times[i] == times[j]
-                    if correctvalues[i] == 1
-                        hcicount += 1
-                        if correctvalues[j] == 1 && predictions[testexamplecounter+i] == predictions[testexamplecounter+j]
-                            hcisum += 1
-                        end
-                    elseif correctvalues[j] == 1
-                        hcicount += 1
-                        if predictions[testexamplecounter+i] == predictions[testexamplecounter+j]
-                            hcisum += 1
-                        end
-                    end
-                end
-            end
-        end
-        hci[foldno] = hcisum/hcicount
+
+        foldpredictions = predictions[testexamplecounter+1:testexamplecounter+length(correctvalues)]
+        eventprobs = foldpredictions[correctvalues .== 1]
+        noeventprobs = foldpredictions[correctvalues .!= 1]
+        auc[foldno] = calculate_auc(eventprobs,noeventprobs)
         for i = 1:length(correctvalues)
             error = abs(correctvalues[i]-predictions[testexamplecounter+i])
             msesum += error^2
@@ -1081,6 +1008,6 @@ function collect_results_cross_validation(method::LearningMethod{Survival}, resu
         region[foldno] = rangesum/length(correctvalues)
     end
     extratime = toq()
-    return SurvivalResult(mean(hci),mean(mse),mean(corrcoeff),mean(avmse),mean(varmse),mean(esterr),mean(absesterr),mean(validity),mean(region),mean(modelsizes),mean(noirregularleafs),
+    return SurvivalResult(mean(auc),mean(mse),mean(corrcoeff),mean(avmse),mean(varmse),mean(esterr),mean(absesterr),mean(validity),mean(region),mean(modelsizes),mean(noirregularleafs),
                           time+extratime), prediction_results
 end

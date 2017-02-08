@@ -97,7 +97,7 @@ type ClassificationResult
 end
 
 type SurvivalResult
-    HCI::Float64
+    AUC::Float64
     MSE::Float64
     Corr::Float64
     AvMSE::Float64
