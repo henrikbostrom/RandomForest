@@ -98,6 +98,11 @@ function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},I
     regressionvalues = []
     timevalues = getDfArrayData(trainingdata[:TIME])
     eventvalues = getDfArrayData(trainingdata[:EVENT])
+    sortedtrainingdata = sortrows(hcat(trainingrefs,trainingweights,timevalues,eventvalues),by=x->x[3])
+    trainingrefs = trunc(Int64,sortedtrainingdata[:,1])
+    trainingweights = sortedtrainingdata[:,2]
+    timevalues = sortedtrainingdata[:,3]
+    eventvalues = sortedtrainingdata[:,4]
     oobpredictions = Array(Array{Float64,1},s)
     for i = 1:s
         oobpredictions[i] = zeros(3)
@@ -364,6 +369,7 @@ end
 
 function evaluate_variable_survival(bestsplit,varno,variable,splittype,trainingrefs,trainingweights,origweightsum,origeventsum,origmean,timevalues,eventvalues,trainingdata,method)
     allvalues = trainingdata[varno][trainingrefs]
+    eventtimes = event_times(timevalues,eventvalues)
     if splittype == :CATEGORIC
         if method.randval
             bestsplit = evaluate_survival_categoric_variable_randval(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,method)
@@ -372,7 +378,7 @@ function evaluate_variable_survival(bestsplit,varno,variable,splittype,trainingr
         end
     else # splittype == :NUMERIC
         if method.randval
-            bestsplit = evaluate_survival_numeric_variable_randval(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,method)
+            bestsplit = evaluate_survival_numeric_variable_randval(bestsplit,varno,variable,splittype,timevalues,eventvalues,eventtimes,allvalues,trainingweights,origweightsum,method)
         else
             bestsplit = evaluate_survival_numeric_variable_allvals(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,origeventsum,origmean,method)
         end
@@ -380,6 +386,20 @@ function evaluate_variable_survival(bestsplit,varno,variable,splittype,trainingr
     end
     return bestsplit
 end
+
+function event_times(timevalues,eventvalues)
+    eventtimes = Float64[]
+    preveventtime = -Inf
+    for i = 1:length(timevalues)
+        if eventvalues[i] == 1
+            if timevalues[i] > preveventtime
+                push!(eventtimes,timevalues[i])
+                preveventtime = timevalues[i]
+            end
+        end
+    end
+    return eventtimes
+end    
 
 function evaluate_survival_categoric_variable_randval(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,method)
     key = allvalues[rand(1:end)]
@@ -420,7 +440,7 @@ end
 function hazard_score(weights,timevalues,eventvalues,cumhazardfunction)
     totalscore = 0.0
     for i = 1:size(weights,1)
-        totalscore += weights[i]*abs(eventvalues[i]-get_cumulative_hazard(cumhazardfunction,timevalues[i]))
+        totalscore += weights[i]*(eventvalues[i]-get_cumulative_hazard(cumhazardfunction,timevalues[i]))^2
     end
     return totalscore
 end
@@ -460,7 +480,7 @@ function evaluate_survival_categoric_variable_allvals(bestsplit,varno,variable,s
     return bestsplit
 end
 
-function evaluate_survival_numeric_variable_randval(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,method)
+function evaluate_survival_numeric_variable_randval(bestsplit,varno,variable,splittype,timevalues,eventvalues,eventtimes,allvalues,trainingweights,origweightsum,method)
     minval = minimum(allvalues)
     maxval = maximum(allvalues)
     splitpoint = minval+rand()*(maxval-minval)
@@ -486,16 +506,58 @@ function evaluate_survival_numeric_variable_randval(bestsplit,varno,variable,spl
     lefteventsum = sum(lefteventvalues)
     righteventsum = sum(righteventvalues)
     if leftweightsum >= method.minleaf && rightweightsum >= method.minleaf && lefteventsum > 0 && righteventsum > 0
-        leftcumhazardfunction = generate_cumulative_hazard_function(leftweights,lefttimevalues,lefteventvalues)
-        lefthazardscore = hazard_score(leftweights,lefttimevalues,lefteventvalues,leftcumhazardfunction)
-        rightcumhazardfunction = generate_cumulative_hazard_function(rightweights,righttimevalues,righteventvalues)
-        righthazardscore = hazard_score(rightweights,righttimevalues,righteventvalues,rightcumhazardfunction)
-        totalscore = lefthazardscore+righthazardscore
-        if -totalscore > bestsplit[1]
+        score = survival_score(eventtimes,lefttimevalues,lefteventvalues,leftweights,righttimevalues,righteventvalues,rightweights)
+        ## leftcumhazardfunction = generate_cumulative_hazard_function(leftweights,lefttimevalues,lefteventvalues)
+        ## lefthazardscore = hazard_score(leftweights,lefttimevalues,lefteventvalues,leftcumhazardfunction)
+        ## rightcumhazardfunction = generate_cumulative_hazard_function(rightweights,righttimevalues,righteventvalues)
+        ## righthazardscore = hazard_score(rightweights,righttimevalues,righteventvalues,rightcumhazardfunction)
+        ## totalscore = lefthazardscore+righthazardscore
+        if score > bestsplit[1]
             bestsplit = (totalscore,varno,variable,splittype,splitpoint)
         end
     end
     return bestsplit
+end
+
+function survival_score(eventtimes,lefttimevalues,lefteventvalues,leftweights,righttimevalues,righteventvalues,rightweights)
+    leftevents, leftatrisk = events_and_at_risk(eventtimes,lefttimevalues,lefteventvalues,leftweights) 
+    rightevents, rightatrisk = events_and_at_risk(eventtimes,righttimevalues,righteventvalues,rightweights)
+    events = leftevents+rightevents
+    atrisk = leftatrisk+rightatrisk
+    noeventtimes = length(eventtimes)
+    numerator = 0.0
+    denomsquared = 0.0
+    for i = 1:noeventtimes
+            numerator += leftevents[i] - leftatrisk[i]*events[i]/atrisk[i]
+            denomsquared += leftatrisk[i]/atrisk[i]*(1-leftatrisk[i]/atrisk[i])*((atrisk[i]-events[i])/(atrisk[i]-1))*events[i]
+        end
+    score = numerator/sqrt(denomsquared)        
+    return score
+end
+
+function events_and_at_risk(eventtimes,timevalues,eventvalues,weights) 
+    events = Array(Float64,length(eventtimes))
+    atrisk = Array(Float64,length(eventtimes))
+    remainingatrisk = sum(weights)
+    counter = 1
+    for i = 1:length(eventtimes)
+        if counter > length(timevalues) || eventtimes[i] < timevalues[counter]
+            events[i] = 0.0
+            atrisk[i] = remainingatrisk
+        else
+            accevent = 0.0
+            accleft = 0.0
+            while counter <= length(timevalues) && timevalues[counter] == eventtimes[i]
+                accevent += eventvalues[counter]*weights[counter]
+                accleft += weights[counter]
+                counter += 1
+            end
+            events[i] = accevent    
+            atrisk[i] = remainingatrisk
+            remainingatrisk -= accleft
+        end
+    end
+    return events, atrisk
 end
 
 function evaluate_survival_numeric_variable_allvals(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,origeventsum,origmean,method) # NOTE: to be fixed!
