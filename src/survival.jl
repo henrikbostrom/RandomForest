@@ -506,14 +506,10 @@ function evaluate_survival_numeric_variable_randval(bestsplit,varno,variable,spl
     lefteventsum = sum(lefteventvalues)
     righteventsum = sum(righteventvalues)
     if leftweightsum >= method.minleaf && rightweightsum >= method.minleaf && lefteventsum > 0 && righteventsum > 0
-        score = survival_score(eventtimes,lefttimevalues,lefteventvalues,leftweights,righttimevalues,righteventvalues,rightweights)
-        ## leftcumhazardfunction = generate_cumulative_hazard_function(leftweights,lefttimevalues,lefteventvalues)
-        ## lefthazardscore = hazard_score(leftweights,lefttimevalues,lefteventvalues,leftcumhazardfunction)
-        ## rightcumhazardfunction = generate_cumulative_hazard_function(rightweights,righttimevalues,righteventvalues)
-        ## righthazardscore = hazard_score(rightweights,righttimevalues,righteventvalues,rightcumhazardfunction)
-        ## totalscore = lefthazardscore+righthazardscore
+#        score = survival_score(eventtimes,lefttimevalues,lefteventvalues,leftweights,righttimevalues,righteventvalues,rightweights)
+        score = total_hazard_score(leftweights,lefttimevalues,lefteventvalues,rightweights,righttimevalues,righteventvalues)
         if score > bestsplit[1]
-            bestsplit = (totalscore,varno,variable,splittype,splitpoint)
+            bestsplit = (score,varno,variable,splittype,splitpoint)
         end
     end
     return bestsplit
@@ -558,6 +554,15 @@ function events_and_at_risk(eventtimes,timevalues,eventvalues,weights)
         end
     end
     return events, atrisk
+end
+
+function total_hazard_score(leftweights,lefttimevalues,lefteventvalues,rightweights,righttimevalues,righteventvalues)
+    leftcumhazardfunction = generate_cumulative_hazard_function(leftweights,lefttimevalues,lefteventvalues)
+    lefthazardscore = hazard_score(leftweights,lefttimevalues,lefteventvalues,leftcumhazardfunction)
+    rightcumhazardfunction = generate_cumulative_hazard_function(rightweights,righttimevalues,righteventvalues)
+    righthazardscore = hazard_score(rightweights,righttimevalues,righteventvalues,rightcumhazardfunction)
+    score = -(lefthazardscore+righthazardscore)
+    return score
 end
 
 function evaluate_survival_numeric_variable_allvals(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,origeventsum,origmean,method) # NOTE: to be fixed!
