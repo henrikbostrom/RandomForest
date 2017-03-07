@@ -506,8 +506,11 @@ function evaluate_survival_numeric_variable_randval(bestsplit,varno,variable,spl
     lefteventsum = sum(lefteventvalues)
     righteventsum = sum(righteventvalues)
     if leftweightsum >= method.minleaf && rightweightsum >= method.minleaf && lefteventsum > 0 && righteventsum > 0
-#        score = survival_score(eventtimes,lefttimevalues,lefteventvalues,leftweights,righttimevalues,righteventvalues,rightweights)
-        score = total_hazard_score(leftweights,lefttimevalues,lefteventvalues,rightweights,righttimevalues,righteventvalues)
+        if method.split == :logrank
+            score = survival_score(eventtimes,lefttimevalues,lefteventvalues,leftweights,righttimevalues,righteventvalues,rightweights)
+        else
+            score = total_hazard_score(leftweights,lefttimevalues,lefteventvalues,rightweights,righttimevalues,righteventvalues)
+        end
         if score > bestsplit[1]
             bestsplit = (score,varno,variable,splittype,splitpoint)
         end
@@ -831,90 +834,55 @@ function collect_results_split(method::LearningMethod{Survival}, results, time)
     correcttrainingvalues = trainingdata[:EVENT]
     oobse = 0.0
     nooob = 0
-    ooberrors = Float64[]
-    alphas = Float64[]
-    deltas = Float64[]
-    largestrange = 2*(maximum(correcttrainingvalues)-minimum(correcttrainingvalues))
+    one_alphas = Float64[]
+    zero_alphas = Float64[]
     for i = 1:length(correcttrainingvalues)
         oobpredcount = oobpredictions[i][1]
         if oobpredcount > 0.0
-            ooberror = abs(correcttrainingvalues[i]-(oobpredictions[i][2]/oobpredcount))
-            push!(ooberrors,ooberror)
-            if conformal == :normalized ## || conformal == :isotonic
-                delta = (oobpredictions[i][3]/oobpredcount-(oobpredictions[i][2]/oobpredcount)^2)
-                if 2*ooberror > largestrange
-                    alpha = largestrange/(delta+0.01)
-                else
-                    alpha = 2*ooberror/(delta+0.01)
-                end
-                push!(alphas,alpha)
-                push!(deltas,delta)
+            prediction = oobpredictions[i][2]/oobpredcount
+            ooberror = abs(correcttrainingvalues[i]-prediction)
+            if correcttrainingvalues[i] == 1                
+                push!(one_alphas,1-prediction)
+            else
+                push!(zero_alphas,prediction)
             end
             oobse += ooberror^2
             nooob += 1
         end
     end
     oobmse = oobse/nooob
-    thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
-    if conformal == :std
-        if thresholdindex >= 1
-            errorrange = minimum([largestrange,2*sort(ooberrors, rev=true)[thresholdindex]])
-        else
-            errorrange = largestrange
-        end
-        prediction_results = [(p,[p-errorrange/2,p+errorrange/2]) for p in predictions]
-    elseif conformal == :normalized
-        if thresholdindex >= 1
-            alpha = sort(alphas, rev=true)[thresholdindex]
-        else
-            alpha = Inf
-        end
-    end
     testdata = globaldata[globaldata[:TEST] .== true,:]
     correctvalues = testdata[:EVENT]
     eventprobs = predictions[correctvalues .== 1]
     noeventprobs = predictions[correctvalues .!= 1]
     auc = calculate_auc(eventprobs,noeventprobs)
     mse = 0.0
+    mad = 0.0
     validity = 0.0
     rangesum = 0.0
     for i = 1:nopredictions
         error = abs(correctvalues[i]-predictions[i])
         mse += error^2
-        if conformal == :normalized && method.modpred
-            randomoob = randomoobs[i]
-            oobpredcount = oobpredictions[randomoob][1]
-            if oobpredcount > 0.0
-                thresholdindex = Int(floor(nooob*(1-method.confidence)))
-                if thresholdindex >= 1
-                    alpha = sort(alphas[[1:randomoob-1;randomoob+1:end]], rev=true)[thresholdindex]
-                else
-                    alpha = Inf
-                end
-            else
-                println("oobpredcount = $oobpredcount !!! This is almost surely impossible!")
+        mad += error
+        if conformal == :std
+            one_alpha = 1-predictions[i]
+            p_one = (sum([one_alphas[j] >= one_alpha ? (one_alphas[j] > one_alpha ? 1 : rand()) : 0 for j = 1:length(one_alphas)])+rand())/(length(one_alphas)+1)
+            zero_alpha = predictions[i]
+            p_zero = (sum([zero_alphas[j] >= zero_alpha ? (zero_alphas[j] > zero_alpha ? 1 : rand()) : 0 for j = 1:length(zero_alphas)])+rand())/(length(zero_alphas)+1)
+            prediction = Int64[]
+            if p_zero > 1-method.confidence
+                push!(prediction,0)
             end
-            delta = squaredpredictions[i]-predictions[i]^2
-            errorrange = alpha*(delta+0.01)
-            if isnan(errorrange) || errorrange > largestrange
-                errorrange = largestrange
+            if p_one > 1-method.confidence
+                push!(prediction,1)
             end
-        elseif conformal == :normalized
-            delta = squaredpredictions[i]-predictions[i]^2
-            errorrange = alpha*(delta+0.01)
-            if isnan(errorrange) || errorrange > largestrange
-                errorrange = largestrange
-            end
-        end
-        if conformal != :std
-            prediction_results[i] = (predictions[i],[predictions[i]-errorrange/2,predictions[i]+errorrange/2])
-        end
-        rangesum += errorrange
-        if error <= errorrange/2
-            validity += 1
+            validity += correctvalues[i] in prediction ? 1 : 0
+            rangesum += length(prediction)
+            prediction_results[i] = (predictions[i],prediction)
         end
     end
     mse = mse/nopredictions
+    mad = mad/nopredictions
     esterr = oobmse-mse
     absesterr = abs(esterr)
     validity = validity/nopredictions
@@ -925,7 +893,7 @@ function collect_results_split(method::LearningMethod{Survival}, results, time)
     avmse = totalsquarederror/totalnotrees
     varmse = avmse-mse
     extratime = toq()
-    return SurvivalResult(auc,mse,corrcoeff,avmse,varmse,esterr,absesterr,validity,region,modelsize,noirregularleafs,time+extratime), prediction_results
+    return SurvivalResult(auc,mse,mad,corrcoeff,avmse,varmse,esterr,absesterr,validity,region,modelsize,noirregularleafs,time+extratime), prediction_results
 end
 
 function collect_results_cross_validation(method::LearningMethod{Survival}, results, modelsizes, nofolds, conformal, time)
@@ -945,6 +913,7 @@ function collect_results_cross_validation(method::LearningMethod{Survival}, resu
     prediction_results = Array(Tuple,size(predictions,1))
     auc = Array(Float64,nofolds)
     mse = Array(Float64,nofolds)
+    mad = Array(Float64,nofolds)
     corrcoeff = Array(Float64,nofolds)
     avmse = Array(Float64,nofolds)
     varmse = Array(Float64,nofolds)
@@ -975,49 +944,26 @@ function collect_results_cross_validation(method::LearningMethod{Survival}, resu
         oobse = 0.0
         nooob = 0
         ooberrors = Float64[]
-        alphas = Float64[]
-        deltas = Float64[]
-        maxcorrect = maximum(correcttrainingvalues)
-        mincorrect = minimum(correcttrainingvalues)
-        largestrange = 2*(maxcorrect-mincorrect)
+        one_alphas = Float64[]
+        zero_alphas = Float64[]
         for i = 1:length(correcttrainingvalues)
             oobpredcount = oobpredictions[i][1]
-            if oobpredcount > 0
-                ooberror = abs(correcttrainingvalues[i]-(oobpredictions[i][2]/oobpredcount))
-                push!(ooberrors,ooberror)
-                if conformal == :normalized 
-                    delta = (oobpredictions[i][3]/oobpredcount)-(oobpredictions[i][2]/oobpredcount)^2
-                    if 2*ooberror > largestrange
-                        alpha = largestrange/(delta+0.01)
-                    else
-                        alpha = 2*ooberror/(delta+0.01)
-                    end
-                    push!(alphas,alpha)
-                    push!(deltas,delta)
+            if oobpredcount > 0.0
+                prediction = oobpredictions[i][2]/oobpredcount
+                ooberror = abs(correcttrainingvalues[i]-prediction)
+                if correcttrainingvalues[i] == 1                
+                    push!(one_alphas,1-prediction)
+                else
+                    push!(zero_alphas,prediction)
                 end
                 oobse += ooberror^2
                 nooob += 1
             end
         end
-        thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
-        if conformal == :std
-            if thresholdindex >= 1
-                errorrange = minimum([largestrange,2*sort(ooberrors, rev=true)[thresholdindex]])
-            else
-                errorrange = largestrange
-            end
-            prediction_results[foldIndeces] = [(p,[p-errorrange/2,p+errorrange/2]) for p in predictions[testexamplecounter+1:testexamplecounter+length(correctvalues)]]
-        elseif conformal == :normalized
-            if thresholdindex >= 1
-                alpha = sort(alphas,rev=true)[thresholdindex]
-            else
-                alpha = Inf
-            end
-        end
         msesum = 0.0
+        madsum = 0.0
         noinregion = 0.0
         rangesum = 0.0
-
         foldpredictions = predictions[testexamplecounter+1:testexamplecounter+length(correctvalues)]
         eventprobs = foldpredictions[correctvalues .== 1]
         noeventprobs = foldpredictions[correctvalues .!= 1]
@@ -1025,43 +971,29 @@ function collect_results_cross_validation(method::LearningMethod{Survival}, resu
         for i = 1:length(correctvalues)
             error = abs(correctvalues[i]-predictions[testexamplecounter+i])
             msesum += error^2
-            if conformal == :normalized && method.modpred
-                randomoob = randomoobs[foldno][i]
-                oobpredcount = oobpredictions[randomoob][1]
-                if oobpredcount > 0.0
-                    thresholdindex = Int(floor(nooob*(1-method.confidence)))
-                    if thresholdindex >= 1
-                        alpha = sort(alphas[[1:randomoob-1;randomoob+1:end]], rev=true)[thresholdindex]
-                    else
-                        alpha = Inf
-                    end
-                else
-                    println("oobpredcount = $oobpredcount !!! This is almost surely impossible!")
+            madsum += error
+
+            if conformal == :std
+                one_alpha = 1-predictions[testexamplecounter+i]
+                p_one = (sum([one_alphas[j] >= one_alpha ? (one_alphas[j] > one_alpha ? 1 : rand()) : 0 for j = 1:length(one_alphas)])+rand())/(length(one_alphas)+1)
+                zero_alpha = predictions[testexamplecounter+i]
+                p_zero = (sum([zero_alphas[j] >= zero_alpha ? (zero_alphas[j] > zero_alpha ? 1 : rand()) : 0 for j = 1:length(zero_alphas)])+rand())/(length(zero_alphas)+1)
+                prediction = Int64[]
+                if p_zero > 1-method.confidence
+                    push!(prediction,0)
                 end
-                delta = (squaredpredictions[testexamplecounter+i]-predictions[testexamplecounter+i]^2)
-                errorrange = alpha*(delta+0.01)
-                if isnan(errorrange) || errorrange > largestrange
-                    errorrange = largestrange
+                if p_one > 1-method.confidence
+                    push!(prediction,1)
                 end
-            elseif conformal == :normalized
-                delta = (squaredpredictions[testexamplecounter+i]-predictions[testexamplecounter+i]^2)
-                errorrange = alpha*(delta+0.01)
-                if isnan(errorrange) || errorrange > largestrange
-                    errorrange = largestrange
-                end
-            end
-            if conformal != :std
+                noinregion += correctvalues[i] in prediction ? 1 : 0
+                rangesum += length(prediction)
                 curIndeces = find(foldIndeces)
                 curIndex = curIndeces[i]
-                prediction_results[curIndex] = (predictions[testexamplecounter+i],[predictions[testexamplecounter+i]-errorrange/2,predictions[testexamplecounter+i]+errorrange/2])
-            end
-            
-            rangesum += errorrange
-            if error <= errorrange/2
-                noinregion += 1
+                prediction_results[curIndex] = (predictions[testexamplecounter+i],prediction)
             end
         end
         mse[foldno] = msesum/length(correctvalues)
+        mad[foldno] = madsum/length(correctvalues)
         corrcoeff[foldno] = cor(correctvalues,predictions[testexamplecounter+1:testexamplecounter+length(correctvalues)])
         testexamplecounter += length(correctvalues)
         totalnotrees = sum([results[r][3][foldno][1] for r = 1:length(results)])
@@ -1075,6 +1007,6 @@ function collect_results_cross_validation(method::LearningMethod{Survival}, resu
         region[foldno] = rangesum/length(correctvalues)
     end
     extratime = toq()
-    return SurvivalResult(mean(auc),mean(mse),mean(corrcoeff),mean(avmse),mean(varmse),mean(esterr),mean(absesterr),mean(validity),mean(region),mean(modelsizes),mean(noirregularleafs),
+    return SurvivalResult(mean(auc),mean(mse),mean(mad),mean(corrcoeff),mean(avmse),mean(varmse),mean(esterr),mean(absesterr),mean(validity),mean(region),mean(modelsizes),mean(noirregularleafs),
                           time+extratime), prediction_results
 end

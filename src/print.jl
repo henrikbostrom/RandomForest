@@ -179,7 +179,7 @@ function print_aligned_l(Str,Size)
 end
 
 function get_rank(value,values,metric) # NOTE: value must be present in values
-    if metric in [:MSE,:AvMSE,:OOBErr,:DEOAcc,:AEEMSE,:AEEAcc,:Brier,:AvBrier,:Region,:Size,:NoIrr,:Time]
+    if metric in [:MSE,:MAD,:AvMSE,:OOBErr,:DEOAcc,:AEEMSE,:AEEAcc,:Brier,:AvBrier,:Region,:Size,:NoIrr,:Time]
         sortedvalues = sort(values)
         range = searchsorted(sortedvalues,value)
     else
