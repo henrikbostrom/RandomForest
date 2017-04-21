@@ -1,3 +1,93 @@
+##
+## Functions to be executed on each worker
+##
+
+function generate_and_test_trees(Arguments::Tuple{LearningMethod{Survival},Symbol,Int64,Int64,Array{Any,1}})
+    method,experimentype,notrees,randseed,randomoobs = Arguments
+    s = size(globaldata,1)
+    srand(randseed)
+    variables, types = get_variables_and_types(globaldata)
+    if experimentype == :test
+        model,oobpredictions,variableimportance, modelsize, noirregularleafs, randomclassoobs, oob =
+            generate_trees((method,Int64[],notrees,randseed);curdata=globaldata[globaldata[:TEST] .== false,:], randomoobs=randomoobs, varimparg = false)
+        testdata = globaldata[globaldata[:TEST] .== true,:]
+        testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
+        newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
+        replacements_for_missing_values!(method,newtestdata,testdata,variables,types,testmissingvalues,testnonmissingvalues)
+        correctvalues = getDfArrayData(testdata[:EVENT])
+        timevalues = getDfArrayData(testdata[:TIME])
+        nopredictions = size(testdata,1)
+        predictions = Array(Array{Float64,1},nopredictions)
+        squaredpredictions = Array(Any,nopredictions)
+        totalnotrees,squarederror = make_prediction_analysis(method, model, newtestdata, randomclassoobs, oob, predictions, squaredpredictions, correctvalues,timevalues)
+        return (modelsize,predictions,[totalnotrees;squarederror],oobpredictions,squaredpredictions,noirregularleafs)
+    else # experimentype == :cv
+        folds = sort(unique(globaldata[:FOLD]))
+        nofolds = length(folds)
+        squarederrors = Array(Any,nofolds)
+        predictions = Array(Any,size(globaldata,1))
+        squaredpredictions = Array(Any,size(globaldata,1))
+        oobpredictions = Array(Any,nofolds)
+        modelsizes = Array(Int,nofolds)
+        noirregularleafs = Array(Int,nofolds)
+        testexamplecounter = 0
+        foldno = 0
+        for fold in folds
+            foldno += 1
+            trainingdata = globaldata[globaldata[:FOLD] .!= fold,:]
+            testdata = globaldata[globaldata[:FOLD] .== fold,:]
+            model,oobpredictions[foldno],variableimportance, modelsizes[foldno], noirregularleafs[foldno], randomclassoobs, oob =
+                generate_trees((method,Int64[],notrees,randseed);curdata=trainingdata, randomoobs=size(randomoobs,1) > 0 ? randomoobs[foldno] : [], varimparg = false)
+            testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,testdata)
+            newtestdata = transform_nonmissing_columns_to_arrays(method,variables,testdata,testmissingvalues)
+            replacements_for_missing_values!(method,newtestdata,testdata,variables,types,testmissingvalues,testnonmissingvalues)
+            correctvalues = getDfArrayData(testdata[:EVENT])
+            timevalues = getDfArrayData(testdata[:TIME])
+            totalnotrees,squarederror =
+                make_prediction_analysis(method, model, newtestdata, randomclassoobs, oob, predictions, squaredpredictions, correctvalues,timevalues; predictionexamplecounter=testexamplecounter)
+            testexamplecounter += size(testdata,1)
+
+            squarederrors[foldno] = [totalnotrees;squarederror]
+        end
+        return (modelsizes,predictions,squarederrors,oobpredictions,squaredpredictions,noirregularleafs)
+    end
+end
+
+function make_prediction_analysis(method::LearningMethod{Survival}, model, newtestdata, randomoobs, oob, predictions, squaredpredictions,correctvalues,timevalues; predictionexamplecounter = 0)
+  squarederror = 0.0
+  totalnotrees = 0
+  for i = 1:length(correctvalues)
+      correctvalue = correctvalues[i]
+      prediction = 0.0
+      squaredprediction = 0.0
+      nosampledtrees = 0
+      for t = 1:length(model)
+          if method.modpred
+              if oob[t][randomoobs[i]]
+                  treeprediction = make_survival_prediction(model[t],newtestdata,i,timevalues[i],0)
+                  prediction += treeprediction
+                  squaredprediction += treeprediction^2
+                  squarederror += (treeprediction-correctvalue)^2
+                  nosampledtrees += 1
+              end
+          else
+              treeprediction = make_survival_prediction(model[t],newtestdata,i,timevalues[i],0)
+              prediction += treeprediction
+              squaredprediction += treeprediction^2
+              squarederror += (treeprediction-correctvalue)^2
+          end
+      end
+      if ~method.modpred
+          nosampledtrees = length(model)
+      end
+      predictionexamplecounter += 1
+      totalnotrees += nosampledtrees
+      predictions[predictionexamplecounter] = [nosampledtrees;prediction]
+      squaredpredictions[predictionexamplecounter] = [nosampledtrees;squaredprediction]
+    end
+    return (totalnotrees,squarederror)
+end
+
 function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},Int,Int};curdata=globaldata, randomoobs=[], varimparg = true)
     method,classes,notrees,randseed = Arguments
     s = size(curdata,1)
@@ -8,6 +98,11 @@ function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},I
     regressionvalues = []
     timevalues = getDfArrayData(trainingdata[:TIME])
     eventvalues = getDfArrayData(trainingdata[:EVENT])
+    sortedtrainingdata = sortrows(hcat(trainingrefs,trainingweights,timevalues,eventvalues),by=x->x[3])
+    trainingrefs = trunc(Int64,sortedtrainingdata[:,1])
+    trainingweights = sortedtrainingdata[:,2]
+    timevalues = sortedtrainingdata[:,3]
+    eventvalues = sortedtrainingdata[:,4]
     oobpredictions = Array(Array{Float64,1},s)
     for i = 1:s
         oobpredictions[i] = zeros(3)
@@ -22,7 +117,6 @@ function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},I
         end
         randomclassoobs[i] = (c,oobref)
     end
-    # starting from here till the end of the function is duplicated between here and the Classifier and Regressor dispatchers
     variables, types = get_variables_and_types(curdata)
     modelsize = 0
     noirregularleafs = 0
@@ -33,7 +127,8 @@ function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},I
     variableimportance = zeros(size(variables,1))
     for treeno = 1:notrees
         sample_replacements_for_missing_values!(method,newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
-        model[treeno], treevariableimportance, noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions,varimp = true)
+        model[treeno], treevariableimportance, noleafs, treenoirregularleafs, oob[treeno] =
+            generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions,varimp = true)
         modelsize += noleafs
         noirregularleafs += treenoirregularleafs
         if (varimparg)
@@ -44,7 +139,6 @@ function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},I
 end
 
 function find_missing_values(method::LearningMethod{Survival},variables,trainingdata)
-    #NOTE: could be further improved with function barrier in val loop. Also identical to the regression version
     missingvalues = Array(Array{Int,1},length(variables))
     nonmissingvalues = Array(Array,length(variables))
     for v = 1:length(variables)
@@ -68,7 +162,6 @@ function find_missing_values(method::LearningMethod{Survival},variables,training
 end
 
 function transform_nonmissing_columns_to_arrays(method::LearningMethod{Survival},variables,trainingdata,missingvalues)
-    #NOTE: Identical to the regression version
     newdata = Array(Array,length(variables))
     for v = 1:length(variables)
         if isempty(missingvalues[v])
@@ -79,7 +172,6 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Survival}
 end
 
 function sample_replacements_for_missing_values!(method::LearningMethod{Survival},newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
-    #NOTE: Identical to the regression version
     for v = 1:length(variables)
         if !isempty(missingvalues[v])
             values = trainingdata[variables[v]]
@@ -104,7 +196,6 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Survival
 end
 
 function replacements_for_missing_values!(method::LearningMethod{Survival},newtestdata,testdata,variables,types,missingvalues,nonmissingvalues)
-    #NOTE: Identical to the regression version
     for v = 1:length(variables)
         if !isempty(missingvalues[v])
             variableType = typeof(testdata[variables[v]]).parameters[1]
@@ -141,77 +232,12 @@ function generate_tree(method::LearningMethod{Survival},trainingrefs,trainingwei
         model, variableimportance, noleafs, noirregularleafs = build_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,trainingdata,variables,types,varimp)
         for i = 1:size(trainingrefs,1)
             trainingref = trainingrefs[i]
-            # emptyleaf, leafstats = make_loo_prediction(model,trainingdata,trainingref,0;time=timevalues[i])
-            # if emptyleaf
-            #     oobprediction = leafstats[2]/leafstats[1]
-            # else
-            #     oobprediction = (leafstats[2]-eventvalues[i])/(leafstats[1]-1)
-            # end
             oobprediction = make_survival_prediction(model,trainingdata,trainingref,timevalues[trainingref],0)
             oobpredictions[trainingref] += [1,oobprediction,oobprediction^2]
         end
     end
-    # if varimp
-    #     return model, variableimportance, noleafs, noirregularleafs, zeroweights
-    # else
-    #     return model, noleafs, noirregularleafs, zeroweights
-    # end
     return model, variableimportance, noleafs, noirregularleafs, zeroweights
 end
-
-## function make_loo_prediction(tree,testdata,exampleno,prediction)
-##     nodeno = 1
-##     nonterminal = true
-##     emptyleaf = false
-##     while nonterminal
-##         node = tree[nodeno]
-##         if node[1] == :LEAF
-##             prediction = emptyleaf,node[2]
-##             nonterminal = false
-##         else
-##             varno, splittype, splitpoint, splitweight = node[1]
-##             examplevalue = testdata[varno][exampleno]
-##             if splittype == :NUMERIC
-##                 if examplevalue <= splitpoint
-##                     leftchild = tree[node[2]]
-##                     if leftchild[1] == :LEAF && leftchild[2][1] < 2.0
-##                         nodeno = node[3]
-##                         emptyleaf = true
-##                     else
-##                         nodeno = node[2]
-##                     end
-##                 else
-##                     rightchild = tree[node[3]]
-##                     if rightchild[1] == :LEAF && rightchild[2][1] < 2.0
-##                         nodeno = node[2]
-##                         emptyleaf = true
-##                     else
-##                         nodeno = node[3]
-##                     end
-##                 end
-##             else
-##                 if examplevalue == splitpoint
-##                     leftchild = tree[node[2]]
-##                     if leftchild[1] == :LEAF && leftchild[2][1] < 2.0
-##                         nodeno = node[3]
-##                         emptyleaf = true
-##                     else
-##                         nodeno = node[2]
-##                     end
-##                 else
-##                     rightchild = tree[node[3]]
-##                     if rightchild[1] == :LEAF && rightchild[2][1] < 2.0
-##                         nodeno = node[2]
-##                         emptyleaf = true
-##                     else
-##                         nodeno = node[3]
-##                     end
-##                 end
-##             end
-##         end
-##     end
-##     return prediction
-## end
 
 function default_prediction(trainingweights,regressionvalues,timevalues,eventvalues,method::LearningMethod{Survival})
     return generate_cumulative_hazard_function(trainingweights,timevalues,eventvalues)
@@ -254,7 +280,7 @@ function leaf_node(node,method::LearningMethod{Survival})
         return true
     else
         noinstances = sum(node.trainingweights)
-        if noinstances >= 2*method.minleaf && sum(node.eventvalues) > 0
+        if noinstances >= 2*method.minleaf && sum(node.eventvalues) > 1
             return false
         else
             return true
@@ -333,6 +359,7 @@ end
 
 function evaluate_variable_survival(bestsplit,varno,variable,splittype,trainingrefs,trainingweights,origweightsum,origeventsum,origmean,timevalues,eventvalues,trainingdata,method)
     allvalues = trainingdata[varno][trainingrefs]
+    eventtimes = event_times(timevalues,eventvalues)
     if splittype == :CATEGORIC
         if method.randval
             bestsplit = evaluate_survival_categoric_variable_randval(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,method)
@@ -341,7 +368,7 @@ function evaluate_variable_survival(bestsplit,varno,variable,splittype,trainingr
         end
     else # splittype == :NUMERIC
         if method.randval
-            bestsplit = evaluate_survival_numeric_variable_randval(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,method)
+            bestsplit = evaluate_survival_numeric_variable_randval(bestsplit,varno,variable,splittype,timevalues,eventvalues,eventtimes,allvalues,trainingweights,origweightsum,method)
         else
             bestsplit = evaluate_survival_numeric_variable_allvals(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,origeventsum,origmean,method)
         end
@@ -349,6 +376,20 @@ function evaluate_variable_survival(bestsplit,varno,variable,splittype,trainingr
     end
     return bestsplit
 end
+
+function event_times(timevalues,eventvalues)
+    eventtimes = Float64[]
+    preveventtime = -Inf
+    for i = 1:length(timevalues)
+        if eventvalues[i] == 1
+            if timevalues[i] > preveventtime
+                push!(eventtimes,timevalues[i])
+                preveventtime = timevalues[i]
+            end
+        end
+    end
+    return eventtimes
+end    
 
 function evaluate_survival_categoric_variable_randval(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,method)
     key = allvalues[rand(1:end)]
@@ -371,7 +412,9 @@ function evaluate_survival_categoric_variable_randval(bestsplit,varno,variable,s
     end
     leftweightsum = sum(leftweights)
     rightweightsum = origweightsum-leftweightsum
-    if leftweightsum >= method.minleaf && rightweightsum >= method.minleaf
+    lefteventsum = sum(lefteventvalues)
+    righteventsum = sum(righteventvalues)
+    if leftweightsum >= method.minleaf && rightweightsum >= method.minleaf && lefteventsum > 0 && righteventsum > 0
         leftcumhazardfunction = generate_cumulative_hazard_function(leftweights,lefttimevalues,lefteventvalues)
         lefthazardscore = hazard_score(leftweights,lefttimevalues,lefteventvalues,leftcumhazardfunction)
         rightcumhazardfunction = generate_cumulative_hazard_function(rightweights,righttimevalues,righteventvalues)
@@ -387,7 +430,7 @@ end
 function hazard_score(weights,timevalues,eventvalues,cumhazardfunction)
     totalscore = 0.0
     for i = 1:size(weights,1)
-        totalscore += weights[i]*abs(eventvalues[i]-get_cumulative_hazard(cumhazardfunction,timevalues[i]))
+        totalscore += weights[i]*(eventvalues[i]-get_cumulative_hazard(cumhazardfunction,timevalues[i]))^2
     end
     return totalscore
 end
@@ -427,7 +470,7 @@ function evaluate_survival_categoric_variable_allvals(bestsplit,varno,variable,s
     return bestsplit
 end
 
-function evaluate_survival_numeric_variable_randval(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,method)
+function evaluate_survival_numeric_variable_randval(bestsplit,varno,variable,splittype,timevalues,eventvalues,eventtimes,allvalues,trainingweights,origweightsum,method)
     minval = minimum(allvalues)
     maxval = maximum(allvalues)
     splitpoint = minval+rand()*(maxval-minval)
@@ -450,21 +493,72 @@ function evaluate_survival_numeric_variable_randval(bestsplit,varno,variable,spl
     end
     leftweightsum = sum(leftweights)
     rightweightsum = origweightsum-leftweightsum
-    if leftweightsum >= method.minleaf && rightweightsum >= method.minleaf
-        leftcumhazardfunction = generate_cumulative_hazard_function(leftweights,lefttimevalues,lefteventvalues)
-        lefthazardscore = hazard_score(leftweights,lefttimevalues,lefteventvalues,leftcumhazardfunction)
-        rightcumhazardfunction = generate_cumulative_hazard_function(rightweights,righttimevalues,righteventvalues)
-        righthazardscore = hazard_score(rightweights,righttimevalues,righteventvalues,rightcumhazardfunction)
-        totalscore = lefthazardscore+righthazardscore
-        if -totalscore > bestsplit[1]
-            bestsplit = (totalscore,varno,variable,splittype,splitpoint)
+    lefteventsum = sum(lefteventvalues)
+    righteventsum = sum(righteventvalues)
+    if leftweightsum >= method.minleaf && rightweightsum >= method.minleaf && lefteventsum > 0 && righteventsum > 0
+        if method.split == :logrank
+            score = survival_score(eventtimes,lefttimevalues,lefteventvalues,leftweights,righttimevalues,righteventvalues,rightweights)
+        else
+            score = total_hazard_score(leftweights,lefttimevalues,lefteventvalues,rightweights,righttimevalues,righteventvalues)
+        end
+        if score > bestsplit[1]
+            bestsplit = (score,varno,variable,splittype,splitpoint)
         end
     end
     return bestsplit
 end
 
+function survival_score(eventtimes,lefttimevalues,lefteventvalues,leftweights,righttimevalues,righteventvalues,rightweights)
+    leftevents, leftatrisk = events_and_at_risk(eventtimes,lefttimevalues,lefteventvalues,leftweights) 
+    rightevents, rightatrisk = events_and_at_risk(eventtimes,righttimevalues,righteventvalues,rightweights)
+    events = leftevents+rightevents
+    atrisk = leftatrisk+rightatrisk
+    noeventtimes = length(eventtimes)
+    numerator = 0.0
+    denomsquared = 0.0
+    for i = 1:noeventtimes
+            numerator += leftevents[i] - leftatrisk[i]*events[i]/atrisk[i]
+            denomsquared += leftatrisk[i]/atrisk[i]*(1-leftatrisk[i]/atrisk[i])*((atrisk[i]-events[i])/(atrisk[i]-1))*events[i]
+        end
+    score = numerator/sqrt(denomsquared)        
+    return score
+end
+
+function events_and_at_risk(eventtimes,timevalues,eventvalues,weights) 
+    events = Array(Float64,length(eventtimes))
+    atrisk = Array(Float64,length(eventtimes))
+    remainingatrisk = sum(weights)
+    counter = 1
+    for i = 1:length(eventtimes)
+        if counter > length(timevalues) || eventtimes[i] < timevalues[counter]
+            events[i] = 0.0
+            atrisk[i] = remainingatrisk
+        else
+            accevent = 0.0
+            accleft = 0.0
+            while counter <= length(timevalues) && timevalues[counter] == eventtimes[i]
+                accevent += eventvalues[counter]*weights[counter]
+                accleft += weights[counter]
+                counter += 1
+            end
+            events[i] = accevent    
+            atrisk[i] = remainingatrisk
+            remainingatrisk -= accleft
+        end
+    end
+    return events, atrisk
+end
+
+function total_hazard_score(leftweights,lefttimevalues,lefteventvalues,rightweights,righttimevalues,righteventvalues)
+    leftcumhazardfunction = generate_cumulative_hazard_function(leftweights,lefttimevalues,lefteventvalues)
+    lefthazardscore = hazard_score(leftweights,lefttimevalues,lefteventvalues,leftcumhazardfunction)
+    rightcumhazardfunction = generate_cumulative_hazard_function(rightweights,righttimevalues,righteventvalues)
+    righthazardscore = hazard_score(rightweights,righttimevalues,righteventvalues,rightcumhazardfunction)
+    score = -(lefthazardscore+righthazardscore)
+    return score
+end
+
 function evaluate_survival_numeric_variable_allvals(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,origeventsum,origmean,method) # NOTE: to be fixed!
-    #NOTE: Identical to the regression version evaluate_regression_numeric_variable_allvals
     numericvalues = Dict{typeof(allvalues[1]), Array{Float64,1}}()
     for i = 1:length(allvalues)
         numericvalues[allvalues[i]] = get(numericvalues,allvalues[i],[0,0]) .+ [trainingweights[i]*eventvalues[i],trainingweights[i]]
@@ -537,16 +631,15 @@ function make_survival_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,ti
         prediction += weight* get_cumulative_hazard(node.prediction,time)
         return prediction
     else
-        # varno, splittype, splitpoint, splitweight = node[1]
         examplevalue::Nullable{S} = testdata[node.varno][exampleno]
         if isnull(examplevalue)
-            prediction =make_survival_prediction(node.leftnode,testdata,exampleno,time,prediction,weight*node.leftweight)
-            prediction =make_survival_prediction(node.rightnode,testdata,exampleno,time,prediction,weight*(1-node.leftweight))
+            prediction = make_survival_prediction(node.leftnode,testdata,exampleno,time,prediction,weight*node.leftweight)
+            prediction = make_survival_prediction(node.rightnode,testdata,exampleno,time,prediction,weight*(1-node.leftweight))
             return prediction
         else
             if node.splittype == :NUMERIC
               nextnode=(get(examplevalue) <= node.splitpoint)? node.leftnode: node.rightnode
-            else #Catagorical
+            else 
               nextnode=(get(examplevalue) == node.splitpoint)? node.leftnode: node.rightnode
             end
             return make_survival_prediction(nextnode,testdata,exampleno,time,prediction,weight)
@@ -555,7 +648,11 @@ function make_survival_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,ti
 end
 
 function generate_model_internal(method::LearningMethod{Survival},oobs,classes)
-    #NOTE: Identical to the regression version
+    if method.conformal == :default
+        conformal = :std
+    else
+        conformal = method.conformal
+    end
     oobpredictions = oobs[1]
     for r = 2:length(oobs)
         oobpredictions += oobs[r]
@@ -563,177 +660,82 @@ function generate_model_internal(method::LearningMethod{Survival},oobs,classes)
     correcttrainingvalues = globaldata[:EVENT]
     oobse = 0.0
     nooob = 0
-    ooberrors = Float64[]
-    alphas = Float64[]
-#            deltas = Float64[]
+    one_alphas = Float64[]
+    zero_alphas = Float64[]
     for i = 1:length(correcttrainingvalues)
         oobpredcount = oobpredictions[i][1]
         if oobpredcount > 0.0
-            ooberror = abs(correcttrainingvalues[i]-(oobpredictions[i][2]/oobpredcount))
-            push!(ooberrors,ooberror)
-            delta = (oobpredictions[i][3]/oobpredcount-(oobpredictions[i][2]/oobpredcount)^2)
-            alpha = 2*ooberror/(delta+0.01)
-            push!(alphas,alpha)
-#                    push!(deltas,delta)
+            prediction = oobpredictions[i][2]/oobpredcount
+            ooberror = abs(correcttrainingvalues[i]-prediction)
+            if correcttrainingvalues[i] == 1                
+                push!(one_alphas,1-prediction)
+            else
+                push!(zero_alphas,prediction)
+            end
             oobse += ooberror^2
             nooob += 1
         end
     end
-    oobperformance = oobse/nooob
-    thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
-    largestrange = maximum(correcttrainingvalues)-minimum(correcttrainingvalues)
-    if method.conformal == :default
-        conformal = :normalized
-    else
-        conformal = method.conformal
-    end
     if conformal == :std
-        if thresholdindex >= 1
-            sortedooberrors = sort(ooberrors, rev=true)
-            errorrange = minimum([largestrange,2*sortedooberrors[thresholdindex]])
-        else
-            errorrange = largestrange
-        end
-        conformalfunction = (:std,errorrange,largestrange,sortedooberrors)
-    elseif conformal == :normalized
-        sortedalphas = sort(alphas,rev=true)
-        if thresholdindex >= 1
-            alpha = sortedalphas[thresholdindex]
-        else
-            alpha = Inf
-        end
-        conformalfunction = (:normalized,alpha,largestrange,sortedalphas)
-    ## elseif conformal == :isotonic
-    ##     eds = Array(Float64,nooob,2)
-    ##     eds[:,1] = ooberrors
-    ##     eds[:,2] = deltas
-    ##     eds = sortrows(eds,by=x->x[2])
-    ##     isotonicthresholds = Any[]
-    ##     mincalibrationsize = maximum([10;Int(floor(1/(round((1-method.confidence)*1000000)/1000000))-1)])
-    ##     oobindex = 0
-    ##     while size(eds,1)-oobindex >= 2*mincalibrationsize
-    ##         isotonicgroup = eds[oobindex+1:oobindex+mincalibrationsize,:]
-    ##         threshold = isotonicgroup[1,2]
-    ##         isotonicgroup = sortrows(isotonicgroup,by=x->x[1],rev=true)
-    ##         push!(isotonicthresholds,(threshold,isotonicgroup[1,1],isotonicgroup))
-    ##         oobindex += mincalibrationsize
-    ##     end
-    ##     isotonicgroup = eds[oobindex+1:end,:]
-    ##     threshold = isotonicgroup[1,2]
-    ##     isotonicgroup = sortrows(isotonicgroup,by=x->x[1],rev=true)
-    ##     thresholdindex = maximum([1,Int(floor(size(isotonicgroup,1)*(1-method.confidence)))])
-    ##     push!(isotonicthresholds,(threshold,isotonicgroup[thresholdindex][1],isotonicgroup))
-    ##     originalthresholds = copy(isotonicthresholds)
-    ##     change = true
-    ##     while change
-    ##         change = false
-    ##         counter = 1
-    ##         while counter < size(isotonicthresholds,1) && ~change
-    ##             if isotonicthresholds[counter][2] > isotonicthresholds[counter+1][2]
-    ##                 newisotonicgroup = [isotonicthresholds[counter][3];isotonicthresholds[counter+1][3]]
-    ##                 threshold = minimum(newisotonicgroup[:,2])
-    ##                 newisotonicgroup = sortrows(newisotonicgroup,by=x->x[1],rev=true)
-    ##                 thresholdindex = maximum([1,Int(floor(size(newisotonicgroup,1)*(1-method.confidence)))])
-    ##                 splice!(isotonicthresholds,counter:counter+1,[(threshold,newisotonicgroup[thresholdindex][1],newisotonicgroup)])
-    ##                 change = true
-    ##             else
-    ##                 counter += 1
-    ##             end
-    ##         end
-    ##     end
-    ##     conformalfunction = (:isotonic,isotonicthresholds,largestrange)
+        all_alphas = sort(vcat(one_alphas,zero_alphas),rev=true)
+        conformalfunction = (:std,all_alphas)
+    else #conformal == :classcond
+        one_alphas = sort(one_alphas,rev=true)
+        zero_alphas = sort(one_alphas,rev=true)
+        conformalfunction = (:classcond,(one_alphas,zero_alphas))
     end
+    oobperformance = oobse/nooob
     return oobperformance, conformalfunction
 end
 
-function apply_model_internal(model::PredictionModel{Survival}; confidence = :std)
-    #NOTE: Identical to the regression version
+function apply_model_internal(model::PredictionModel{Survival}; confidence = 0.95)
     numThreads = Threads.nthreads()
     nocoworkers = nprocs()-1
     predictions = zeros(size(globaldata,1))
-    squaredpredictions = zeros(size(globaldata,1))
     if nocoworkers > 0
         alltrees = getworkertrees(model, nocoworkers)
         results = pmap(apply_trees,[(model.method,[],subtrees) for subtrees in alltrees])
         for r = 1:length(results)
             predictions += results[r][1]
-            squaredpredictions += results[r][2]
         end
     elseif numThreads > 1
         alltrees = getworkertrees(model, numThreads)
         predictionResults = Array{Array,1}(length(alltrees))
-        squaredpredictionResults = Array{Array,1}(length(alltrees))
         Threads.@threads for subtrees in alltrees
             results = apply_trees((model.method,[],subtrees))
             predictionResults[Threads.threadid()] = results[1]
-            squaredpredictionResults[Threads.threadid()] = results[2]
         end
         waitfor(predictionResults)
-        waitfor(squaredpredictionResults)
         predictions = sum(predictionResults)
-        squaredpredictions = sum(squaredpredictionResults)
     else
         results = apply_trees((model.method,[],model.trees))
         predictions += results[1]
-        squaredpredictions += results[2]
     end
     predictions = predictions/model.method.notrees
-    squaredpredictions = squaredpredictions/model.method.notrees
-    if model.conformal[1] == :std
-        if confidence == :std
-            errorrange = model.conformal[2]
-        else
-            nooob = size(model.conformal[4],1)
-            thresholdindex = Int(floor((nooob+1)*(1-confidence)))
-            if thresholdindex >= 1
-                errorrange = minimum([model.conformal[3],2*model.conformal[4][thresholdindex]])
-            else
-                errorrange = model.conformal[3]
-            end
-            results = [(p,[p-errorrange/2,p+errorrange/2]) for p in predictions]
+    conformal = model.conformal[1]
+    alphas = model.conformal[2]
+    results = Array(Any,size(predictions,1))
+    for i = 1:size(predictions,1)
+        if conformal == :classcond
+            p_one = get_p_value(1-predictions[i],alphas[1])
+            p_zero = get_p_value(predictions[i],alphas[2])
+        else # conformal == :std 
+            p_one = get_p_value(1-predictions[i],alphas)
+            p_zero = get_p_value(predictions[i],alphas)            
         end
-    elseif model.conformal[1] == :normalized
-        if confidence == :std
-            alpha = model.conformal[2]
-        else
-            nooob = size(model.conformal[4],1)
-            thresholdindex = Int(floor((nooob+1)*(1-confidence)))
-            if thresholdindex >= 1
-                alpha = model.conformal[4][thresholdindex]
-            else
-                alpha = Inf
-            end
+        plausible = Int64[]        
+        if p_zero > 1-confidence
+            push!(plausible,0)
         end
-        results = Array(Tuple,size(predictions,1))
-        for i = 1:size(predictions,1)
-            delta = squaredpredictions[i]-predictions[i]^2
-            errorrange = alpha*(delta+0.01)
-            results[i] = (predictions[i],[predictions[i]-errorrange/2,predictions[i]+errorrange/2])
+        if p_one > 1-confidence
+            push!(plausible,1)
         end
-    ## elseif model.conformal[1] == :isotonic
-    ##     isotonicthresholds = model.conformal[2]
-    ##     errorrange = model.conformal[3]
-    ##     results = Array(Any,size(predictions,1))
-    ##     for i = 1:size(predictions,1)
-    ##         delta = squaredpredictions[i]-predictions[i]^2
-    ##             foundthreshold = false
-    ##             thresholdcounter = size(isotonicthresholds,1)
-    ##             while ~foundthreshold && thresholdcounter > 0
-    ##                 if delta >= isotonicthresholds[thresholdcounter][1]
-    ##                     errorrange = isotonicthresholds[thresholdcounter][2]*2
-    ##                     foundthreshold = true
-    ##                 else
-    ##                     thresholdcounter -= 1
-    ##                 end
-    ##             end
-    ##         results[i] = (predictions[i],[predictions[i]-errorrange/2,predictions[i]+errorrange/2])
-    ##     end
+        results[i] = ((predictions[i] >= 0.5 ? 1 : 0),predictions[i],plausible,[p_zero,p_one])
     end
     return results
 end
 
 function apply_trees(Arguments::Tuple{LearningMethod{Survival},Array,Array})
-    #NOTE: Identical to the regression version
     method, classes, trees = Arguments
     variables, types = get_variables_and_types(globaldata)
     testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,globaldata)
@@ -754,4 +756,209 @@ function apply_trees(Arguments::Tuple{LearningMethod{Survival},Array,Array})
     end
     results = (predictions,squaredpredictions)
     return results
+end
+
+function collect_results_split(method::LearningMethod{Survival}, randomoobs, results, time)
+    modelsize = sum([result[1] for result in results])
+    noirregularleafs = sum([result[6] for result in results])
+    predictions = results[1][2]
+    for r = 2:length(results)
+        predictions += results[r][2]
+    end
+    nopredictions = size(predictions,1)
+    predictions = [predictions[i][2]/predictions[i][1] for i = 1:nopredictions]
+    if method.conformal == :default
+        conformal = :std
+    else
+        conformal = method.conformal
+    end
+    oobpredictions = results[1][4]
+    for r = 2:length(results)
+        oobpredictions += results[r][4]
+    end
+    trainingdata = globaldata[globaldata[:TEST] .== false,:]
+    correcttrainingvalues = trainingdata[:EVENT]
+    oobse = 0.0
+    nooob = 0
+    one_alphas = Float64[]
+    zero_alphas = Float64[]
+    for i = 1:length(correcttrainingvalues)
+        oobpredcount = oobpredictions[i][1]
+        if oobpredcount > 0.0
+            prediction = oobpredictions[i][2]/oobpredcount
+            ooberror = abs(correcttrainingvalues[i]-prediction)
+            if correcttrainingvalues[i] == 1                
+                push!(one_alphas,1-prediction)
+            else
+                push!(zero_alphas,prediction)
+            end
+            oobse += ooberror^2
+            nooob += 1
+        end
+    end
+    if conformal == :std
+        all_alphas = sort(vcat(one_alphas,zero_alphas),rev=true)
+    else
+        one_alphas = sort(one_alphas,rev=true)
+        zero_alphas = sort(one_alphas,rev=true)
+    end
+    oobmse = oobse/nooob
+    testdata = globaldata[globaldata[:TEST] .== true,:]
+    correctvalues = testdata[:EVENT]
+    eventprobs = predictions[correctvalues .== 1]
+    noeventprobs = predictions[correctvalues .!= 1]
+    auc = calculate_auc(eventprobs,noeventprobs)
+    mse = 0.0
+    mad = 0.0
+    validity = 0.0
+    rangesum = 0.0
+    for i = 1:nopredictions
+        error = abs(correctvalues[i]-predictions[i])
+        mse += error^2
+        mad += error
+        if conformal == :classcond
+            p_one = get_p_value(1-predictions[i],one_alphas)
+            p_zero = get_p_value(predictions[i],zero_alphas)
+        else # conformal == :std 
+            p_one = get_p_value(1-predictions[i],all_alphas)
+            p_zero = get_p_value(predictions[i],all_alphas)            
+        end
+        prediction = Int64[]
+        if p_zero > 1-method.confidence
+            push!(prediction,0)
+        end
+        if p_one > 1-method.confidence
+            push!(prediction,1)
+        end
+        validity += correctvalues[i] in prediction ? 1 : 0
+        rangesum += length(prediction)
+    end
+    mse = mse/nopredictions
+    mad = mad/nopredictions
+    esterr = oobmse-mse
+    absesterr = abs(esterr)
+    validity = validity/nopredictions
+    region = rangesum/nopredictions
+    corrcoeff = cor(correctvalues,predictions)
+    totalnotrees = sum([results[r][3][1] for r = 1:length(results)])
+    totalsquarederror = sum([results[r][3][2] for r = 1:length(results)])
+    avmse = totalsquarederror/totalnotrees
+    varmse = avmse-mse
+    extratime = toq()
+    return SurvivalResult(auc,mse,mad,corrcoeff,avmse,varmse,esterr,absesterr,validity,region,modelsize,noirregularleafs,time+extratime)
+end
+
+function collect_results_cross_validation(method::LearningMethod{Survival}, randomoobs, results, modelsizes, nofolds, time)
+    folds = collect(1:nofolds)
+    allnoirregularleafs = [result[6] for result in results]
+    noirregularleafs = allnoirregularleafs[1]
+    for r = 2:length(allnoirregularleafs)
+        noirregularleafs += allnoirregularleafs[r]
+    end
+    predictions = results[1][2]
+    for r = 2:length(results)
+        predictions += results[r][2]
+    end
+    nopredictions = size(globaldata,1)
+    testexamplecounter = 0
+    predictions = [predictions[i][2]/predictions[i][1] for i = 1:nopredictions]
+    if method.conformal == :default
+        conformal = :std
+    else
+        conformal = method.conformal
+    end
+    auc = Array(Float64,nofolds)
+    mse = Array(Float64,nofolds)
+    mad = Array(Float64,nofolds)
+    corrcoeff = Array(Float64,nofolds)
+    avmse = Array(Float64,nofolds)
+    varmse = Array(Float64,nofolds)
+    oobmse = Array(Float64,nofolds)
+    esterr = Array(Float64,nofolds)
+    absesterr = Array(Float64,nofolds)
+    validity = Array(Float64,nofolds)
+    region = Array(Float64,nofolds)
+    foldno = 0
+    for fold in folds
+        foldno += 1
+        foldIndeces = globaldata[:FOLD] .== fold
+        testdata = globaldata[foldIndeces,:]
+        correctvalues = testdata[:EVENT]
+        times = testdata[:TIME]
+        correcttrainingvalues = globaldata[globaldata[:FOLD] .!= fold,:EVENT]
+        oobpredictions = results[1][4][foldno]
+        for r = 2:length(results)
+            oobpredictions += results[r][4][foldno]
+        end
+        oobse = 0.0
+        nooob = 0
+        ooberrors = Float64[]
+        one_alphas = Float64[]
+        zero_alphas = Float64[]
+        for i = 1:length(correcttrainingvalues)
+            oobpredcount = oobpredictions[i][1]
+            if oobpredcount > 0.0
+                prediction = oobpredictions[i][2]/oobpredcount
+                ooberror = abs(correcttrainingvalues[i]-prediction)
+                if correcttrainingvalues[i] == 1                
+                    push!(one_alphas,1-prediction)
+                else
+                    push!(zero_alphas,prediction)
+                end
+                oobse += ooberror^2
+                nooob += 1
+            end
+        end
+        if conformal == :std
+            all_alphas = sort(vcat(one_alphas,zero_alphas),rev=true)
+        else
+            one_alphas = sort(one_alphas,rev=true)
+            zero_alphas = sort(one_alphas,rev=true)
+        end
+        msesum = 0.0
+        madsum = 0.0
+        noinregion = 0.0
+        rangesum = 0.0
+        foldpredictions = predictions[testexamplecounter+1:testexamplecounter+length(correctvalues)]
+        eventprobs = foldpredictions[correctvalues .== 1]
+        noeventprobs = foldpredictions[correctvalues .!= 1]
+        auc[foldno] = calculate_auc(eventprobs,noeventprobs)
+        for i = 1:length(correctvalues)
+            error = abs(correctvalues[i]-predictions[testexamplecounter+i])
+            msesum += error^2
+            madsum += error
+            if conformal == :classcond
+                p_one = get_p_value(1-predictions[testexamplecounter+i],one_alphas)
+                p_zero = get_p_value(predictions[testexamplecounter+i],zero_alphas)
+            else # conformal == :std 
+                p_one = get_p_value(1-predictions[testexamplecounter+i],all_alphas)
+                p_zero = get_p_value(predictions[testexamplecounter+i],all_alphas)            
+            end
+            prediction = Int64[]
+            if p_zero > 1-method.confidence
+                push!(prediction,0)
+            end
+            if p_one > 1-method.confidence
+                push!(prediction,1)
+            end
+            noinregion += correctvalues[i] in prediction ? 1 : 0
+            rangesum += length(prediction)
+        end
+        mse[foldno] = msesum/length(correctvalues)
+        mad[foldno] = madsum/length(correctvalues)
+        corrcoeff[foldno] = cor(correctvalues,predictions[testexamplecounter+1:testexamplecounter+length(correctvalues)])
+        testexamplecounter += length(correctvalues)
+        totalnotrees = sum([results[r][3][foldno][1] for r = 1:length(results)])
+        totalsquarederror = sum([results[r][3][foldno][2] for r = 1:length(results)])
+        avmse[foldno] = totalsquarederror/totalnotrees
+        varmse[foldno] = avmse[foldno]-mse[foldno]
+        oobmse[foldno] = oobse/nooob
+        esterr[foldno] = oobmse[foldno]-mse[foldno]
+        absesterr[foldno] = abs(oobmse[foldno]-mse[foldno])
+        validity[foldno] = noinregion/length(correctvalues)
+        region[foldno] = rangesum/length(correctvalues)
+    end
+    extratime = toq()
+    return SurvivalResult(mean(auc),mean(mse),mean(mad),mean(corrcoeff),mean(avmse),mean(varmse),mean(esterr),mean(absesterr),mean(validity),mean(region),mean(modelsizes),mean(noirregularleafs),
+                          time+extratime)
 end

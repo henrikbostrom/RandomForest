@@ -1,10 +1,3 @@
-type SparseData
-    header::Array{Any, 1}
-    data::Array{SparseVector}
-    labels::Array
-    weights::Array
-end
-
 function Base.names(a::SparseData)
     return a.header
 end
