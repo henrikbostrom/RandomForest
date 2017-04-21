@@ -2,7 +2,7 @@
 ## Functions to be executed on each worker
 ##
 
-function generate_and_test_trees(Arguments::Tuple{LearningMethod{Survival},Symbol,Int64,Int64,Array{Int64,1}})
+function generate_and_test_trees(Arguments::Tuple{LearningMethod{Survival},Symbol,Int64,Int64,Array{Any,1}})
     method,experimentype,notrees,randseed,randomoobs = Arguments
     s = size(globaldata,1)
     srand(randseed)
@@ -117,7 +117,6 @@ function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},I
         end
         randomclassoobs[i] = (c,oobref)
     end
-    # starting from here till the end of the function is duplicated between here and the Classifier and Regressor dispatchers
     variables, types = get_variables_and_types(curdata)
     modelsize = 0
     noirregularleafs = 0
@@ -140,7 +139,6 @@ function generate_trees(Arguments::Tuple{LearningMethod{Survival},Array{Int,1},I
 end
 
 function find_missing_values(method::LearningMethod{Survival},variables,trainingdata)
-    #NOTE: could be further improved with function barrier in val loop. Also identical to the regression version
     missingvalues = Array(Array{Int,1},length(variables))
     nonmissingvalues = Array(Array,length(variables))
     for v = 1:length(variables)
@@ -164,7 +162,6 @@ function find_missing_values(method::LearningMethod{Survival},variables,training
 end
 
 function transform_nonmissing_columns_to_arrays(method::LearningMethod{Survival},variables,trainingdata,missingvalues)
-    #NOTE: Identical to the regression version
     newdata = Array(Array,length(variables))
     for v = 1:length(variables)
         if isempty(missingvalues[v])
@@ -175,7 +172,6 @@ function transform_nonmissing_columns_to_arrays(method::LearningMethod{Survival}
 end
 
 function sample_replacements_for_missing_values!(method::LearningMethod{Survival},newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
-    #NOTE: Identical to the regression version
     for v = 1:length(variables)
         if !isempty(missingvalues[v])
             values = trainingdata[variables[v]]
@@ -200,7 +196,6 @@ function sample_replacements_for_missing_values!(method::LearningMethod{Survival
 end
 
 function replacements_for_missing_values!(method::LearningMethod{Survival},newtestdata,testdata,variables,types,missingvalues,nonmissingvalues)
-    #NOTE: Identical to the regression version
     for v = 1:length(variables)
         if !isempty(missingvalues[v])
             variableType = typeof(testdata[variables[v]]).parameters[1]
@@ -241,11 +236,6 @@ function generate_tree(method::LearningMethod{Survival},trainingrefs,trainingwei
             oobpredictions[trainingref] += [1,oobprediction,oobprediction^2]
         end
     end
-    # if varimp
-    #     return model, variableimportance, noleafs, noirregularleafs, zeroweights
-    # else
-    #     return model, noleafs, noirregularleafs, zeroweights
-    # end
     return model, variableimportance, noleafs, noirregularleafs, zeroweights
 end
 
@@ -569,7 +559,6 @@ function total_hazard_score(leftweights,lefttimevalues,lefteventvalues,rightweig
 end
 
 function evaluate_survival_numeric_variable_allvals(bestsplit,varno,variable,splittype,timevalues,eventvalues,allvalues,trainingweights,origweightsum,origeventsum,origmean,method) # NOTE: to be fixed!
-    #NOTE: Identical to the regression version evaluate_regression_numeric_variable_allvals
     numericvalues = Dict{typeof(allvalues[1]), Array{Float64,1}}()
     for i = 1:length(allvalues)
         numericvalues[allvalues[i]] = get(numericvalues,allvalues[i],[0,0]) .+ [trainingweights[i]*eventvalues[i],trainingweights[i]]
@@ -642,16 +631,15 @@ function make_survival_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,ti
         prediction += weight* get_cumulative_hazard(node.prediction,time)
         return prediction
     else
-        # varno, splittype, splitpoint, splitweight = node[1]
         examplevalue::Nullable{S} = testdata[node.varno][exampleno]
         if isnull(examplevalue)
-            prediction =make_survival_prediction(node.leftnode,testdata,exampleno,time,prediction,weight*node.leftweight)
-            prediction =make_survival_prediction(node.rightnode,testdata,exampleno,time,prediction,weight*(1-node.leftweight))
+            prediction = make_survival_prediction(node.leftnode,testdata,exampleno,time,prediction,weight*node.leftweight)
+            prediction = make_survival_prediction(node.rightnode,testdata,exampleno,time,prediction,weight*(1-node.leftweight))
             return prediction
         else
             if node.splittype == :NUMERIC
               nextnode=(get(examplevalue) <= node.splitpoint)? node.leftnode: node.rightnode
-            else #Catagorical
+            else 
               nextnode=(get(examplevalue) == node.splitpoint)? node.leftnode: node.rightnode
             end
             return make_survival_prediction(nextnode,testdata,exampleno,time,prediction,weight)
@@ -660,7 +648,11 @@ function make_survival_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,ti
 end
 
 function generate_model_internal(method::LearningMethod{Survival},oobs,classes)
-    #NOTE: Identical to the regression version
+    if method.conformal == :default
+        conformal = :std
+    else
+        conformal = method.conformal
+    end
     oobpredictions = oobs[1]
     for r = 2:length(oobs)
         oobpredictions += oobs[r]
@@ -668,120 +660,82 @@ function generate_model_internal(method::LearningMethod{Survival},oobs,classes)
     correcttrainingvalues = globaldata[:EVENT]
     oobse = 0.0
     nooob = 0
-    ooberrors = Float64[]
-    alphas = Float64[]
-#            deltas = Float64[]
+    one_alphas = Float64[]
+    zero_alphas = Float64[]
     for i = 1:length(correcttrainingvalues)
         oobpredcount = oobpredictions[i][1]
         if oobpredcount > 0.0
-            ooberror = abs(correcttrainingvalues[i]-(oobpredictions[i][2]/oobpredcount))
-            push!(ooberrors,ooberror)
-            delta = (oobpredictions[i][3]/oobpredcount-(oobpredictions[i][2]/oobpredcount)^2)
-            alpha = 2*ooberror/(delta+0.01)
-            push!(alphas,alpha)
-#                    push!(deltas,delta)
+            prediction = oobpredictions[i][2]/oobpredcount
+            ooberror = abs(correcttrainingvalues[i]-prediction)
+            if correcttrainingvalues[i] == 1                
+                push!(one_alphas,1-prediction)
+            else
+                push!(zero_alphas,prediction)
+            end
             oobse += ooberror^2
             nooob += 1
         end
     end
-    oobperformance = oobse/nooob
-    thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
-    largestrange = maximum(correcttrainingvalues)-minimum(correcttrainingvalues)
-    if method.conformal == :default
-        conformal = :normalized
-    else
-        conformal = method.conformal
-    end
     if conformal == :std
-        if thresholdindex >= 1
-            sortedooberrors = sort(ooberrors, rev=true)
-            errorrange = minimum([largestrange,2*sortedooberrors[thresholdindex]])
-        else
-            errorrange = largestrange
-        end
-        conformalfunction = (:std,errorrange,largestrange,sortedooberrors)
-    elseif conformal == :normalized
-        sortedalphas = sort(alphas,rev=true)
-        if thresholdindex >= 1
-            alpha = sortedalphas[thresholdindex]
-        else
-            alpha = Inf
-        end
-        conformalfunction = (:normalized,alpha,largestrange,sortedalphas)
+        all_alphas = sort(vcat(one_alphas,zero_alphas),rev=true)
+        conformalfunction = (:std,all_alphas)
+    else #conformal == :classcond
+        one_alphas = sort(one_alphas,rev=true)
+        zero_alphas = sort(one_alphas,rev=true)
+        conformalfunction = (:classcond,(one_alphas,zero_alphas))
     end
+    oobperformance = oobse/nooob
     return oobperformance, conformalfunction
 end
 
-function apply_model_internal(model::PredictionModel{Survival}; confidence = :std)
-    #NOTE: Identical to the regression version
+function apply_model_internal(model::PredictionModel{Survival}; confidence = 0.95)
     numThreads = Threads.nthreads()
     nocoworkers = nprocs()-1
     predictions = zeros(size(globaldata,1))
-    squaredpredictions = zeros(size(globaldata,1))
     if nocoworkers > 0
         alltrees = getworkertrees(model, nocoworkers)
         results = pmap(apply_trees,[(model.method,[],subtrees) for subtrees in alltrees])
         for r = 1:length(results)
             predictions += results[r][1]
-            squaredpredictions += results[r][2]
         end
     elseif numThreads > 1
         alltrees = getworkertrees(model, numThreads)
         predictionResults = Array{Array,1}(length(alltrees))
-        squaredpredictionResults = Array{Array,1}(length(alltrees))
         Threads.@threads for subtrees in alltrees
             results = apply_trees((model.method,[],subtrees))
             predictionResults[Threads.threadid()] = results[1]
-            squaredpredictionResults[Threads.threadid()] = results[2]
         end
         waitfor(predictionResults)
-        waitfor(squaredpredictionResults)
         predictions = sum(predictionResults)
-        squaredpredictions = sum(squaredpredictionResults)
     else
         results = apply_trees((model.method,[],model.trees))
         predictions += results[1]
-        squaredpredictions += results[2]
     end
     predictions = predictions/model.method.notrees
-    squaredpredictions = squaredpredictions/model.method.notrees
-    if model.conformal[1] == :std
-        if confidence == :std
-            errorrange = model.conformal[2]
-        else
-            nooob = size(model.conformal[4],1)
-            thresholdindex = Int(floor((nooob+1)*(1-confidence)))
-            if thresholdindex >= 1
-                errorrange = minimum([model.conformal[3],2*model.conformal[4][thresholdindex]])
-            else
-                errorrange = model.conformal[3]
-            end
-            results = [(p,[p-errorrange/2,p+errorrange/2]) for p in predictions]
+    conformal = model.conformal[1]
+    alphas = model.conformal[2]
+    results = Array(Any,size(predictions,1))
+    for i = 1:size(predictions,1)
+        if conformal == :classcond
+            p_one = get_p_value(1-predictions[i],alphas[1])
+            p_zero = get_p_value(predictions[i],alphas[2])
+        else # conformal == :std 
+            p_one = get_p_value(1-predictions[i],alphas)
+            p_zero = get_p_value(predictions[i],alphas)            
         end
-    elseif model.conformal[1] == :normalized
-        if confidence == :std
-            alpha = model.conformal[2]
-        else
-            nooob = size(model.conformal[4],1)
-            thresholdindex = Int(floor((nooob+1)*(1-confidence)))
-            if thresholdindex >= 1
-                alpha = model.conformal[4][thresholdindex]
-            else
-                alpha = Inf
-            end
+        plausible = Int64[]        
+        if p_zero > 1-confidence
+            push!(plausible,0)
         end
-        results = Array(Tuple,size(predictions,1))
-        for i = 1:size(predictions,1)
-            delta = squaredpredictions[i]-predictions[i]^2
-            errorrange = alpha*(delta+0.01)
-            results[i] = (predictions[i],[predictions[i]-errorrange/2,predictions[i]+errorrange/2])
+        if p_one > 1-confidence
+            push!(plausible,1)
         end
+        results[i] = ((predictions[i] >= 0.5 ? 1 : 0),predictions[i],plausible,[p_zero,p_one])
     end
     return results
 end
 
 function apply_trees(Arguments::Tuple{LearningMethod{Survival},Array,Array})
-    #NOTE: Identical to the regression version
     method, classes, trees = Arguments
     variables, types = get_variables_and_types(globaldata)
     testmissingvalues, testnonmissingvalues = find_missing_values(method,variables,globaldata)
@@ -804,7 +758,7 @@ function apply_trees(Arguments::Tuple{LearningMethod{Survival},Array,Array})
     return results
 end
 
-function collect_results_split(method::LearningMethod{Survival}, results, time)
+function collect_results_split(method::LearningMethod{Survival}, randomoobs, results, time)
     modelsize = sum([result[1] for result in results])
     noirregularleafs = sum([result[6] for result in results])
     predictions = results[1][2]
@@ -813,18 +767,10 @@ function collect_results_split(method::LearningMethod{Survival}, results, time)
     end
     nopredictions = size(predictions,1)
     predictions = [predictions[i][2]/predictions[i][1] for i = 1:nopredictions]
-    prediction_results = Array(Tuple,size(predictions,1))
     if method.conformal == :default
-        conformal = :normalized
+        conformal = :std
     else
         conformal = method.conformal
-    end
-    if conformal == :normalized 
-        squaredpredictions = results[1][5]
-        for r = 2:length(results)
-            squaredpredictions += results[r][5]
-        end
-        squaredpredictions = [squaredpredictions[i][2]/squaredpredictions[i][1] for i = 1:nopredictions]
     end
     oobpredictions = results[1][4]
     for r = 2:length(results)
@@ -850,6 +796,12 @@ function collect_results_split(method::LearningMethod{Survival}, results, time)
             nooob += 1
         end
     end
+    if conformal == :std
+        all_alphas = sort(vcat(one_alphas,zero_alphas),rev=true)
+    else
+        one_alphas = sort(one_alphas,rev=true)
+        zero_alphas = sort(one_alphas,rev=true)
+    end
     oobmse = oobse/nooob
     testdata = globaldata[globaldata[:TEST] .== true,:]
     correctvalues = testdata[:EVENT]
@@ -864,22 +816,22 @@ function collect_results_split(method::LearningMethod{Survival}, results, time)
         error = abs(correctvalues[i]-predictions[i])
         mse += error^2
         mad += error
-        if conformal == :std
-            one_alpha = 1-predictions[i]
-            p_one = (sum([one_alphas[j] >= one_alpha ? (one_alphas[j] > one_alpha ? 1 : rand()) : 0 for j = 1:length(one_alphas)])+rand())/(length(one_alphas)+1)
-            zero_alpha = predictions[i]
-            p_zero = (sum([zero_alphas[j] >= zero_alpha ? (zero_alphas[j] > zero_alpha ? 1 : rand()) : 0 for j = 1:length(zero_alphas)])+rand())/(length(zero_alphas)+1)
-            prediction = Int64[]
-            if p_zero > 1-method.confidence
-                push!(prediction,0)
-            end
-            if p_one > 1-method.confidence
-                push!(prediction,1)
-            end
-            validity += correctvalues[i] in prediction ? 1 : 0
-            rangesum += length(prediction)
-            prediction_results[i] = (predictions[i],prediction)
+        if conformal == :classcond
+            p_one = get_p_value(1-predictions[i],one_alphas)
+            p_zero = get_p_value(predictions[i],zero_alphas)
+        else # conformal == :std 
+            p_one = get_p_value(1-predictions[i],all_alphas)
+            p_zero = get_p_value(predictions[i],all_alphas)            
         end
+        prediction = Int64[]
+        if p_zero > 1-method.confidence
+            push!(prediction,0)
+        end
+        if p_one > 1-method.confidence
+            push!(prediction,1)
+        end
+        validity += correctvalues[i] in prediction ? 1 : 0
+        rangesum += length(prediction)
     end
     mse = mse/nopredictions
     mad = mad/nopredictions
@@ -893,10 +845,10 @@ function collect_results_split(method::LearningMethod{Survival}, results, time)
     avmse = totalsquarederror/totalnotrees
     varmse = avmse-mse
     extratime = toq()
-    return SurvivalResult(auc,mse,mad,corrcoeff,avmse,varmse,esterr,absesterr,validity,region,modelsize,noirregularleafs,time+extratime), prediction_results
+    return SurvivalResult(auc,mse,mad,corrcoeff,avmse,varmse,esterr,absesterr,validity,region,modelsize,noirregularleafs,time+extratime)
 end
 
-function collect_results_cross_validation(method::LearningMethod{Survival}, results, modelsizes, nofolds, conformal, time)
+function collect_results_cross_validation(method::LearningMethod{Survival}, randomoobs, results, modelsizes, nofolds, time)
     folds = collect(1:nofolds)
     allnoirregularleafs = [result[6] for result in results]
     noirregularleafs = allnoirregularleafs[1]
@@ -910,7 +862,11 @@ function collect_results_cross_validation(method::LearningMethod{Survival}, resu
     nopredictions = size(globaldata,1)
     testexamplecounter = 0
     predictions = [predictions[i][2]/predictions[i][1] for i = 1:nopredictions]
-    prediction_results = Array(Tuple,size(predictions,1))
+    if method.conformal == :default
+        conformal = :std
+    else
+        conformal = method.conformal
+    end
     auc = Array(Float64,nofolds)
     mse = Array(Float64,nofolds)
     mad = Array(Float64,nofolds)
@@ -923,13 +879,6 @@ function collect_results_cross_validation(method::LearningMethod{Survival}, resu
     validity = Array(Float64,nofolds)
     region = Array(Float64,nofolds)
     foldno = 0
-    if conformal == :normalized ## || conformal == :isotonic
-        squaredpredictions = results[1][5]
-        for r = 2:length(results)
-            squaredpredictions += results[r][5]
-        end
-        squaredpredictions = [squaredpredictions[i][2]/squaredpredictions[i][1] for i = 1:nopredictions]
-    end
     for fold in folds
         foldno += 1
         foldIndeces = globaldata[:FOLD] .== fold
@@ -960,6 +909,12 @@ function collect_results_cross_validation(method::LearningMethod{Survival}, resu
                 nooob += 1
             end
         end
+        if conformal == :std
+            all_alphas = sort(vcat(one_alphas,zero_alphas),rev=true)
+        else
+            one_alphas = sort(one_alphas,rev=true)
+            zero_alphas = sort(one_alphas,rev=true)
+        end
         msesum = 0.0
         madsum = 0.0
         noinregion = 0.0
@@ -972,25 +927,22 @@ function collect_results_cross_validation(method::LearningMethod{Survival}, resu
             error = abs(correctvalues[i]-predictions[testexamplecounter+i])
             msesum += error^2
             madsum += error
-
-            if conformal == :std
-                one_alpha = 1-predictions[testexamplecounter+i]
-                p_one = (sum([one_alphas[j] >= one_alpha ? (one_alphas[j] > one_alpha ? 1 : rand()) : 0 for j = 1:length(one_alphas)])+rand())/(length(one_alphas)+1)
-                zero_alpha = predictions[testexamplecounter+i]
-                p_zero = (sum([zero_alphas[j] >= zero_alpha ? (zero_alphas[j] > zero_alpha ? 1 : rand()) : 0 for j = 1:length(zero_alphas)])+rand())/(length(zero_alphas)+1)
-                prediction = Int64[]
-                if p_zero > 1-method.confidence
-                    push!(prediction,0)
-                end
-                if p_one > 1-method.confidence
-                    push!(prediction,1)
-                end
-                noinregion += correctvalues[i] in prediction ? 1 : 0
-                rangesum += length(prediction)
-                curIndeces = find(foldIndeces)
-                curIndex = curIndeces[i]
-                prediction_results[curIndex] = (predictions[testexamplecounter+i],prediction)
+            if conformal == :classcond
+                p_one = get_p_value(1-predictions[testexamplecounter+i],one_alphas)
+                p_zero = get_p_value(predictions[testexamplecounter+i],zero_alphas)
+            else # conformal == :std 
+                p_one = get_p_value(1-predictions[testexamplecounter+i],all_alphas)
+                p_zero = get_p_value(predictions[testexamplecounter+i],all_alphas)            
             end
+            prediction = Int64[]
+            if p_zero > 1-method.confidence
+                push!(prediction,0)
+            end
+            if p_one > 1-method.confidence
+                push!(prediction,1)
+            end
+            noinregion += correctvalues[i] in prediction ? 1 : 0
+            rangesum += length(prediction)
         end
         mse[foldno] = msesum/length(correctvalues)
         mad[foldno] = madsum/length(correctvalues)
@@ -1008,5 +960,5 @@ function collect_results_cross_validation(method::LearningMethod{Survival}, resu
     end
     extratime = toq()
     return SurvivalResult(mean(auc),mean(mse),mean(mad),mean(corrcoeff),mean(avmse),mean(varmse),mean(esterr),mean(absesterr),mean(validity),mean(region),mean(modelsizes),mean(noirregularleafs),
-                          time+extratime), prediction_results
+                          time+extratime)
 end

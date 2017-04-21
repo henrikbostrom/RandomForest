@@ -73,6 +73,8 @@ type RegressionResult
     AEEMSE::Float64
     Valid::Float64
     Region::Float64
+#    ErrSize::Float64
+#    ValSize::Float64
     Size::Float64
     NoIrr::Float64
     Time::Float64

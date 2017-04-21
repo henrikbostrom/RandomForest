@@ -11,34 +11,38 @@
 ##
 ## TODO for version 1.0:
 ##
+## *** KNOWN ISSUES ***
+##
+## - modpred does not work properly, e.g., for classification (split and cross-validation)
+##   and generate_ and apply_model
+##
 ## *** MUST ***
 ##
-## - output should either be presented as text or as a dataframe (or possibly more than one)
-## - basic information about each dataset should be displayed in result table, e.g. no classes
 ##
 ## *** SHOULD ***
 ##
-## - allow stored models to be used with different confidence levels (requires storing all alphas)
-## - allow for using modpred in stored models (requires storing info. from all oob predictions)
-## - leave-one-out cross validation
-## - handling of sparse data
-## - make everything work for single trees, including nonconformity measures, etc.
+## - sparse data files should include labels
+## - handling of sparse data (no missing values) also in experiments and for survival forests
+## - include (almost) all performance metrics on OOB instances
 ## - warnings/errors should be reported for incorrect format of datasets
 ## - warnings/errors should be reported for incorrect parameter settings
 ##
 ## *** COULD ***
 ##
-## - variable importance alternatively calculated using permutations
-## - consider alternative ways of distributing tasks, e.g., w/o copying dataset
-## - employ weight vectors (from StatsBase)
-## - handle uncertainty
-## - functions to "foldify", i.e., add "FOLD" or "TEST" columns to exported files
+## - variable importance could alternatively be calculated using permutations
+## - basic information about each dataset could be displayed in result table, e.g. no classes
+## - output could either be presented as text or as a dataframe (or possibly more than one)
+## - leave-one-out cross validation
 ## - statistical tests (Friedman)
 ##
 ## *** WONT ***
 ##
 ## - allow for original weights that have to be taken into account when performing bagging, etc.
+## - handle uncertainty in input features
+## - make everything work for single trees, including nonconformity measures, etc.
 ## - visualize single tree
+## - employ weight vectors (from StatsBase)
+## - functions to "foldify", i.e., add "FOLD" or "TEST" columns to exported files
 
 __precompile__()
 
@@ -83,14 +87,14 @@ include("sparseData.jl")
 global useSparseData = false
 global const rf_ver=v"0.0.11"
 
-"""`runexp` is used to test the performance of the library on a number of test sets"""
+"""`runexp` is used to run experiments on a number of standard datasets"""
 function runexp()
     experiment(files = ["uci/glass.txt"]) # Warmup
-    experiment(files="uci",methods=[forest(),forest(notrees=500)])
+    experiment(files="uci",methods=[forest(),forest(notrees=500)],resultfile="uci-results.txt")
     experiment(files = ["regression/cooling.txt"]) # Warmup
-    experiment(files="regression",methods=[forest(),forest(notrees=500)])
+    experiment(files="regression",methods=[forest(),forest(notrees=500)],resultfile="regression-results.txt")
     experiment(files = ["survival/pharynx.csv"]) # Warmup
-    experiment(files="survival",methods=[forest(notrees=500,minleaf=10),forest(notrees=1000,minleaf=10)])
+    experiment(files="survival",methods=[forest(notrees=500,minleaf=10),forest(notrees=1000,minleaf=10)],resultfile="survival-results.txt")
     true
 end
 
@@ -134,7 +138,6 @@ The arguments should be on the following format:
 
     method : a call on the form forest(...) (default = forest())
 
-        [FIXME: tree() method is missing here]: #
         - The call may have the following (optional) arguments:
 
             notrees : integer (default = 100)
@@ -431,17 +434,17 @@ function run_split(testoption,methods)
     numThreads = Threads.nthreads()
     time = 0
     methodresults = Array(Any,length(methods))
-    origseed = rand(1:1000_000_000) #FIXME: randomizing the random seed doesn't help
+    origseed = rand(1:1000_000_000)
     for m = 1:length(methods)
         results = Array{Any,1}()
-        srand(origseed) #NOTE: To remove configuration order dependance
+        srand(origseed) 
         if methods[m].modpred
-            randomoobs = Array(Int64,notestexamples)
+            randomoobs = Array(Any,notestexamples)
             for i = 1:notestexamples
                 randomoobs[i] = rand(1:notrainingexamples)
             end
         else
-            randomoobs = Array(Int,0)
+            randomoobs = []
         end
         if nocoworkers > 0
             notrees = getnotrees(methods[m], nocoworkers)
@@ -457,15 +460,10 @@ function run_split(testoption,methods)
             notrees = [methods[m].notrees]
             time = @elapsed results = generate_and_test_trees.([(methods[m],:test,n,rand(1:1000_000_000),randomoobs) for n in notrees])
         end
-
         tic()
-        methodresult = collect_results_split(methods[m], results, time)
-        methodresults[m] = Dict("performance"=>methodresult[1], "predictions"=>methodresult[2])
-        if length(methodresult) > 2
-            methodresults[m]["classLabels"] = methodresult[3]
-        end
+        methodresults[m] = collect_results_split(methods[m], randomoobs, results, time)
     end
-    return Dict("results"=>methodresults, "testSplit"=>map(i->i ? 1 : 0, globaldata[:TEST]), "type"=>prediction_task(globaldata))
+    return methodresults
 end
 
 function run_cross_validation(protocol,methods)
@@ -529,7 +527,10 @@ function run_cross_validation(protocol,methods)
                 end
             end
         else
-            randomoobs = Array(Int64,0)
+            randomoobs = Array(Any,nofolds)
+            for i = 1:nofolds
+                randomoobs[i] = []
+            end
         end
         if nocoworkers > 0
             notrees = getnotrees(methods[m], nocoworkers)
@@ -562,13 +563,9 @@ function run_cross_validation(protocol,methods)
         for r = 2:length(allmodelsizes)
             modelsizes += allmodelsizes[r]
         end
-        methodresult = collect_results_cross_validation(methods[m], results, modelsizes, nofolds, conformal, time)
-        methodresults[m] = Dict("performance"=>methodresult[1], "predictions"=>methodresult[2])
-        if length(methodresult) > 2
-            methodresults[m]["classLabels"] = methodresult[3]
-        end
+        methodresults[m] = collect_results_cross_validation(methods[m], randomoobs, results, modelsizes, nofolds, time)
     end
-    return Dict("results"=>methodresults, "type"=>prediction_task(globaldata))
+    return methodresults
 end
 
 ##
@@ -626,25 +623,73 @@ function load_sparse_data(source, target; predictionType=:CLASS, separator = ' '
     if n == -1
         n = maximum([parse(split(filter(i->length(i) != 0, df[r,:])[end], ":")[1]) for r in 1:size(df,1)])
     end
-    sparseMatrix = spzeros(size(df,1), n)
-    for r = 1:size(df,1)
-        d = filter(i->length(i) != 0, df[r,:])
-        spd = Dict(parse(split(i,":")[1])=>parse(split(i,":")[2]) for i in d)
-        sparseMatrix[r, :] = sparsevec(spd, n)
+    nocoworkers = nprocs()-1
+    numThreads = Threads.nthreads()
+    if nocoworkers > 0
+        rownos = getrownos(size(df,1),nocoworkers)
+        allvectors = pmap(read_vectors,[(df[firstrow:lastrow,:],firstrow,n) for (firstrow,lastrow) in rownos])
+    elseif numThreads > 1
+        rownos = getrownos(size(df,1),numThreads)
+        allvectors = Array(Any,numThreads)
+        Threads.@threads for i = 1:numThreads            
+            allvectors[Threads.threadid()] = read_vectors((df[rownos[Threads.threadid()][1]:rownos[Threads.threadid()][2],:],rownos[Threads.threadid()][1],n))
+        end
+    else
+        firstrow, lastrow = rownos[1]
+        allvectors = [read_vectors((df[firstrow:lastrow,:],firstrow,n))]
     end
+    println("Found all vectors.")
+    rows = [allvectors[i][1] for i=1:size(allvectors,1)]
+    columns = [allvectors[i][2] for i=1:size(allvectors,1)]
+    values = [allvectors[i][3] for i=1:size(allvectors,1)]
+    sparseMatrix = sparse(vcat(rows...),vcat(columns...),vcat(values...),size(df,1),n)
+    println("Created matrix of size $(size(sparseMatrix)).")
     labels = readdlm(target, separator)[:,1]
     names = Any[1:n...]
     push!(names,predictionType)
     push!(names,:WEIGHT)
-    # equivDataFrame = DataFrame(full(sparseMatrix))
-    # equivDataFrame[predictionType] = labels
-    # equivDataFrame = hcat(equivDataFrame,DataFrame(WEIGHT = ones(size(equivDataFrame,1))))
-    # global globaldata = equivDataFrame
     global globaldata = SparseData(names,[sparseMatrix[:,i] for i = 1:n], labels, ones(length(labels)))
     initiate_workers()
     println("Data: $(source)")
 end
-            
+           
+function getrownos(totalnorows, nocoworkers)
+    if nocoworkers == 0
+        rownos = [(1,totalnorows)]
+    else
+        norows = [div(totalnorows,nocoworkers) for i=1:nocoworkers]
+        for i = 1:mod(totalnorows,nocoworkers)
+            norows[i] += 1
+        end
+        rownos = Array(Any,nocoworkers)
+        startno = 1
+        for i = 1:nocoworkers
+            rownos[i] = (startno,startno+norows[i]-1)
+            startno += norows[i]
+        end
+    end
+    return rownos
+end
+
+function read_vectors(Arguments)
+    df,firstrow,n = Arguments
+    rows = Int64[]
+    columns = Int64[]
+    values = Float64[]
+    for r = 1:size(df,1)
+        d = df[r,:]
+        for j = 1:length(d)
+            if length(d[j]) > 0
+                parts = split(d[j],":")
+                push!(rows,firstrow+r-1)
+                push!(columns,parse(parts[1]))
+                push!(values,parse(parts[2]))
+            end            
+        end
+    end
+    return rows,columns,values
+end                
+
 ##
 ## Function for building a single tree.
 ##
@@ -681,9 +726,9 @@ function get_tree_node(treeData, variableimportance, leafnodesstats, trainingdat
             leftrefs,leftweights,leftregressionvalues,lefttimevalues,lefteventvalues,rightrefs,rightweights,rightregressionvalues,righttimevalues,righteventvalues,leftweight = make_split(method,treeData,trainingdata,bestsplit)
             varno, variable, splittype, splitpoint = bestsplit
             if varimp
-                if typeof(method.learningType) == Regressor #predictiontask == :REGRESSION
+                if typeof(method.learningType) == Regressor
                     variableimp = variance_reduction(treeData.trainingweights,treeData.regressionvalues,leftweights,leftregressionvalues,rightweights,rightregressionvalues)
-                elseif typeof(method.learningType) == Classifier #predictiontask == :CLASS
+                elseif typeof(method.learningType) == Classifier
                     variableimp = information_gain(treeData.trainingweights,leftweights,rightweights)
                 else #predictiontask == :SURVIVAL
                     variableimp = hazard_score_gain(treeData.trainingweights,treeData.timevalues,treeData.eventvalues,leftweights,lefttimevalues,lefteventvalues,rightweights,righttimevalues,righteventvalues)
@@ -760,7 +805,6 @@ function make_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,prediction,
         prediction += weight*node.prediction
         return prediction
     else
-        # varno, splittype, splitpoint, splitweight = node[1]
         examplevalue::Nullable{S} = testdata[node.varno][exampleno]
         if isnull(examplevalue)
             prediction = make_prediction(node.leftnode,testdata,exampleno,prediction,weight*node.leftweight)
@@ -769,7 +813,7 @@ function make_prediction{T,S}(node::TreeNode{T,S},testdata,exampleno,prediction,
         else
             if node.splittype == :NUMERIC
               nextnode=(get(examplevalue) <= node.splitpoint)? node.leftnode: node.rightnode
-            else #Catagorical
+            else # node.splittype == :CATEGORIC
               nextnode=(get(examplevalue) == node.splitpoint)? node.leftnode: node.rightnode
             end
             return make_prediction(nextnode,testdata,exampleno,prediction,weight)
@@ -792,8 +836,7 @@ The arguments should be on the following format:
     methods : a list of calls to forest(...) as explained above (default = [forest()])
     protocol : integer, float, :cv or :test as explained above (default = 10)
 """
-# AMG: this is for running a single file. Note: we should allow data to be passed as argument in the next
-# three functions !!!
+
 function evaluate_method(;method = forest(),protocol = 10)
     println("Running experiment")
     method = fix_method_type(method)
@@ -899,9 +942,10 @@ function generate_model(;method = forest())
     if predictiontask == :NONE
         println("The loaded dataset is not on the correct format: CLASS/REGRESSION column missing")
         println("This may be due to an incorrectly specified separator, e.g., use: separator = \'\\t\'")
-        result = :NONE
+        model = :NONE
     else
         method = fix_method_type(method)
+        println("Method: $method")
         classes = typeof(method.learningType) == Classifier ? getDfArrayData(unique(globaldata[:CLASS])) : Int[]
         nocoworkers = nprocs()-1
         numThreads = Threads.nthreads()
@@ -929,9 +973,9 @@ function generate_model(;method = forest())
         variables, types = get_variables_and_types(globaldata)
         variableimportance = hcat(variables,variableimportance)
         oobperformance, conformalfunction = generate_model_internal(method, oobs, classes)
-        result = PredictionModel{typeof(method.learningType)}(method,classes,rf_ver,oobperformance,variableimportance,vcat(trees...),conformalfunction)
+        model = PredictionModel{typeof(method.learningType)}(method,classes,rf_ver,oobperformance,variableimportance,vcat(trees...),conformalfunction)
     end
-    return result
+    return model
 end
 
 """
@@ -1021,7 +1065,7 @@ The argument should be on the following format:
                  - probability of including the correct label in the prediction region
                  - :std means employing the same confidence level as used during training
 """
-function apply_model(model::PredictionModel; confidence = :std)
+function apply_model(model::PredictionModel; confidence = 0.95)
     apply_model_internal(model, confidence=confidence)
 end
 

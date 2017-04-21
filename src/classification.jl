@@ -2,7 +2,8 @@
 ##
 ## Functions to be executed on each worker
 ##
-function generate_and_test_trees(Arguments::Tuple{LearningMethod{Classifier},Symbol,Int64,Int64,Array{Int64,1}})
+
+function generate_and_test_trees(Arguments::Tuple{LearningMethod{Classifier},Symbol,Int64,Int64,Array{Any,1}})
     method,experimentype,notrees,randseed,randomoobs = Arguments
     classes = getDfArrayData(unique(globaldata[:CLASS]))
     s = size(globaldata,1)
@@ -121,8 +122,7 @@ function generate_trees(Arguments::Tuple{LearningMethod{Classifier},AbstractArra
     end
     regressionvalues = []
     timevalues = []
-    eventvalues = []
-    
+    eventvalues = []    
     randomclassoobs = Array(Any,size(randomoobs,1))
     for i = 1:size(randomclassoobs,1)
         oobref = randomoobs[i]
@@ -133,18 +133,22 @@ function generate_trees(Arguments::Tuple{LearningMethod{Classifier},AbstractArra
         end
         randomclassoobs[i] = (c,oobref)
     end
-    # starting from here till the end of the function is duplicated between here and the Regressor and Survival dispatchers
-    # need to be cleaned
     variables, types = get_variables_and_types(curdata)
     modelsize = 0
     noirregularleafs = 0
-    missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
-    newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
+    if useSparseData
+        newtrainingdata = trainingdata
+    else
+        missingvalues, nonmissingvalues = find_missing_values(method,variables,trainingdata)
+        newtrainingdata = transform_nonmissing_columns_to_arrays(method,variables,trainingdata,missingvalues)
+    end
     model = Array(TreeNode,notrees)
     oob = Array(Array,notrees)
     variableimportance = zeros(size(variables,1))
     for treeno = 1:notrees
-       sample_replacements_for_missing_values!(method, newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
+        if ~useSparseData
+            sample_replacements_for_missing_values!(method, newtrainingdata,trainingdata,variables,types,missingvalues,nonmissingvalues)
+        end
         model[treeno], treevariableimportance, noleafs, treenoirregularleafs, oob[treeno] = generate_tree(method,trainingrefs,trainingweights,regressionvalues,timevalues,eventvalues,newtrainingdata,variables,types,oobpredictions;varimp = varimparg)
         modelsize += noleafs
         noirregularleafs += treenoirregularleafs
@@ -353,8 +357,8 @@ function find_best_split(node,trainingdata,variables,types,method::LearningMetho
     if method.splitsample > 0
         splitsamplesize = method.splitsample
         noclasses = size(node.trainingrefs,1)
-        sampletrainingweights = Array(Array{Float64,1},noclasses) #typeof(node).parameters[2]
-        sampletrainingrefs = Array(Array{Int,1},noclasses) #typeof(node).parameters[1]
+        sampletrainingweights = Array(Array{Float64,1},noclasses)
+        sampletrainingrefs = Array(Array{Int,1},noclasses)
         for c = 1:noclasses
             if sum(node.trainingweights[c]) <= splitsamplesize
                 sampletrainingweights[c] = node.trainingweights[c]
@@ -384,6 +388,19 @@ function find_best_split(node,trainingdata,variables,types,method::LearningMetho
     else
         return (varno,variable,splittype,splitpoint)
     end
+end
+
+function non_zero_variables(novariables,trainingdata,node)
+    includevariables = falses(novariables)
+    for c = 1:size(trainingdata,1)
+        for v = 1:novariables
+            if countnz(view(trainingdata[c][v],node.trainingrefs[c])) > 0
+#            if nnz(trainingdata[c][v][node.trainingrefs[c]]) > 0
+                includevariables[v] = true
+            end
+        end
+    end
+    return Array(1:novariables)[includevariables]
 end
 
 function evaluate_variable_classification(bestsplit,varno,variable,splittype,trainingrefs,trainingweights,origclasscounts,noclasses,trainingdata,method)
@@ -425,22 +442,27 @@ function evaluate_classification_categoric_variable_allvals(bestsplit,varno,vari
 end
 
 function evaluate_classification_numeric_variable_randval(bestsplit,varno,variable,splittype,origclasscounts,noclasses,allvalues,trainingweights,method)
-    minval = Inf
-    maxval = -Inf
-    for c = 1:noclasses
-        if length(allvalues[c]) > 0
-            minvalc = minimum(allvalues[c])
-            if minvalc < minval
-                minval = minvalc
-            end
-            maxvalc = maximum(allvalues[c])
-            if maxvalc > maxval
-                maxval = maxvalc
+    if ~useSparseData
+        minval = Inf
+        maxval = -Inf
+        for c = 1:noclasses
+            if length(allvalues[c]) > 0
+                minvalc = minimum(allvalues[c])
+                if minvalc < minval
+                    minval = minvalc
+                end
+                maxvalc = maximum(allvalues[c])
+                if maxvalc > maxval
+                    maxval = maxvalc
+                end
             end
         end
-    end
-    if maxval > minval
-        splitpoint = minval+rand()*(maxval-minval)
+        if maxval > minval
+            splitpoint = minval+rand()*(maxval-minval)
+            bestsplit = evaluate_classification_common(splitpoint, <=, bestsplit, varno,variable,splittype, allvalues, noclasses, trainingweights, origclasscounts, method)
+        end
+    else
+        splitpoint = 0.5
         bestsplit = evaluate_classification_common(splitpoint, <=, bestsplit, varno,variable,splittype, allvalues, noclasses, trainingweights, origclasscounts, method)
     end
     return bestsplit
@@ -524,7 +546,6 @@ function entropy(counts,total)
     return entropyval
 end
 
-# @iprofile begin
 function make_split(method::LearningMethod{Classifier},node,trainingdata,bestsplit)
     (varno, variable, splittype, splitpoint) = bestsplit
     noclasses = size(node.trainingrefs,1)
@@ -550,12 +571,6 @@ function make_split(method::LearningMethod{Classifier},node,trainingdata,bestspl
                 push!(rightweights[c],node.trainingweights[c][r])
             end
         end
-        # leftrefIds = map(r->op(values[r], splitpoint), 1:length(node.trainingrefs[c]))
-        # leftrefs[c] = node.trainingrefs[c][leftrefIds]
-        # leftweights[c] = node.trainingweights[c][leftrefIds]
-        # rightrefIds = !leftrefIds
-        # rightrefs[c] = node.trainingrefs[c][rightrefIds]
-        # rightweights[c] = node.trainingweights[c][rightrefIds]
     end
     noleftexamples = sum([sum(leftweights[i]) for i=1:noclasses])
     norightexamples = sum([sum(rightweights[i]) for i=1:noclasses])
@@ -584,22 +599,14 @@ function generate_model_internal(method::LearningMethod{Classifier}, oobs, class
             for i = 1:size(oobpredictions[c],1)
                 oobpredcount = oobpredictions[c][i][1]
                 if oobpredcount > 0
-                    alpha = oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount
+                    alpha = 1-(oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount)
                     push!(alphas,alpha)
                     noobcorrect += 1-abs(sign(indmax(oobpredictions[c][i][2:end])-c))
                     nooob += 1
                 end
             end
         end
-        thresholdindex = floor(Int,(nooob+1)*(1-method.confidence))
-        sortedalphas = Float64[]
-        if thresholdindex >= 1
-            sortedalphas = sort(alphas)
-            alpha = sortedalphas[thresholdindex]
-        else
-            alpha = -Inf
-        end
-        conformalfunction = (:std,alpha,sortedalphas)
+        conformalfunction = (:std,sort(alphas,rev=true))
     elseif conformal == :classcond
         classalpha = Array(Float64,noclasses)
         classalphas = Array(Array,noclasses)
@@ -609,30 +616,22 @@ function generate_model_internal(method::LearningMethod{Classifier}, oobs, class
             for i = 1:size(oobpredictions[c],1)
                 oobpredcount = oobpredictions[c][i][1]
                 if oobpredcount > 0
-                    alphavalue = oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount
+                    alphavalue = 1-(oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount)
                     push!(classalphas[c],alphavalue)
                     noobcorrect += 1-abs(sign(indmax(oobpredictions[c][i][2:end])-c))
                     noclassoob += 1
                 end
             end
-            thresholdindex = Int(floor((noclassoob+1)*(1-method.confidence)))
-            if thresholdindex >= 1
-                classalphas[c] = sort(classalphas[c])
-                classalpha[c] = classalphas[c][thresholdindex]
-            else
-                classalpha[c] = -Inf
-            end
+            classalphas[c] = sort(classalphas[c],rev=true)
             nooob += noclassoob
         end
-        conformalfunction = (:classcond,classalpha,classalphas)
+        conformalfunction = (:classcond,classalphas)
     end
     oobperformance = noobcorrect/nooob
     return oobperformance, conformalfunction
 end
 
-
-function apply_model_internal(model::PredictionModel{Classifier}; confidence = :std)
-    # AMG: still requires global data
+function apply_model_internal(model::PredictionModel{Classifier}; confidence = 0.95)
     numThreads = Threads.nthreads()
     nocoworkers = nprocs()-1
     if nocoworkers > 0
@@ -651,52 +650,47 @@ function apply_model_internal(model::PredictionModel{Classifier}; confidence = :
         predictions = apply_trees((model.method,model.classes,model.trees))
     end
     predictions = predictions/model.method.notrees
-    noclasses = length(model.classes)
-    if model.conformal[1] == :std
-        if confidence == :std
-            alpha = model.conformal[2]
-        else
-            nooob = size(model.conformal[3],1)
-            thresholdindex = Int(floor((nooob+1)*(1-confidence)))
-            if thresholdindex >= 1
-                alpha = model.conformal[3][thresholdindex]
-            else
-                alpha = -Inf
-            end
-        end
-        classalpha = fill(alpha, noclasses)
-    elseif model.conformal[1] == :classcond
-        if confidence == :std
-            classalpha = model.conformal[2]
-        else
-            classalpha = Array(Float64,noclasses)
-            for c = 1:noclasses
-                noclassoob = size(model.conformal[3][c],1)
-                thresholdindex = Int(floor((noclassoob+1)*(1-confidence)))
-                if thresholdindex >= 1
-                    classalpha[c] = model.conformal[3][c][thresholdindex]
-                else
-                    classalpha[c] = -Inf
-                end
-            end
-        end
-    end
-    return get_predictions_classification(model.classes, predictions, classalpha)
-end
-
-function get_predictions_classification(classes, predictions, classalpha)
+    classes = model.classes
+    conformal = model.conformal[1]
+    alphas = model.conformal[2]
     results = Array(Any,size(predictions,1))
     for i = 1:size(predictions,1)
         class = classes[indmax(predictions[i])]
-        plausible = typeof(class)[]
+        plausible = typeof(class)[]        
+        pvalues = Array(Float64,length(classes))
         for j=1:length(classes)
-            if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= classalpha[j]
+            if conformal == :std
+                pvalues[j] = get_p_value(1-(predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]])),alphas)
+            else # conformal == :classcond
+                pvalues[j] = get_p_value(1-(predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]])),alphas[j])
+            end
+            if  pvalues[j] > 1-confidence
                 push!(plausible,classes[j])
             end
         end
-        results[i] = (class,plausible,predictions[i])
+        results[i] = (class,predictions[i],plausible,pvalues)
     end
     return results
+end
+
+function get_p_value(alpha,alphas)
+    noalphas = length(alphas)
+    i = 1
+    foundsmaller = false
+    gt = 0
+    e = 1
+    while i <= noalphas && ~foundsmaller
+        if alphas[i] > alpha
+            gt += 1
+        elseif alphas[i] == alpha
+            e += 1
+        else
+            foundsmaller = true
+        end
+        i += 1
+    end
+    p = (gt + rand()*e)/(noalphas+1)
+    return p
 end
 
 function apply_trees(Arguments::Tuple{LearningMethod{Classifier},Any,Any})
@@ -719,8 +713,7 @@ function apply_trees(Arguments::Tuple{LearningMethod{Classifier},Any,Any})
     return predictions
 end
 
-
-function collect_results_split(method::LearningMethod{Classifier}, results, time)
+function collect_results_split(method::LearningMethod{Classifier}, randomoobs, results, time)
     modelsize = sum([result[1] for result in results])
     noirregularleafs = sum([result[5] for result in results])
     predictions = results[1][2]
@@ -735,6 +728,7 @@ function collect_results_split(method::LearningMethod{Classifier}, results, time
     for c = 1:noclasses
         classdata[c] = globaldata[globaldata[:CLASS] .== classes[c],:]
     end
+    confidence = method.confidence
     if method.conformal == :default
         conformal = :std
     else
@@ -754,20 +748,14 @@ function collect_results_split(method::LearningMethod{Classifier}, results, time
             for i = 1:size(oobpredictions[c],1)
                 oobpredcount = oobpredictions[c][i][1]
                 if oobpredcount > 0
-                    alpha = oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount
+                    alpha = 1-(oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount)
                     push!(alphas,alpha)
                     noobcorrect += 1-abs(sign(indmax(oobpredictions[c][i][2:end])-c))
                     nooob += 1
                 end
             end
         end
-        thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
-        if thresholdindex >= 1
-            alpha = sort(alphas)[thresholdindex]
-        else
-            alpha = -Inf
-        end
-        classalpha = fill(alpha, noclasses)
+        alphas = sort(alphas,rev=true)
     elseif conformal == :classcond
         randomclassoobs = Array(Any,size(randomoobs,1))
         for i = 1:size(randomclassoobs,1)
@@ -779,28 +767,21 @@ function collect_results_split(method::LearningMethod{Classifier}, results, time
             end
             randomclassoobs[i] = (c,oobref)
         end
-        classalpha = Array(Float64,noclasses)
-        classalphas = Array(Any,noclasses)
+        alphas = Array(Float64,noclasses)
         for c = 1:noclasses
             alphas = Float64[]
             noclassoob = 0
             for i = 1:size(oobpredictions[c],1)
                 oobpredcount = oobpredictions[c][i][1]
                 if oobpredcount > 0
-                    alphavalue = oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount
-                    push!(alphas,alphavalue)
+                    alpha = 1-(oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount)
+                    push!(alphas[c],alpha)
                     noobcorrect += 1-abs(sign(indmax(oobpredictions[c][i][2:end])-c))
                     noclassoob += 1
                 end
             end
-            classalphas[c] = alphas
-            thresholdindex = Int(floor((noclassoob+1)*(1-method.confidence)))
-            if thresholdindex >= 1
-                classalpha[c] = sort(alphas)[thresholdindex]
-            else
-                classalpha[c] = -Inf
-            end
             nooob += noclassoob
+            alphas[c] = sort(alphas[c],rev=true)
         end
     end
     oobacc = noobcorrect/nooob
@@ -827,10 +808,11 @@ function collect_results_split(method::LearningMethod{Classifier}, results, time
                 margin = predictions[i][c]-maximum(predictions[i][allbutclassvector])
                 marginsum += margin
                 probsum += maximum(predictions[i])
-                if method.modpred
+                if method.modpred # NOTE: FIXME
                     if conformal == :std
                         randomoob = randomoobs[i]
-                        thresholdindex = Int(floor(nooob*(1-method.confidence)))
+                        
+                        thresholdindex = Int(floor(nooob*(1-confidence)))
                         if thresholdindex >= 1
                             alpha = sort(alphas[[1:randomoob-1;randomoob+1:end]])[thresholdindex] # NOTE: assumes oobpredcount > 0 always is true!
                         else
@@ -838,7 +820,7 @@ function collect_results_split(method::LearningMethod{Classifier}, results, time
                         end
                     else # conformal == :classcond
                         randomoobclass, randomoobref = randomclassoobs[i]
-                        thresholdindex = Int(floor(size(classalphas[randomoobclass],1)*(1-method.confidence)))
+                        thresholdindex = Int(floor(size(classalphas[randomoobclass],1)*(1-confidence)))
                         origclassalpha = classalpha[randomoobclass]
                         if thresholdindex >= 1
                             classalpha[randomoobclass] = sort(classalphas[randomoobclass][[1:randomoobref-1;randomoobref+1:end]])[thresholdindex] # NOTE: assumes oobpredcount > 0 always is true!
@@ -848,45 +830,25 @@ function collect_results_split(method::LearningMethod{Classifier}, results, time
                         alpha = classalpha[c]
                     end
                 else
-                    if conformal == :classcond
-                        alpha = classalpha[c]
-                    end
-                end
-                if margin >= alpha
-                    noinrangesum += 1
-                end
-                nolabels = 0
-                if conformal == :std
+                    plausible = Int64[]
                     for j = 1:noclasses
-                        if j == mostprobable
-                            if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= alpha
-                                nolabels += 1
-                            end
-                        else
-                            if predictions[i][j]-predictions[i][mostprobable] >= alpha # classalphas[j]
-                                nolabels += 1
-                            end
+                        if conformal == :std
+                            p_value = get_p_value(1-(predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]])),alphas)
+                        elseif conformal == :classcond
+                            p_value = get_p_value(1-(predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]])),alphas[j])
+                        end
+                        if p_value > 1-confidence
+                            push!(plausible,j)
                         end
                     end
-                else # conformal == :classcond
-                    for j = 1:noclasses
-                        if j == mostprobable
-                            if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= classalpha[j]
-                                nolabels += 1
-                            end
-                        else
-                            if predictions[i][j]-predictions[i][mostprobable] >= classalpha[j]
-                                nolabels += 1
-                            end
+                    nolabels = length(plausible)
+                    nolabelssum += nolabels
+                    if c in plausible
+                        noinrangesum += 1
+                        if nolabels == 1
+                            noonec += 1
                         end
                     end
-                    if method.modpred
-                        classalpha[randomoobclass] = origclassalpha
-                    end
-                end
-                nolabelssum += nolabels
-                if nolabels == 1
-                    noonec += correct
                 end
             end
         end
@@ -923,10 +885,9 @@ function collect_results_split(method::LearningMethod{Classifier}, results, time
     avbrier = totalsquarederror/totalnotrees
     varbrier = avbrier-brierscore
     extratime = toq()
-    return ClassificationResult(accuracy,weightedauc,brierscore,avacc,esterr,absesterr,avbrier,varbrier,margin,prob,validity,avc,onec,modelsize,noirregularleafs,time+extratime), get_predictions_classification(classes, predictions, classalpha), classes
+    return ClassificationResult(accuracy,weightedauc,brierscore,avacc,esterr,absesterr,avbrier,varbrier,margin,prob,validity,avc,onec,modelsize,noirregularleafs,time+extratime)#, get_predictions_classification(classes, predictions, classalpha), classes
 
 end
-
 
 function calculate_auc(posclassprobabilities,negclassprobabilities)
     values = Dict{Any, Any}()
@@ -960,7 +921,7 @@ function calculate_auc(posclassprobabilities,negclassprobabilities)
     return auc
 end
 
-function collect_results_cross_validation(method::LearningMethod{Classifier}, results, modelsizes, nofolds, conformal, time)
+function collect_results_cross_validation(method::LearningMethod{Classifier}, randomoobs, results, modelsizes, nofolds, time)
     folds = collect(1:nofolds)
     allnoirregularleafs = [result[5] for result in results]
     noirregularleafs = allnoirregularleafs[1]
@@ -973,8 +934,8 @@ function collect_results_cross_validation(method::LearningMethod{Classifier}, re
     end
     nopredictions = size(globaldata,1)
     testexamplecounter = 0
-
     predictions = [predictions[i][2:end]/predictions[i][1] for i = 1:nopredictions]
+    confidence = method.confidence
     if method.conformal == :default
         conformal = :std
     else
@@ -1021,41 +982,27 @@ function collect_results_cross_validation(method::LearningMethod{Classifier}, re
                 for i = 1:size(oobpredictions[c],1)
                     oobpredcount = oobpredictions[c][i][1]
                     if oobpredcount > 0
-                        alpha = oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount
+                        alpha = 1-(oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount)
                         push!(alphas,alpha)
                         noobcorrect += 1-abs(sign(indmax(oobpredictions[c][i][2:end])-c))
                         nooob += 1
                     end
+                end
             end
-            end
-            thresholdindex = Int(floor((nooob+1)*(1-method.confidence)))
-            if thresholdindex >= 1
-                alpha = sort(alphas)[thresholdindex]
-            else
-                alpha = -Inf
-            end
-            classalphas = [alpha for j=1:noclasses]
+            alphas = sort(alphas,rev=true)
         elseif conformal == :classcond
-            classalphas = Array(Float64,noclasses)
+            alphas = Array(Float64,noclasses)
             for c = 1:noclasses
-                alphas = Float64[]
-                noclassoob = 0
                 for i = 1:size(oobpredictions[c],1)
                     oobpredcount = oobpredictions[c][i][1]
                     if oobpredcount > 0
-                        alphavalue = oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount
-                        push!(alphas,alphavalue)
+                        alpha = 1-(oobpredictions[c][i][c+1]/oobpredcount-maximum(oobpredictions[c][i][[2:c;c+2:noclasses+1]])/oobpredcount)
+                        push!(alphas[c],alpha)
                         noobcorrect += 1-abs(sign(indmax(oobpredictions[c][i][2:end])-c))
-                        noclassoob += 1
+                        nooob += 1
                     end
                 end
-                thresholdindex = Int(floor((noclassoob+1)*(1-method.confidence)))
-                if thresholdindex >= 1
-                    classalphas[c] = sort(alphas)[thresholdindex]
-                else
-                classalphas[c] = -Inf
-                end
-                nooob += noclassoob
+                alphas[c] = sort(alphas[c],rev=true)
             end
         end
         oobacc[foldno] = noobcorrect/nooob
@@ -1081,31 +1028,30 @@ function collect_results_cross_validation(method::LearningMethod{Classifier}, re
                     examplemargin = predictions[i][c]-maximum(predictions[i][allbutclassvector])
                     marginsum += examplemargin
                     probsum += maximum(predictions[i])
-                    if examplemargin >= classalphas[c]
-                        noinrangesum += 1
-                    end
-                    nolabels = 0
+                    plausible = Int64[]
                     for j = 1:noclasses
-                        if j == mostprobable
-                            if predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]]) >= classalphas[j]
-                                nolabels += 1
-                            end
-                        else
-                            if predictions[i][j]-predictions[i][mostprobable] >= classalphas[j]
-                                nolabels += 1
-                            end
+                        if conformal == :std
+                            p_value = get_p_value(1-(predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]])),alphas)
+                        elseif conformal == :classcond
+                            p_value = get_p_value(1-(predictions[i][j]-maximum(predictions[i][[1:j-1;j+1:end]])),alphas[j])
+                        end
+                        if p_value > 1-confidence
+                            push!(plausible,j)
                         end
                     end
+                    nolabels = length(plausible)
                     nolabelssum += nolabels
-                    if nolabels == 1
-                        noonec += correct
+                    if c in plausible
+                        noinrangesum += 1
+                        if nolabels == 1
+                            noonec += 1
+                        end
                     end
                 end
                 testexamplecounter += size(testdata[c],1)
             end
         end
         foldpredictions = predictions[origtestexamplecounter+1:testexamplecounter]
-        returning_prediction[foldIndeces] =  get_predictions_classification(classes, foldpredictions, classalphas)
         tempexamplecounter = 0
         for c = 1:noclasses
             if size(testdata[c],1) > 0
@@ -1138,5 +1084,5 @@ function collect_results_cross_validation(method::LearningMethod{Classifier}, re
     end
     extratime = toq()
     return ClassificationResult(mean(accuracy),mean(auc),mean(brierscore),mean(avacc),mean(esterr),mean(absesterr),mean(avbrier),mean(varbrier),mean(margin),mean(prob),
-                                                mean(validity),mean(avc),mean(onec),mean(modelsizes),mean(noirregularleafs),time+extratime), returning_prediction, classes
+                                                mean(validity),mean(avc),mean(onec),mean(modelsizes),mean(noirregularleafs),time+extratime)# , returning_prediction, classes
 end

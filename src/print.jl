@@ -4,7 +4,7 @@
 function present_results(results,methods;ignoredatasetlabel = false)
     if results != []
         if results[1][1] == :CLASS # NOTE: Assuming all tasks of the same type
-            resultlabels = fieldnames(ClassificationResult) #FIXME: MOH Can be extracted from the model information
+            resultlabels = fieldnames(ClassificationResult)
         elseif results[1][1] == :REGRESSION
             resultlabels = fieldnames(RegressionResult)
         else # results[1][1] == :SURVIVAL
@@ -14,7 +14,7 @@ function present_results(results,methods;ignoredatasetlabel = false)
         for datasetno = 1:length(results)
             for methodno = 1:length(methods)
                 for resultno = 1:length(resultlabels)
-                    methodresults[datasetno,methodno,resultno] = getfield(results[datasetno][3]["results"][methodno]["performance"], resultlabels[resultno])
+                    methodresults[datasetno,methodno,resultno] = getfield(results[datasetno][3][methodno],resultlabels[resultno])
                 end
             end
         end
@@ -45,7 +45,7 @@ function present_results(results,methods;ignoredatasetlabel = false)
             println("\nClassification results")
         elseif results[1][1] == :REGRESSION
             println("\nRegression results")
-        else # results[1][1] == :SURVIVAL
+        else # results[1] == :SURVIVAL
             println("\nSurvival results")
         end
         print_aligned_l("",maxdatasetnamesize)
