@@ -7,8 +7,9 @@ julia:
 notifications:
     email: false
 sudo: false
-script:
+before-install:
     - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
+script:
     - julia -e 'Pkg.clone(pwd()); Pkg.test("RandomForest", coverage=true)'
 after_success:
     - julia -e 'cd(Pkg.dir("RandomForest")); Pkg.add("Coverage"); using Coverage; Codecov.submit(process_folder())'
